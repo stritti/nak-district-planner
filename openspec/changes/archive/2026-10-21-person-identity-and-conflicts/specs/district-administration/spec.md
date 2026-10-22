@@ -35,3 +35,24 @@ Leaders SHALL be managed under `/api/v1/districts/{id}/leaders` (`VIEWER` read, 
 - **WHEN** the same request is repeated with `confirm_duplicate`
 - **THEN** a separate leader record is created
 
+## ADDED Requirements
+
+### Requirement: Leader assignments
+A leader SHALL have one or more assignments, each naming a congregation (or the district level), an optional role (congregation leader on a congregation, district leader on the district level) and a home flag, with exactly one home assignment. A leader SHALL be visible to planners of every assigned congregation. District-level planners SHALL manage all assignments; a congregation-scoped planner SHALL manage only the assignment of their own congregation.
+
+#### Scenario: Leader of two congregations
+- **WHEN** a person is assigned to congregations A and B, as congregation leader in both
+- **THEN** the leader overview shows the person under A and under B with that role and marks the home congregation
+
+#### Scenario: Congregation planner edits another congregation's assignment
+- **WHEN** a planner of congregation A changes or removes the assignment of the same person for congregation B
+- **THEN** the API responds with 403 and nothing is changed
+
+#### Scenario: Role on the wrong level
+- **WHEN** a request gives the congregation-leader role to a district-level assignment, or the district-leader role to a congregation assignment
+- **THEN** the API rejects it with 422 (registration, approval, create and assignment changes alike)
+
+#### Scenario: Last or home assignment
+- **WHEN** the last assignment, or the home assignment while others exist, is removed
+- **THEN** the API rejects the request until another assignment became the home assignment
+

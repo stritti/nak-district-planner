@@ -10,7 +10,7 @@ deliberately together with this file.
 
 import re
 
-from app.adapters.db.migrations.duty_identity_schedule_v3 import FUNCTION_NAME, FUNCTION_SQL
+from app.adapters.db.migrations.duty_identity_schedule_v4 import FUNCTION_NAME, FUNCTION_SQL
 
 
 def test_is_a_stable_definer_function_with_a_fixed_search_path():
@@ -54,9 +54,23 @@ def test_results_stay_inside_the_requested_district_and_active_events():
     assert "da.planning_slot_id<>p_exclude_slot" in FUNCTION_SQL
 
 
-def test_name_matches_never_catch_linked_accounts_or_leaders():
-    assert "da.linked_user_sub IS NULL AND da.leader_id IS NULL" in FUNCTION_SQL
+def test_name_matches_are_weak_and_reach_every_identity_kind():
+    """A typed name also hits account and leader duties, but never makes the match strong."""
     assert "da.normalized_name=p_name" in FUNCTION_SQL
+    assert "da.linked_user_sub IS NOT NULL AND lower(regexp_replace(btrim(da.display_name)" in FUNCTION_SQL
+    assert "l.id=da.leader_id AND lower(regexp_replace(btrim(l.name)" in FUNCTION_SQL
+    strong = FUNCTION_SQL[FUNCTION_SQL.index("ei.actual_end_at,\n        (") : FUNCTION_SQL.index("FROM event_duty_assignments")]
+    assert "p_name" not in strong
+    assert "da.linked_user_sub IS NOT NULL OR" not in strong
+
+
+def test_events_with_an_instance_match_by_their_actual_interval():
+    window = FUNCTION_SQL[FUNCTION_SQL.index("ei.id IS NOT NULL AND"):FUNCTION_SQL.index("ei.id IS NULL AND")]
+    assert "ei.actual_start_at<p_to AND ei.actual_end_at>p_from" in window
+    # Only events without an instance fall back to the (coarser) planning date.
+    assert FUNCTION_SQL.count("ei.id IS NULL AND ps.planning_date") == 2
+    assert FUNCTION_SQL.count("ei.actual_start_at<p_to AND ei.actual_end_at>p_from") == 2
+    assert "p_from timestamptz, p_to timestamptz" in FUNCTION_SQL
 
 
 def test_the_service_assignment_branch_is_restricted_to_the_district_and_the_leader():
@@ -65,6 +79,13 @@ def test_the_service_assignment_branch_is_restricted_to_the_district_and_the_lea
     assert "ps.district_id=p_district" in branch
     assert "ps.status='ACTIVE'" in branch
     assert "ps.id<>p_exclude_slot" in branch
+
+
+def test_version_3_stays_frozen_for_the_migration_history():
+    from app.adapters.db.migrations import duty_identity_schedule_v3 as v3
+
+    assert "p_from date, p_to date" in v3.FUNCTION_SQL
+    assert "(da.linked_user_sub IS NOT NULL OR da.leader_id IS NOT NULL)" in v3.FUNCTION_SQL
 
 
 def test_version_1_stays_frozen_for_the_migration_history():
@@ -77,5 +98,5 @@ def test_version_1_stays_frozen_for_the_migration_history():
 def test_an_account_reaches_only_leaders_of_the_requested_district():
     assert FUNCTION_SQL.count(
         "(SELECT l.id FROM leaders l WHERE l.district_id=p_district AND l.user_sub=p_sub)"
-    ) == 2
-    assert FUNCTION_SQL.count("p_sub IS NOT NULL AND") == 3
+    ) == 3  # strength flag, duty match, service branch
+    assert FUNCTION_SQL.count("p_sub IS NOT NULL AND") == 4

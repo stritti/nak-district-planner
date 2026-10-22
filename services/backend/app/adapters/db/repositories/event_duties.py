@@ -168,8 +168,8 @@ class SqlEventDutiesRepository(EventDutiesRepository):
                     "name": normalized_name,
                     "leader": leader_id,
                     "exclude": exclude_slot_id,
-                    "start": window_start.astimezone(UTC).date(),
-                    "end": window_end.astimezone(UTC).date(),
+                    "start": window_start,
+                    "end": window_end,
                 },
             )
         ).all()

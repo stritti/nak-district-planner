@@ -54,7 +54,7 @@
           class="form-input"
         >
           <option :value="null">Keine</option>
-          <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
+          <option v-for="sr in roleChoicesFor(modal.congregationId)" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
         </select>
       </div>
 
@@ -120,7 +120,8 @@
 <script setup lang="ts">
 import type { AddModalState } from './modalState'
 import { BuildingOffice2Icon, HomeModernIcon, PlusIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { LEADER_RANKS, SPECIAL_ROLES } from '../../api/leaders'
+import { LEADER_RANKS } from '../../api/leaders'
+import { roleChoicesFor } from '../../api/leaderRoles'
 
 // The parent owns the form state (reactive object) and the save logic; this
 // component only renders it. Aliasing the prop avoids prop-mutation lint noise

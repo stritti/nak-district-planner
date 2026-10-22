@@ -291,6 +291,19 @@ Bei einem Fallback-Ereignis:
 3. Nach Wiederherstellung kontrollierten Request ausfuehren und weitere Fallbacks ausschliessen.
 4. Ursache und Dauer im Betriebstagebuch dokumentieren.
 
+### 6.1a Audit-Protokollierung (#648)
+
+Audit-Eintraege werden **synchron und dauerhaft** geschrieben; es gibt keine In-Memory-Queue mehr.
+
+- Ein schreibender Request wird erst nach dem Commit beantwortet. Scheitert der Commit, antwortet die API mit 5xx; Aenderung und Audit-Eintraege bleiben aus.
+- Verweigerte Requests (403) und fehlgeschlagene schreibende Requests werden vor der Antwort protokolliert. Kann der Eintrag nicht gespeichert werden, antwortet die API mit **503** (`Audit-Protokollierung nicht verfuegbar`) statt mit einem unprotokollierten Ergebnis.
+- Erfolgreiche Schreibzugriffe tragen ihren Eintrag in derselben Transaktion: das Domaenen-Audit (Terminplanung, Zuweisungen, Kalenderintegrationen, Export-Token) oder, wo es keines gibt, einen HTTP-Eintrag.
+- Bei einem Datenbankausfall schlagen Schreibzugriffe und verweigerte Zugriffe daher mit 5xx/503 fehl. Das ist gewollt; es entstehen keine unprotokollierten Aenderungen.
+
+Metrik `nak.audit.write_failures` (Attribut `stage`: `durable` = Speichern gescheitert, `build` = Eintrag nicht erzeugbar). Alarm bei jedem Anstieg ueber Null. Die Logzeile `Audit entry could not be persisted (<Fehlertyp>)` enthaelt weder Pfad noch Payload.
+
+Bei einem Alarm: Datenbank-Erreichbarkeit, Verbindungslimit und Rollenrechte (`audit_logs`) pruefen, danach einen kontrollierten schreibenden Request ausfuehren und die Zeile in `audit_logs` kontrollieren.
+
 ### 6.2 Secrets
 
 - Secrets nur ueber Secret-Management bereitstellen, niemals committen.

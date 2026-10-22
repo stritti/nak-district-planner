@@ -651,3 +651,36 @@ def test_the_write_schema_accepts_a_leader_only_alone(extra):
         with pytest.raises(ValidationError):
             AssignmentWrite(**base, **extra)
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first", ["account", "leader"])
+async def test_one_person_cannot_hold_the_same_duty_as_account_and_as_leader(first):
+    """The leader's linked account and the leader record are the same person (capacity 2)."""
+    repo = Repository()
+    repo.categories[0] = replace(repo.categories[0], capacity=2)
+    leader = _leader(repo)  # user_sub="leader-account"
+    repo.users = [{"sub": "leader-account", "display_name": "Hans Müller"}]
+    service = EventDutiesService(repo)
+    account = {"linked_user_sub": "leader-account"}
+    as_leader = {"leader_id": leader.id}
+    one, other = (account, as_leader) if first == "account" else (as_leader, account)
+
+    await service.assign(repo.district, repo.slot_id, repo.categories[0].id, **one)
+    with pytest.raises(DutyConflictError):
+        await service.assign(repo.district, repo.slot_id, repo.categories[0].id, **other)
+    assert len(repo.assignments) == 1
+
+
+@pytest.mark.asyncio
+async def test_different_people_may_share_a_duty_with_capacity_for_two():
+    repo = Repository()
+    repo.categories[0] = replace(repo.categories[0], capacity=2)
+    leader = _leader(repo)
+    repo.users = [{"sub": "someone-else", "display_name": "Anna"}]
+    service = EventDutiesService(repo)
+    await service.assign(repo.district, repo.slot_id, repo.categories[0].id, leader_id=leader.id)
+    await service.assign(
+        repo.district, repo.slot_id, repo.categories[0].id, linked_user_sub="someone-else"
+    )
+    assert len(repo.assignments) == 2
+

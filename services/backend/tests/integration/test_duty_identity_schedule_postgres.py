@@ -390,9 +390,14 @@ async def test_an_account_matches_its_linked_leader_outside_the_callers_leader_r
     ids, leader_id, service_slot = leader_world
     _, sub, subs = members
     async with sessions() as db, db.begin():
+        await db.execute(text("UPDATE leaders SET user_sub=:s WHERE id=:l"), {"s": sub, "l": leader_id})
+        # The leader is assigned to c2 only (home assignment), so a c1 planner cannot read it.
         await db.execute(
-            text("UPDATE leaders SET user_sub=:s, congregation_id=:c WHERE id=:l"),
-            {"s": sub, "c": ids["c2"], "l": leader_id},
+            text(
+                "INSERT INTO leader_assignments (id, leader_id, district_id, congregation_id, role, is_home, "
+                "created_at, updated_at) VALUES (:i, :l, :d, :c, NULL, true, now(), now())"
+            ),
+            {"i": uuid.uuid4(), "l": leader_id, "d": ids["district"], "c": ids["c2"]},
         )
     async with sessions() as db, db.begin():
         await _as_app_user(db, subs["planner_c1"])
@@ -407,3 +412,137 @@ async def test_an_account_matches_its_linked_leader_outside_the_callers_leader_r
     assert visible == 0  # the leader itself stays hidden from the c1 planner
     assert service_slot in {d.slot_id for d in found}
     assert all(d.strong for d in found)
+
+
+# ── v4: exact intervals and symmetric name matching ───────────────────────────
+
+
+@pytest.fixture
+async def interval_world(sessions):
+    """Own district: duties of one account on moved and long-running events, a typed-name duty."""
+    now = datetime.now(UTC)
+    ids = {k: uuid.uuid4() for k in (
+        "district", "cat", "moved_in", "moved_out", "long_service", "typed", "linked_only", "target",
+    )}
+    sub, other_sub, leader_id = f"acct-{uuid.uuid4().hex[:8]}", f"other-{uuid.uuid4().hex[:8]}", uuid.uuid4()
+    async with sessions() as db, db.begin():
+        await db.execute(
+            text("INSERT INTO districts (id, name, created_at, updated_at) VALUES (:i, 'B', :n, :n)"),
+            {"i": ids["district"], "n": now},
+        )
+        for user_sub in (sub, other_sub):
+            await db.execute(
+                text("INSERT INTO users (id, sub, email, username, is_superadmin, created_at, updated_at) VALUES (:i, :s, :e, :s, false, :n, :n)"),
+                {"i": uuid.uuid4(), "s": user_sub, "e": f"{user_sub}@example.test", "n": now},
+            )
+        await db.execute(
+            text("INSERT INTO leaders (id, name, district_id) VALUES (:i, 'Hans Müller', :d)"),
+            {"i": leader_id, "d": ids["district"]},
+        )
+        await db.execute(
+            text("INSERT INTO event_duty_categories (id, district_id, congregation_id, code, label, enabled, capacity, event_categories) VALUES (:i, :d, NULL, 'org', 'Organist', true, 9, '{}')"),
+            {"i": ids["cat"], "d": ids["district"]},
+        )
+
+        async def slot(key, planned_day, planned_time, instance=None):
+            await db.execute(
+                text(
+                    "INSERT INTO planning_slots (id, district_id, congregation_id, category, planning_date, planning_time, "
+                    "status, applicability, created_at, updated_at) VALUES (:i, :d, NULL, 'Gottesdienst', :day, :t, "
+                    "'ACTIVE', '{}', :n, :n)"
+                ),
+                {"i": ids[key], "d": ids["district"], "day": planned_day, "t": planned_time, "n": now},
+            )
+            if instance:
+                await db.execute(
+                    text(
+                        "INSERT INTO event_instances (id, planning_slot_id, actual_start_at, actual_end_at, title, source, "
+                        "visibility, sync_state, deviation_flag, created_at, updated_at) VALUES (:i, :s, :a, :b, 'GD', "
+                        "'INTERNAL', 'INTERNAL', 'CLEAN', false, :n, :n)"
+                    ),
+                    {"i": uuid.uuid4(), "s": ids[key], "a": instance[0], "b": instance[1], "n": now},
+                )
+
+        async def duty(key, *, linked=None, normalized=None, leader=None, display="Name"):
+            await db.execute(
+                text(
+                    "INSERT INTO event_duty_assignments (id, planning_slot_id, duty_category_id, district_id, "
+                    "congregation_id, display_name, duty_label, linked_user_sub, normalized_name, leader_id) VALUES "
+                    "(:i, :s, :c, :d, NULL, :n, 'Organist', :l, :nn, :ld)"
+                ),
+                {"i": uuid.uuid4(), "s": ids[key], "c": ids["cat"], "d": ids["district"], "n": display,
+                 "l": linked, "nn": normalized, "ld": leader},
+            )
+
+        # Planned for the next day but moved onto the target day, 09:45-10:45.
+        await slot("moved_in", DAY + timedelta(days=1), time(9, 0), (START + timedelta(minutes=45), START + timedelta(minutes=105)))
+        await duty("moved_in", linked=sub)
+        # Planned for the target day at 09:00 but moved three days away.
+        await slot("moved_out", DAY, time(9, 0), (START + timedelta(days=3), START + timedelta(days=3, hours=2)))
+        await duty("moved_out", linked=sub)
+        # A long event planned the day before that is still running at 09:30.
+        await slot("long_service", DAY - timedelta(days=1), time(20, 0), (START - timedelta(hours=13), START + timedelta(hours=1)))
+        await duty("long_service", linked=sub)
+        # Duties found by name only: a typed one, an account-linked one and a leader's.
+        await slot("typed", DAY, time(9, 0))
+        await duty("typed", normalized="hans müller")
+        await slot("linked_only", DAY, time(9, 15))
+        await duty("linked_only", linked=other_sub, display="Hans  Müller")
+        await slot("target", DAY, time(9, 0))
+    yield ids, sub, other_sub, leader_id
+    async with sessions() as db, db.begin():
+        await db.execute(text("DELETE FROM districts WHERE id=:i"), {"i": ids["district"]})
+        for user_sub in (sub, other_sub):
+            await db.execute(text("DELETE FROM users WHERE sub=:s"), {"s": user_sub})
+
+
+async def _lookup_v4(sessions, ids, **identity):
+    async with sessions() as db:
+        await _as_system_worker(db)
+        return await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=identity.get("sub"), normalized_name=identity.get("name"),
+            leader_id=identity.get("leader"), window_start=START, window_end=START + timedelta(minutes=90),
+            exclude_slot_id=ids["target"],
+        )
+
+
+async def test_instance_times_decide_not_the_planning_date(sessions, interval_world):
+    ids, sub, _, _ = interval_world
+    found = {d.slot_id for d in await _lookup_v4(sessions, ids, sub=sub)}
+    assert ids["moved_in"] in found  # planned tomorrow, actually today
+    assert ids["long_service"] in found  # planned yesterday, still running
+    assert ids["moved_out"] not in found  # planned today, actually three days later
+
+
+async def test_a_typed_name_finds_account_and_typed_duties_weakly(sessions, interval_world):
+    ids, _, _, _ = interval_world
+    found = await _lookup_v4(sessions, ids, name="hans müller")
+    assert {d.slot_id for d in found} == {ids["typed"], ids["linked_only"]}
+    assert all(not d.strong for d in found)  # a name never makes a match strong
+
+
+async def test_a_typed_name_finds_a_leaders_duty_by_the_leaders_name(sessions, interval_world):
+    ids, _, _, leader_id = interval_world
+    async with sessions() as db, db.begin():
+        await db.execute(
+            text(
+                "INSERT INTO event_duty_assignments (id, planning_slot_id, duty_category_id, district_id, "
+                "congregation_id, display_name, duty_label, linked_user_sub, normalized_name, leader_id) VALUES "
+                "(:i, :s, :c, :d, NULL, 'Ev. Hans Müller', 'Dirigent', NULL, NULL, :l)"
+            ),
+            {"i": uuid.uuid4(), "s": ids["target"], "c": ids["cat"], "d": ids["district"], "l": leader_id},
+        )
+    async with sessions() as db:
+        await _as_system_worker(db)
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=None, normalized_name="hans müller", leader_id=None,
+            window_start=START, window_end=START + timedelta(minutes=90), exclude_slot_id=uuid.uuid4(),
+        )
+    assert ids["target"] in {d.slot_id for d in found}
+    assert all(not d.strong for d in found)
+
+
+async def test_an_account_match_is_strong(sessions, interval_world):
+    ids, sub, _, _ = interval_world
+    found = await _lookup_v4(sessions, ids, sub=sub)
+    assert found and all(d.strong for d in found)

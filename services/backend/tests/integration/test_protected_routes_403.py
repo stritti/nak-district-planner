@@ -87,6 +87,7 @@ def mock_oidc_adapter():
 def override_db_session():
     async def _override_db_session():
         session = AsyncMock()
+        session.add = MagicMock()  # AsyncSession.add is synchronous; the audit entry uses it
         result = MagicMock()
         result.mappings.return_value.one_or_none.return_value = None
         result.scalar_one_or_none.return_value = False
@@ -221,7 +222,7 @@ def _series_obj(district_id: uuid.UUID):
 
 
 def _leader_obj(district_id: uuid.UUID):
-    return SimpleNamespace(id=uuid.uuid4(), district_id=district_id, congregation_id=None)
+    return SimpleNamespace(id=uuid.uuid4(), district_id=district_id, congregation_ids=set())
 
 
 def _notification_obj(district_id: uuid.UUID):

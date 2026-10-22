@@ -203,3 +203,95 @@ async def test_approve_provisioning_failure_sets_status() -> None:
         )
 
     assert out.idp_provision_status == "FAILED"
+
+
+async def _approve_with(reg, body, district_id):
+    db = AsyncMock()
+    db.scalar.return_value = district_id  # every congregation belongs to the district
+    cong_repo = AsyncMock()
+    cong_repo.get.return_value = Congregation.create(name="G", district_id=district_id)
+    reg_repo, leader_repo = AsyncMock(), AsyncMock()
+    reg_repo.get.return_value = reg
+    with (
+        patch("app.adapters.api.routers.registrations.require_role_in_district"),
+        patch("app.adapters.api.routers.registrations.get_idp_provisioner", return_value=None),
+    ):
+        await rr.approve_registration(
+            district_id, reg.id, body, _auth(), db,
+            reg_repo=reg_repo, cong_repo=cong_repo, leader_repo=leader_repo, mem_repo=AsyncMock(),
+        )
+    return leader_repo.save.await_args.args[0]
+
+
+def _approve_body(**extra):
+    district_id = extra.pop("district_id")
+    return RegistrationApprove(
+        role=Role.VIEWER, scope_type=ScopeType.DISTRICT, scope_id=district_id, **extra
+    )
+
+
+@pytest.mark.asyncio
+async def test_approval_creates_the_leader_with_all_given_assignments() -> None:
+    district_id, a, b = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    reg = LeaderRegistration.create(district_id=district_id, name="M", email="m@example.com")
+    body = _approve_body(
+        district_id=district_id,
+        assignments=[
+            {"congregation_id": a, "role": "Gemeindevorsteher"},
+            {"congregation_id": b, "is_home": True},
+        ],
+    )
+    leader = await _approve_with(reg, body, district_id)
+    assert {(x.congregation_id, x.is_home) for x in leader.assignments} == {(a, False), (b, True)}
+    assert {x.leader_id for x in leader.assignments} == {leader.id}
+
+
+@pytest.mark.asyncio
+async def test_approval_without_assignments_uses_the_registrants_single_choice() -> None:
+    district_id, a = uuid.uuid4(), uuid.uuid4()
+    reg = LeaderRegistration.create(
+        district_id=district_id, name="M", email="m@example.com", congregation_id=a
+    )
+    leader = await _approve_with(reg, _approve_body(district_id=district_id), district_id)
+    assert [(x.congregation_id, x.is_home) for x in leader.assignments] == [(a, True)]
+
+
+def test_assignments_replace_the_single_choice_fields_and_need_one_home() -> None:
+    from pydantic import ValidationError
+
+    district_id, a, b = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    with pytest.raises(ValidationError):
+        _approve_body(district_id=district_id, congregation_id=a, assignments=[{"congregation_id": b}])
+    with pytest.raises(ValidationError):
+        _approve_body(
+            district_id=district_id,
+            assignments=[{"congregation_id": a}, {"congregation_id": b}],
+        )
+
+
+def test_a_registration_role_must_fit_the_level():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        RegistrationCreate(name="M", email="m@example.com", special_role="Gemeindevorsteher")
+    with pytest.raises(ValidationError):
+        RegistrationCreate(
+            name="M", email="m@example.com", congregation_id=uuid.uuid4(), special_role="Bezirksvorsteher"
+        )
+    with pytest.raises(ValidationError):
+        _approve_body(
+            district_id=uuid.uuid4(),
+            assignments=[{"congregation_id": uuid.uuid4(), "role": "Bezirksvorsteher"}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_approval_rejects_a_single_choice_whose_role_does_not_fit():
+    district_id = uuid.uuid4()
+    reg = LeaderRegistration.create(
+        district_id=district_id, name="M", email="m@example.com",
+        special_role=rr.SpecialRole.GEMEINDEVORSTEHER,  # no congregation
+    )
+    with pytest.raises(HTTPException) as err:
+        await _approve_with(reg, _approve_body(district_id=district_id), district_id)
+    assert err.value.status_code == 422

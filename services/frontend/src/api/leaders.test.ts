@@ -7,6 +7,7 @@ vi.mock('./client')
 
 import * as client from './client'
 import {
+  addLeaderAssignment,
   createLeader,
   deleteLeader,
   getSelfLeaderLink,
@@ -14,8 +15,10 @@ import {
   leaderNameFromId,
   linkSelfToLeader,
   listLeaders,
+  removeLeaderAssignment,
   unlinkSelfFromLeader,
   updateLeader,
+  updateLeaderAssignment,
   updateLeaderInline,
   type LeaderResponse,
 } from './leaders'
@@ -26,8 +29,9 @@ const leader = (overrides: Partial<LeaderResponse> = {}): LeaderResponse => ({
   name: 'Max Mustermann',
   district_id: 'district-1',
   rank: 'Pr.',
-  congregation_id: 'congregation-1',
-  special_role: null,
+  assignments: [
+    { id: 'a-1', congregation_id: 'congregation-1', role: null, is_home: true, revision: 'ar-1' },
+  ],
   user_sub: null,
   email: null,
   phone: null,
@@ -112,5 +116,44 @@ describe('leader API', () => {
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/districts/district-1/leaders/link-self', {
       method: 'DELETE',
     })
+  })
+})
+
+
+describe('assignment requests', () => {
+  beforeEach(() => apiFetch.mockReset())
+
+  it('adds an assignment with a POST to the sub-resource', async () => {
+    apiFetch.mockResolvedValue({ id: 'a-2' })
+    await addLeaderAssignment('d1', 'l1', { congregation_id: 'c2', role: 'Gemeindevorsteher' })
+    expect(apiFetch).toHaveBeenCalledWith('/api/v1/districts/d1/leaders/l1/assignments', {
+      method: 'POST',
+      body: JSON.stringify({ congregation_id: 'c2', role: 'Gemeindevorsteher' }),
+    })
+  })
+
+  it('changes an assignment with the revision of that assignment', async () => {
+    apiFetch.mockResolvedValue({ id: 'a-2' })
+    await updateLeaderAssignment('d1', 'l1', 'a-2', { is_home: true }, '"r2"')
+    expect(apiFetch).toHaveBeenCalledWith('/api/v1/districts/d1/leaders/l1/assignments/a-2', {
+      method: 'PATCH',
+      headers: { 'If-Match': '"r2"' },
+      body: JSON.stringify({ is_home: true }),
+    })
+  })
+
+  it('removes an assignment with the revision of that assignment', async () => {
+    apiFetch.mockResolvedValue(undefined)
+    await removeLeaderAssignment('d1', 'l1', 'a-2', '"r2"')
+    expect(apiFetch).toHaveBeenCalledWith('/api/v1/districts/d1/leaders/l1/assignments/a-2', {
+      method: 'DELETE',
+      headers: { 'If-Match': '"r2"' },
+    })
+  })
+
+  it('refuses to change or remove without a revision', async () => {
+    await expect(updateLeaderAssignment('d1', 'l1', 'a-2', { role: null }, '')).rejects.toThrow('Versionsinformation')
+    await expect(removeLeaderAssignment('d1', 'l1', 'a-2', '')).rejects.toThrow('Versionsinformation')
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 })

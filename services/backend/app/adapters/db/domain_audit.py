@@ -20,7 +20,6 @@ name under ``changes.redacted_fields``.
 from __future__ import annotations
 
 import enum
-import logging
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -40,16 +39,20 @@ from app.adapters.db.orm_models.event_duty import (
     EventTypeDutyConfigurationORM,
 )
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.adapters.db.orm_models.leader import LeaderORM
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM, LeaderORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
     RecurringEventDecisionORM,
     RecurringEventTemplateORM,
 )
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.audit_request import mark_domain_audit
 from app.tenant import TenantContext
 
-logger = logging.getLogger(__name__)
+
+class AuditTenantResolutionError(RuntimeError):
+    """Reject a mutation whose mandatory domain audit cannot be tenant-scoped."""
+
 
 AUDIT_SOURCE = "domain"
 
@@ -102,6 +105,10 @@ class AuditedResource:
 AUDITED_RESOURCES: dict[type, AuditedResource] = {
     LeaderORM: AuditedResource(
         "leader", ("is_active", "hidden_from_lists", "service_end_date"), _own_tenant
+    ),
+    # Who serves in which congregation with which role is a rights-relevant fact.
+    LeaderAssignmentORM: AuditedResource(
+        "leader_assignment", ("leader_id", "congregation_id", "role", "is_home"), _own_tenant
     ),
     EventDutyCategoryORM: AuditedResource(
         "event_duty_category", ("label", "enabled", "capacity", "event_categories"), _own_tenant
@@ -257,14 +264,11 @@ def collect_entries(session: Session) -> list[AuditEntry]:
 def _audit_row(session: Session, entry: AuditEntry, now: datetime) -> dict[str, Any] | None:
     district_id, congregation_id = entry.resource.tenant(session, entry.row)
     if district_id is None and congregation_id is None:
-        # Without a tenant the entry would be invisible and, for non-superadmins,
-        # rejected by RLS, which would abort the business transaction.
-        logger.warning(
-            "Domain audit skipped, tenant unknown: resource_type=%s resource_id=%s",
-            entry.resource.resource_type,
-            entry.row.id,
+        # Fail closed: a missing tenant must never silently discard the audit
+        # intent while committing the protected business mutation.
+        raise AuditTenantResolutionError(
+            f"Audit tenant is required for {entry.resource.resource_type}"
         )
-        return None
     changes = {"redacted_fields": list(entry.redacted_fields)} if entry.redacted_fields else None
     return {
         "id": uuid.uuid4(),
@@ -294,6 +298,7 @@ def record_domain_audit(session: Session, _flush_context: Any) -> None:
     rows = [row for entry in entries if (row := _audit_row(session, entry, now)) is not None]
     if rows:
         session.connection().execute(insert(AuditLogORM.__table__), rows)
+        mark_domain_audit()
 
 
 def bulk_delete_audit_row(

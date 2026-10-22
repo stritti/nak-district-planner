@@ -87,51 +87,16 @@ async def test_workflow_and_unknown_fields_not_exposed_inline(payload):
 
 
 @pytest.mark.asyncio
-async def test_rank_and_special_role_can_be_changed_and_role_cleared():
+async def test_rank_can_be_changed():
     ctx = _setup()
-    result = await _inline(
-        ctx,
-        leaders.LeaderInlineUpdate(rank="Pr.", special_role="Gemeindevorsteher"),
-        leaders._leader_revision(ctx[1]),
-    )
-    assert (result.rank, result.special_role) == ("Pr.", "Gemeindevorsteher")
-    cleared = await _inline(
-        ctx, leaders.LeaderInlineUpdate(special_role=None), result.revision
-    )
-    assert cleared.special_role is None
-    assert cleared.rank == "Pr."
+    result = await _inline(ctx, leaders.LeaderInlineUpdate(rank="Pr."), leaders._leader_revision(ctx[1]))
+    assert result.rank == "Pr."
 
 
-@pytest.mark.asyncio
-async def test_congregation_move_validates_tenant_and_allows_district_level():
-    ctx = _setup()
-    target = uuid.uuid4()
-    with patch.object(leaders, "ensure_congregation_in_district", new=AsyncMock()) as ensure:
-        moved = await _inline(
-            ctx, leaders.LeaderInlineUpdate(congregation_id=target), leaders._leader_revision(ctx[1])
-        )
-        ensure.assert_awaited_once_with(ANY, ctx[0], target)
-        back = await _inline(
-            ctx, leaders.LeaderInlineUpdate(congregation_id=None), moved.revision
-        )
-    assert moved.congregation_id == target
-    assert back.congregation_id is None
-
-
-@pytest.mark.asyncio
-async def test_foreign_district_congregation_is_rejected_without_saving():
-    ctx = _setup()
-    denied = HTTPException(422, "Gemeinde gehört nicht zum Bezirk")
-    with (
-        patch.object(leaders, "ensure_congregation_in_district", new=AsyncMock(side_effect=denied)),
-        pytest.raises(HTTPException) as err,
-    ):
-        await _inline(
-            ctx, leaders.LeaderInlineUpdate(congregation_id=uuid.uuid4()),
-            leaders._leader_revision(ctx[1]),
-        )
-    assert err.value.status_code == 422
-    ctx[2].save.assert_not_awaited()
+@pytest.mark.parametrize("field", ["special_role", "congregation_id"])
+def test_assignment_fields_are_no_longer_inline_editable(field):
+    with pytest.raises(ValidationError):
+        leaders.LeaderInlineUpdate.model_validate({field: None})
 
 
 @pytest.mark.asyncio

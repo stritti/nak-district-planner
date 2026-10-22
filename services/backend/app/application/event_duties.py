@@ -312,7 +312,7 @@ class EventDutiesService:
             linked_user_sub=linked_user_sub,
             normalized_name=name_key,
             leader_id=assignment.leader_id,
-            window_start=start - default_duration,
+            window_start=start,
             window_end=end,
             exclude_slot_id=slot.id,
         )
@@ -412,6 +412,7 @@ class EventDutiesService:
             )
             if not linked_name:
                 raise DutyNotFoundError("Reference not found")
+        leader = None
         leader_label = None
         if leader_id:
             # Held until commit; taken after the slot lock, the order service assignments use.
@@ -451,13 +452,24 @@ class EventDutiesService:
             leader_id=leader_id,
             leader_display_name=leader_label,
         )
-        if any(
-            (assignment.linked_user_sub and peer.linked_user_sub == assignment.linked_user_sub)
-            or (assignment.leader_id and peer.leader_id == assignment.leader_id)
-            or (assignment.normalized_name and peer.normalized_name == assignment.normalized_name)
-            for peer in peers
-        ):
-            raise DutyConflictError("Duplicate duty identity")
+        # One verified person has one account: the leader record and its linked account
+        # are the same identity when comparing against the other duties of the category.
+        accounts = {a for a in (linked_user_sub, leader.user_sub if leader else None) if a}
+        for peer in peers:
+            peer_accounts = {peer.linked_user_sub} if peer.linked_user_sub else set()
+            if peer.leader_id and accounts:
+                peer_leader = await self.repository.get_leader(district_id, peer.leader_id)
+                if peer_leader is not None and peer_leader.user_sub:
+                    peer_accounts.add(peer_leader.user_sub)
+            if (
+                accounts & peer_accounts
+                or (assignment.leader_id and peer.leader_id == assignment.leader_id)
+                or (
+                    assignment.normalized_name
+                    and peer.normalized_name == assignment.normalized_name
+                )
+            ):
+                raise DutyConflictError("Duplicate duty identity")
         return assignment, name
 
     async def _remember_name(
