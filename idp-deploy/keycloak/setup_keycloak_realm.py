@@ -159,14 +159,23 @@ class KeycloakAdminClient:
         """
         base = f"{self.keycloak_url}/admin/realms/{realm_name}"
         found = requests.get(
-            f"{base}/clients?clientId={client_id}", headers=self._headers(), timeout=10
+            f"{base}/clients",
+            params={"clientId": client_id},
+            headers=self._headers(),
+            timeout=10,
         )
         found.raise_for_status()
         clients = found.json()
-        if not clients:
+        if not isinstance(clients, list) or not clients:
             return False
+        client_uuid = clients[0].get("id") if isinstance(clients[0], dict) else None
+        if not isinstance(client_uuid, str) or not client_uuid:
+            raise Exception(
+                f"Failed to delete the provisioning client {client_id}: "
+                "Keycloak returned no client id"
+            )
         deleted = requests.delete(
-            f"{base}/clients/{clients[0]['id']}", headers=self._headers(), timeout=10
+            f"{base}/clients/{client_uuid}", headers=self._headers(), timeout=10
         )
         if deleted.status_code != 204:
             print(f"✗ Failed to delete provisioning client: {deleted.status_code} {deleted.text}")
@@ -514,7 +523,10 @@ def main():
         admin.ensure_audience_mapper(args.realm_name, client["id"], args.client_id)
 
         # 3b. The backend no longer provisions users: remove the former client
-        admin.remove_provisioning_client(args.realm_name, args.provisioning_client_id)
+        if admin.remove_provisioning_client(args.realm_name, args.provisioning_client_id):
+            print("  Former provisioning client existed and was deleted")
+        else:
+            print("  No former provisioning client present (nothing to delete)")
 
         # 4. Test user only on request: a known password must never reach a
         # production realm by default.
@@ -556,8 +568,14 @@ def main():
         print("  Users create their Keycloak account themselves (self-registration with")
         print("  email verification; the email address is the username). The backend holds")
         print("  no Keycloak admin credential. An approved registration is linked at the")
-        print("  first login through the verified email. Protect the registration with a")
-        print("  rate limit at the reverse proxy (see docs/operations/production-compose.md).\n")
+        print("  first login through the verified email.")
+        print("  Checklist before going live:")
+        print("  [ ] Protect the Keycloak registration and login endpoints with a rate")
+        print("      limit at the reverse proxy")
+        print("      (see docs/operations/production-compose.md, section 'Rate-Limiting').")
+        print("  [ ] Configure SMTP for the realm (Realm settings -> Email) and verify it")
+        print("      with 'Test connection'; without email the verification mail cannot be")
+        print("      sent and registration stays unusable.\n")
 
         print("Frontend Environment Variables (.env.local):")
         print(f"  VITE_OIDC_DISCOVERY_URL={discovery_url}")

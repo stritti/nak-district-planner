@@ -86,7 +86,8 @@ def test_existing_provisioning_client_is_deleted() -> None:
         removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
 
     assert removed is True
-    assert get.call_args.args[0].endswith("/clients?clientId=nak-planner-provisioning")
+    assert get.call_args.args[0].endswith("/clients")
+    assert get.call_args.kwargs["params"] == {"clientId": "nak-planner-provisioning"}
     assert delete.call_args.args[0] == "http://kc/admin/realms/nak-planner/clients/prov-uuid"
 
 
@@ -102,6 +103,30 @@ def test_missing_provisioning_client_is_a_no_op() -> None:
     assert removed is False
     delete.assert_not_called()
     post.assert_not_called()
+
+
+def test_a_response_without_a_client_id_aborts_the_setup() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, [{"name": "no-id"}])),
+        patch.object(module.requests, "delete") as delete,
+        pytest.raises(Exception, match="no client id"),
+    ):
+        _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    delete.assert_not_called()
+
+
+def test_a_non_list_response_is_a_no_op() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, {"unexpected": "shape"})),
+        patch.object(module.requests, "delete") as delete,
+    ):
+        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    assert removed is False
+    delete.assert_not_called()
 
 
 def test_a_failed_deletion_of_the_provisioning_client_aborts_the_setup() -> None:
