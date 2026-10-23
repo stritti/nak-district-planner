@@ -151,5 +151,6 @@ def test_only_promotion_script_can_mutate_release_aliases() -> None:
     promoter = (REPO_ROOT / "scripts/promote_release_images.py").read_text(encoding="utf-8")
     assert "self.ensure_version_tags()" in promoter
     assert "self.verify_staging()" in promoter
+    assert "self.ensure_not_superseded()" in promoter
     assert "self.tag_image(repo, alias, image.digest)" in promoter
     assert 'command("gh", "release", "edit", self.tag, "--draft=false")' in promoter
