@@ -117,16 +117,21 @@ export function listCongregationsPublic(districtId: string): Promise<PublicCongr
   )
 }
 
-/** Submit a self-registration (public — no auth required). */
+/**
+ * Submit a self-registration (public — no auth required). A logged-in user passes the
+ * access token so that the registration is bound to their account (`sub`) at once.
+ */
 export function submitRegistration(
   districtId: string,
   body: RegistrationCreate,
+  accessToken?: string | null,
 ): Promise<RegistrationResponse> {
   return publicFetch<RegistrationResponse>(
     `/api/v1/districts/${districtId}/registrations`,
     {
       method: 'POST',
       body: JSON.stringify(body),
+      ...(accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}),
     },
   )
 }

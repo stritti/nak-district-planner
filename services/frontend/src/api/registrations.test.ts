@@ -79,6 +79,31 @@ describe('registration API', () => {
     })
   })
 
+  it('binds the registration to a logged-in account by sending its access token', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 'registration-1' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+    await submitRegistration('district-1', { name: 'A', email: 'a@example.org' }, 'access-token-1')
+
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer access-token-1',
+    })
+  })
+
+  it('sends no Authorization header without a token', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 'registration-1' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+    await submitRegistration('district-1', { name: 'A', email: 'a@example.org' }, null)
+
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('Authorization')
+  })
+
   it('sends the CSRF cookie value as header, the backend rejects cookie-only requests', async () => {
     document.cookie = 'csrf_token=signed-token; path=/'
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 'r1' }), {

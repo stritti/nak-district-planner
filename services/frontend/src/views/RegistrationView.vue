@@ -22,6 +22,32 @@
             Ihre Registrierungsanfrage wurde übermittelt. Der Bezirksadministrator wird sie prüfen
             und Sie gegebenenfalls freischalten.
           </p>
+
+          <!-- The account is created by the user in Keycloak; the approval is linked at the
+               first login through the verified email address. -->
+          <p v-if="accountLinked" class="mt-4 text-sm text-gray-600" data-testid="account-linked">
+            Die Registrierung ist mit Ihrem angemeldeten Konto verknüpft.
+          </p>
+          <div v-else class="mt-6 border-t border-gray-200 pt-6" data-testid="create-account">
+            <p class="text-sm text-gray-600 mb-4">
+              Legen Sie jetzt Ihr Konto an. Verwenden Sie dabei dieselbe E-Mail-Adresse
+              (<strong>{{ submittedEmail }}</strong>) und bestätigen Sie sie über den Link in der
+              E-Mail. Nach der Freischaltung erhalten Sie beim nächsten Anmelden Zugriff.
+            </p>
+            <p v-if="accountError" class="mb-3 text-sm text-red-600" role="alert">{{ accountError }}</p>
+            <button
+              type="button"
+              class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium transition-colors"
+              :disabled="creatingAccount"
+              @click="createAccount"
+            >
+              {{ creatingAccount ? 'Weiterleitung…' : 'Konto anlegen' }}
+            </button>
+            <p class="mt-3 text-xs text-gray-500">
+              Sie haben bereits ein Konto?
+              <RouterLink to="/login" class="text-blue-500 hover:underline">Anmelden</RouterLink>
+            </p>
+          </div>
         </div>
 
         <!-- Form -->
@@ -147,8 +173,11 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { CheckCircleIcon } from '@heroicons/vue/24/outline'
 import ContextualHelp from '../components/ContextualHelp.vue'
+import { useOIDC } from '../composables/useOIDC'
+import { useAuthStore } from '../stores/auth'
 import { LEADER_RANKS } from '../api/leaders'
 import { roleChoicesFor, roleFitsLevel } from '../api/leaderRoles'
 import type { LeaderRank, SpecialRole } from '../api/leaders'
@@ -160,9 +189,18 @@ import {
   type PublicCongregationInfo,
 } from '../api/registrations'
 
+const oidc = useOIDC(useRouter())
+const authStore = useAuthStore()
+
 const submitted = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
+// Email of the submitted registration (shown in the account hint) and whether the request
+// carried the token of a logged-in user, which binds the registration to that account.
+const submittedEmail = ref('')
+const accountLinked = ref(false)
+const creatingAccount = ref(false)
+const accountError = ref<string | null>(null)
 
 const districts = ref<PublicDistrictInfo[]>([])
 const congregations = ref<PublicCongregationInfo[]>([])
@@ -222,20 +260,39 @@ async function handleSubmit() {
   error.value = null
   submitting.value = true
   try {
-    await submitRegistration(form.value.district_id, {
-      name: form.value.name,
-      email: form.value.email,
-      rank: form.value.rank || null,
-      congregation_id: form.value.congregation_id || null,
-      special_role: form.value.special_role || null,
-      phone: form.value.phone || null,
-      notes: form.value.notes || null,
-    })
+    const accessToken = authStore.getToken()
+    await submitRegistration(
+      form.value.district_id,
+      {
+        name: form.value.name,
+        email: form.value.email,
+        rank: form.value.rank || null,
+        congregation_id: form.value.congregation_id || null,
+        special_role: form.value.special_role || null,
+        phone: form.value.phone || null,
+        notes: form.value.notes || null,
+      },
+      accessToken,
+    )
+    submittedEmail.value = form.value.email
+    accountLinked.value = !!accessToken
     submitted.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Fehler beim Einreichen der Registrierung.'
   } finally {
     submitting.value = false
+  }
+}
+
+/** Open the realm's registration form (OIDC prompt=create) to create the Keycloak account. */
+async function createAccount() {
+  accountError.value = null
+  creatingAccount.value = true
+  try {
+    window.location.href = await oidc.getAuthorizationUrl({ prompt: 'create' })
+  } catch (err) {
+    accountError.value = err instanceof Error ? err.message : 'Weiterleitung fehlgeschlagen'
+    creatingAccount.value = false
   }
 }
 </script>
