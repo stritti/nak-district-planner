@@ -22,7 +22,7 @@ Internet ──80/443──> traefik ──┬─ Host(APP_HOST)  ──> fronte
 | `edge` (fest `172.30.250.0/24`) | traefik, frontend, keycloak | Proxy-Hop. nginx (`NGINX_REAL_IP_FROM`) und Keycloak (`KC_PROXY_TRUSTED_ADDRESSES`) vertrauen nur diesem Netz. |
 | `app` (fest `172.30.251.0/24`) | traefik, frontend, backend, worker, beat | API-Verkehr und ausgehender Internetzugang (OIDC, Kalender-Sync, SMTP). Traefik ist hier unter `AUTH_HOST` erreichbar, damit das Backend Keycloak ohne Umweg über das Internet findet. |
 | `data` (`internal`) | db, valkey, migrate, backend, worker, beat | Datenbank und Cache, ohne Route nach außen |
-| `idp` (`internal`) | keycloak, keycloak-db, backend | Keycloak-Datenbank; Admin-API für das optionale IdP-Provisioning |
+| `idp` (`internal`) | keycloak, keycloak-db, backend | Keycloak-Datenbank; das Backend erreicht Keycloak hier für OIDC (kein Admin-Zugang) |
 
 Sicherheitsregeln, die die Tests in `tests/unit/test_production_compose.py` absichern:
 
@@ -139,31 +139,21 @@ Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden
      Ohne diesen Mapper enthält das Access-Token nur `aud=account`. Das Backend lehnt dann jede API-Anfrage mit 401 ab, obwohl die Anmeldung klappt.
 4. Das Client-Secret in `.env` als `OIDC_CLIENT_SECRET` eintragen, dazu `OIDC_DISCOVERY_URL` und `OIDC_CLIENT_ID` (siehe Abschnitt 1).
 
-Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem eigenen Confidential Client im Realm `nak-planner` an (`client_credentials`), nie im Realm `master`:
+Das Backend hält **kein** Keycloak-Admin-Credential und legt keine Benutzer in Keycloak an. Jede Person legt ihr Konto selbst an (Selbstregistrierung mit verifizierter E-Mail-Adresse); eine freigegebene Registrierung wird beim ersten Login über die verifizierte E-Mail verknüpft. Grund: Jedes Admin-Recht mit dem Scope `manage` erlaubt in Keycloak Kontoübernahmen (E-Mail ändern und Einladung auslösen, OTP-/WebAuthn-Credentials löschen, externe Identität verknüpfen), auch mit feingranularen Berechtigungen (FGAP v2).
 
-1. Im Realm `nak-planner` einen Client `nak-planner-provisioning` anlegen: *Client authentication* an, *Service accounts roles* an, *Standard flow* und *Direct access grants* aus. Alternativ legt `idp-deploy/keycloak/setup_keycloak_realm.py` ihn an; das Secret steht danach im Tab *Credentials*. Gegen den produktiven Keycloak aus einem Netz in `KEYCLOAK_ADMIN_ALLOWED_IPS` aufrufen, mit `--admin-user <dauerhafter Admin> --admin-password "$KC_ADMIN_PW"` (Passwort vorher mit `read -rs KC_ADMIN_PW` einlesen, damit es nicht in der Shell-Historie landet), `--keycloak-url https://<AUTH_HOST> --client-id nak-planner --health-url https://<AUTH_HOST>/realms/nak-planner --frontend-url https://<APP_HOST>` (der Health-Endpunkt liegt intern auf Port 9000) und ohne `--create-test-user`, das einen Testbenutzer mit bekanntem Passwort anlegt.
-2. Unter *Service accounts roles → Assign role → Client roles* nur `manage-users` und `view-users` des Clients `realm-management` zuweisen.
-3. Das Secret aus dem Tab *Credentials* als `IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET` eintragen. Zum Rotieren dort *Regenerate* wählen, den neuen Wert eintragen und Backend und Worker neu starten.
-4. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak-planner` unter *Realm settings → Email* dasselbe SMTP-Relay wie für die App (`SMTP_*`) und eine Absenderadresse eintragen und mit *Test connection* prüfen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
-5. Im Realm unter *Realm settings → Login* die *User registration* ausschalten (die Registrierung läuft über die App) und *Verify email* einschalten. Unter *Security defenses* die *Brute force detection* aktivieren, unter *Authentication → Policies* eine Passwort-Policy mit mindestens 15 Zeichen setzen. Das Setup-Skript setzt diese Werte ebenfalls. Für Bezirksadmins zusätzlich OTP oder Passkey (WebAuthn) als Required Action verlangen.
+1. Das Realm einrichten, am einfachsten mit `idp-deploy/keycloak/setup_keycloak_realm.py`. Gegen den produktiven Keycloak aus einem Netz in `KEYCLOAK_ADMIN_ALLOWED_IPS` aufrufen, mit `--admin-user <dauerhafter Admin> --admin-password "$KC_ADMIN_PW"` (Passwort vorher mit `read -rs KC_ADMIN_PW` einlesen, damit es nicht in der Shell-Historie landet), `--keycloak-url https://<AUTH_HOST> --client-id nak-planner --health-url https://<AUTH_HOST>/realms/nak-planner --frontend-url https://<APP_HOST>` (der Health-Endpunkt liegt intern auf Port 9000) und ohne `--create-test-user`, das einen Testbenutzer mit bekanntem Passwort anlegt. Das Skript setzt im Realm `registrationAllowed`, `verifyEmail` und `registrationEmailAsUsername` (die E-Mail-Adresse ist der Benutzername), die Brute-Force-Erkennung und eine Passwort-Policy mit mindestens 15 Zeichen und **löscht** einen vorhandenen früheren Client `nak-planner-provisioning`.
+2. Wer das Realm von Hand einrichtet: unter *Realm settings → Login* *User registration*, *Email as username* und *Verify email* einschalten; unter *Security defenses* die *Brute force detection* aktivieren, unter *Authentication → Policies* eine Passwort-Policy mit mindestens 15 Zeichen setzen. Für Bezirksadmins zusätzlich OTP oder Passkey (WebAuthn) als Required Action verlangen.
+3. Die Bestätigungsmail der Registrierung versendet Keycloak selbst. Dafür im Realm `nak-planner` unter *Realm settings → Email* dasselbe SMTP-Relay wie für die App (`SMTP_*`) und eine Absenderadresse eintragen und mit *Test connection* prüfen. Ohne SMTP lässt sich ein Konto nicht bestätigen.
+4. In `.env` dürfen weder `IDP_PROVISIONING_PROVIDER=keycloak` noch `IDP_PROVISIONING_KEYCLOAK_*` stehen. Mit `IDP_PROVISIONING_ENABLED=true` und Provider `keycloak` verweigert das Backend den Start (siehe Upgrade-Notiz [`699-keycloak-self-registration.md`](/operations/release-notes/699-keycloak-self-registration)).
 
-Der `production_guard` verlangt die Keycloak-Werte und lehnt die früheren Variablen `IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME`/`_PASSWORD` ab:
+#### Selbstregistrierung schützen
 
-```dotenv
-IDP_PROVISIONING_ENABLED=true
-IDP_PROVISIONING_PROVIDER=keycloak
-IDP_PROVISIONING_KEYCLOAK_BASE_URL=http://keycloak:8080
-IDP_PROVISIONING_KEYCLOAK_REALM=nak-planner
-IDP_PROVISIONING_KEYCLOAK_CLIENT_ID=nak-planner-provisioning
-IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET=<Secret aus dem Credentials-Tab>
-# optional: Rücksprung in die App und Gültigkeit des Einladungslinks (Default 72 h)
-IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI=https://<APP_HOST>/
-IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS=259200
-```
+Das Registrierungsformular des Realms ist öffentlich. Ein Konto ohne freigegebene Registrierung hat keinen Zugriff (geschützte Endpunkte antworten mit `403`, „Freigabe ausstehend“), die offene Registrierung ist also kein Zugriffsrisiko, aber ein Spam-Risiko, und das Formular verrät, ob eine E-Mail-Adresse schon ein Konto hat.
 
-Die Rücksprung-URI muss als gültige Redirect-URI des Clients `OIDC_CLIENT_ID` eingetragen sein, sonst lehnt Keycloak die Einladung ab. Dafür die App-Wurzel `https://<APP_HOST>/` zusätzlich zu `/auth/callback` unter *Valid redirect URIs* eintragen (das Setup-Skript tut das). `/auth/callback` selbst eignet sich nicht, weil die Seite ohne Authorization-Code einen Fehler zeigt.
-
-**Umstieg von früheren Versionen:** Wer bisher einen `master`-Benutzer (`nak-provisioning`) verwendet hat, legt vor dem Update den Client wie oben an, ersetzt in `.env` die beiden `ADMIN`-Variablen durch `CLIENT_ID`/`CLIENT_SECRET` und löscht danach den `master`-Benutzer. Ohne diesen Schritt startet das Backend in Produktion nicht.
+- **Rate-Limit:** Die mitgelieferte Traefik-Konfiguration (`deploy/traefik/dynamic/keycloak.yml`, bei vorhandenem Traefik `deploy/compose/existing-traefik.yml`) begrenzt die Registrierungsrouten `/realms/<Realm>/login-actions/registration` und `/realms/<Realm>/protocol/openid-connect/registrations` auf durchschnittlich 10 Anfragen je Minute und Client (Burst 10). Wer einen eigenen Reverse Proxy nutzt, richtet eine gleichwertige Begrenzung für diese Pfade ein.
+- **Optional:** im Authentication-Flow *registration* des Realms den reCAPTCHA-Schritt aktivieren.
+- **Bereinigen:** Unbestätigte, ungenutzte Konten lassen sich in der Keycloak-Konsole unter *Users* löschen; sie gewähren nichts.
+- **Abweichende E-Mail:** Legt jemand das Konto mit einer anderen E-Mail-Adresse an als in der Registrierung, greift die Verknüpfung nicht, und der Zugriff bleibt bei „Freigabe ausstehend“. Die Registrierungsseite nennt die Bedingung; ein Bezirksadmin kann die Registrierung mit der richtigen Adresse neu anlegen lassen.
 
 Details zu Rollen, Mappern und Fehlerbildern stehen in `idp-deploy/keycloak/OIDC-SETUP.md`.
 
@@ -248,7 +238,7 @@ Prüfen, was tatsächlich startet: `docker compose config --services`
 2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „3. Keycloak starten und einrichten“ beschrieben (einschließlich Audience-Mapper), und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
 3. Der Issuer in der Discovery-Antwort muss über HTTPS mit einem öffentlich gültigen Zertifikat erreichbar sein. Das Backend prüft TLS und übernimmt den Issuer aus der Discovery-Antwort.
 4. `.env.keycloak` und `.env.keycloak-db` werden nicht gebraucht.
-5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und dort im App-Realm einen Confidential Client mit Service Account und nur `manage-users`/`view-users` von `realm-management` anlegen, wie oben beschrieben. Für Einladungs-Mails braucht der Realm einen SMTP-Server.
+5. Im App-Realm die Selbstregistrierung einrichten, wie oben beschrieben (das Setup-Skript erledigt das). Das Backend braucht keinen Admin-Zugang zum Keycloak; der Realm braucht einen SMTP-Server für die Bestätigungsmail und, hinter dem eigenen Proxy, ein Rate-Limit für die Registrierungsrouten.
 
 ### Vorhandener Traefik
 
