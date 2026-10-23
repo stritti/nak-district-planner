@@ -67,3 +67,39 @@ def test_as_uuid_passes_through_uuid_and_none() -> None:
     value = uuid.uuid4()
     assert _as_uuid(value) is value
     assert _as_uuid(None) is None
+
+
+async def test_overlong_text_is_cut_to_the_column_instead_of_failing_the_insert() -> None:
+    """A request failing with a long database message must still be auditable (it was a 503)."""
+    repo, session = _repo()
+
+    await repo.create(
+        AuditLogCreate(
+            action=AuditAction.CREATE,
+            resource_type="districts",
+            status=AuditStatus.FAILED,
+            error_message="x" * 5000,
+            user_agent="ua" * 1000,
+            user_email="e" * 400,
+            request_id="r" * 300,
+        )
+    )
+
+    row = session.add.call_args.args[0]
+    assert len(row.error_message) == 1000 and row.error_message.endswith("…")
+    assert len(row.user_agent) == 500
+    assert len(row.user_email) == 255
+    assert len(row.request_id) == 100
+
+
+async def test_text_within_the_limit_is_stored_unchanged() -> None:
+    repo, session = _repo()
+
+    await repo.create(
+        AuditLogCreate(
+            action=AuditAction.UPDATE, resource_type="leaders", error_message="a" * 1000, user_agent="curl/8"
+        )
+    )
+
+    row = session.add.call_args.args[0]
+    assert row.error_message == "a" * 1000 and row.user_agent == "curl/8"
