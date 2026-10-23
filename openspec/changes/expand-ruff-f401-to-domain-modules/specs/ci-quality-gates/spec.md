@@ -1,6 +1,6 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Production Python modules SHALL incrementally enforce unused-import checks
+### Requirement: Ruff F401 SHALL cover all reviewed domain components
 The backend CI SHALL run an isolated Ruff F401 check for both registration modules already covered by #719 and **every module** in the `app/domain/ports`, `app/domain/planning`, and `app/domain/services` directories, independently of the global F401 ignore. This applies to newly introduced files in those directories without needing an allow-list update.
 
 #### Scenario: Reviewed modules have no unused imports
