@@ -41,12 +41,14 @@ python3 setup_keycloak_realm.py \
 # This will:
 # - Create realm "nak-planner"
 # - Create public OIDC client "nak-planner-frontend"
-# - Apply secure realm defaults (no self-registration, verify email,
-#   brute-force detection, password policy length(15))
-# - Create confidential client "nak-planner-provisioning" (service account with
-#   only realm-management manage-users/view-users); copy its secret from
-#   Clients -> nak-planner-provisioning -> Credentials into the backend .env
-#   (IDP_PROVISIONING_KEYCLOAK_CLIENT_ID / _CLIENT_SECRET)
+# - Apply realm defaults: self-registration with email verification and the
+#   email as username, brute-force detection, password policy length(15).
+#   Users create their account themselves; the backend holds no Keycloak admin
+#   credential. Protect the public registration with a rate limit at the
+#   reverse proxy (docs/operations/production-compose.md, "Selbstregistrierung
+#   schützen").
+# - Delete the former client "nak-planner-provisioning" if it exists, so that its
+#   secret is no longer valid (remove IDP_PROVISIONING_KEYCLOAK_* from the backend .env)
 # - Create test user "testuser" / "testpassword123" (only with --create-test-user;
 #   never use that flag against a production realm)
 # - Export realm config
