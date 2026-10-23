@@ -81,62 +81,73 @@ def test_branch_and_pr_builds_never_publish_images() -> None:
     assert len(image_builds) == 2
 
 
-def test_image_publication_requires_a_release_and_builds_its_tag() -> None:
+def test_release_please_creates_draft_and_tag_before_building() -> None:
+    import json
+
+    config = json.loads((REPO_ROOT / "release-please-config.json").read_text(encoding="utf-8"))
+    assert config["draft"] is True
+    assert config["force-tag-creation"] is True
+
     release = _yaml(".github/workflows/release.yml")
-    publish = release["jobs"]["docker-build"]
-    # A release with operator requirements must publish instructions first.
-    assert publish["needs"] == ["release-please", "publish-upgrade-notes"]
-    upgrade_notes = release["jobs"]["publish-upgrade-notes"]
-    assert upgrade_notes["needs"] == "release-please"
-    assert upgrade_notes["if"] == "${{ needs.release-please.outputs.releases_created == 'true' }}"
-    assert upgrade_notes["permissions"]["contents"] == "write"
-    steps = upgrade_notes["steps"]
-    checkout_upgrade = next(
-        s for s in steps if s.get("uses", "").startswith("actions/checkout@")
-    )
-    assert checkout_upgrade["with"]["ref"] == "${{ needs.release-please.outputs.tag_name }}"
-    assert checkout_upgrade["with"]["fetch-depth"] == 0
-    assert any(
-        "scripts/publish_release_upgrade_notes.py" in step.get("run", "")
-        for step in steps
-    )
-    assert publish["if"] == "${{ needs.release-please.outputs.releases_created == 'true' }}"
-    matrix = publish["strategy"]["matrix"]
-    assert set(matrix["service"]) == {"backend", "frontend"}
-    assert sorted(matrix["include"], key=lambda item: item["service"]) == [
-        {"service": "backend", "context": "services/backend"},
-        {"service": "frontend", "context": "services/frontend"},
-    ]
-
-    checkout = next(
-        step for step in publish["steps"]
-        if step.get("uses", "").startswith("actions/checkout@")
-    )
-    assert checkout["with"]["ref"] == "${{ needs.release-please.outputs.tag_name }}"
-    build = next(
-        step for step in publish["steps"]
-        if step.get("uses", "").startswith("docker/build-push-action@")
-    )
-    assert build["with"]["push"] is True
-    assert build["with"]["context"] == "${{ matrix.context }}"
-    metadata = next(
-        step for step in publish["steps"]
-        if step.get("uses", "").startswith("docker/metadata-action@")
-    )
-    assert metadata["with"]["images"] == "ghcr.io/${{ github.repository }}/${{ matrix.service }}"
-    assert build["with"]["tags"] == f"${{{{ steps.{metadata['id']}.outputs.tags }}}}"
-    tags = metadata["with"]["tags"]
-    assert (
-        "type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}"
-        in tags
-    )
-    assert "type=ref,event=branch" not in tags
-    assert "type=sha" not in tags
+    assert release["concurrency"]["cancel-in-progress"] is False
+    assert release["concurrency"]["group"] == "release-publication"
+    assert release["permissions"]["contents"] == "read"
 
 
-def test_only_stable_releases_publish_latest() -> None:
-    release = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    latest = [line.strip() for line in release.splitlines() if "value=latest" in line]
-    assert latest == [
-        "type=raw,value=latest,enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}"
-    ]
+def test_release_requires_verified_notes_and_both_images() -> None:
+    release = _yaml(".github/workflows/release.yml")
+    notes = release["jobs"]["publish-upgrade-notes"]
+    assert notes["needs"] == "release-please"
+    assert "always()" in notes["if"]
+    assert "workflow_dispatch" in notes["if"]
+    assert notes["permissions"]["contents"] == "write"
+
+    note_steps = notes["steps"]
+    checkout = next(s for s in note_steps if s.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["fetch-depth"] == 0
+    assert checkout["with"]["fetch-tags"] is True
+    assert "inputs.release_tag || needs.release-please.outputs.tag_name" in checkout["with"]["ref"]
+    verify = next(s for s in note_steps if s.get("id") == "verify")
+    assert "git merge-base --is-ancestor HEAD origin/main" in verify["run"]
+    assert "gh release view" in verify["run"]
+    assert "isDraft" in verify["run"]
+    assert any("scripts/publish_release_upgrade_notes.py" in s.get("run", "") for s in note_steps)
+
+    build = release["jobs"]["docker-build"]
+    assert build["needs"] == "publish-upgrade-notes"
+    assert build["if"] == "${{ needs.publish-upgrade-notes.result == 'success' }}"
+    steps = build["steps"]
+    actions = [s for s in steps if s.get("uses", "").startswith("docker/build-push-action@")]
+    assert [s["id"] for s in actions] == ["backend", "frontend"]
+    for service, action in zip(("backend", "frontend"), actions):
+        assert action["with"]["push"] is True
+        assert action["with"]["context"] == f"services/{service}"
+        assert f"/{service}:candidate-" in action["with"]["tags"]
+        assert "github.run_id" in action["with"]["tags"]
+        assert "github.run_attempt" in action["with"]["tags"]
+        assert "latest" not in action["with"]["tags"]
+    promote = next(s for s in steps if "scripts/promote_release_images.py" in s.get("run", ""))
+    assert promote["env"]["BACKEND_DIGEST"] == "${{ steps.backend.outputs.digest }}"
+    assert promote["env"]["FRONTEND_DIGEST"] == "${{ steps.frontend.outputs.digest }}"
+    assert promote["env"]["RELEASE_TAG"] == "${{ needs.publish-upgrade-notes.outputs.tag_name }}"
+
+
+def test_failed_notes_cannot_publish_images() -> None:
+    release = _yaml(".github/workflows/release.yml")
+    notes = release["jobs"]["publish-upgrade-notes"]
+    build = release["jobs"]["docker-build"]
+    assert build["needs"] == "publish-upgrade-notes"
+    assert build["if"] == "${{ needs.publish-upgrade-notes.result == 'success' }}"
+    assert any("scripts/publish_release_upgrade_notes.py" in s.get("run", "") for s in notes["steps"])
+
+
+def test_only_promotion_script_can_mutate_release_aliases() -> None:
+    release = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "docker/metadata-action@" not in release
+    assert "value=latest" not in release
+    assert "scripts/promote_release_images.py" in release
+    promoter = (REPO_ROOT / "scripts/promote_release_images.py").read_text(encoding="utf-8")
+    assert "self.ensure_version_tags()" in promoter
+    assert "self.verify_staging()" in promoter
+    assert "self.tag_image(repo, alias, image.digest)" in promoter
+    assert 'command("gh", "release", "edit", self.tag, "--draft=false")' in promoter
