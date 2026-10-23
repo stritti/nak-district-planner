@@ -79,7 +79,7 @@ Die Release-Pipeline besteht aus mehreren GitHub Actions Workflows. Für die eig
 
 1. `release-please` legt mit `draft: true` und `force-tag-creation: true` einen **Draft-Release** und einen Git-Tag an.
 2. `publish-upgrade-notes` überprüft SemVer-Tag, Zugehörigkeit zu `main`, Draft-Status, den öffentlich veröffentlichten Vorgänger-Tag und Upgrade-Anweisungen. Ein Fehler blockiert alle folgenden Jobs.
-3. `docker-build` erstellt beide Images aus demselben Tag und pusht ausschließlich eindeutige `candidate-<run_id>-<run_attempt>`-Tags.
+3. `docker-build` prüft zunächst, ob bereits ein unveränderlicher Digest-Nachweis (`nak-release-candidates.json`) als Asset des Draft-Releases existiert. Wenn ja, nutzt der Workflow genau dieses geprüfte Paar und überspringt neue Builds. Andernfalls erstellt er beide Images aus demselben Tag, pusht ausschließlich eindeutige `candidate-<run_id>-<run_attempt>`-Tags und speichert das Paar mit Release-Tag, Quell-Commit und Registry am Draft, bevor eine Promotion beginnt.
 4. `scripts/promote_release_images.py` überprüft die beiden Digests und veröffentlicht **danach** beide exakten Versionstags. Bereits vorhandene Versionstags dürfen nicht auf abweichende Digests zeigen.
 5. Stabile Releases promoten erst danach die Aliase `major.minor`, `major` und `latest`. Release Candidates verändern diese Aliase nicht.
 6. **Erst zuletzt** macht `gh release edit --draft=false` den GitHub Release öffentlich.
@@ -155,8 +155,8 @@ Erstmalig wird dieses Verfahren für die
 
 1. Fehler im Actions-Job und Draft-Status unter GitHub Releases prüfen. Der Draft darf nicht manuell vorzeitig freigegeben werden.
 2. In GHCR für **beide** Dienste den Digest des Kandidaten und eines möglicherweise schon gesetzten Versionstags vergleichen. Fertige Versionstags sind write-once.
-3. Unter Actions -> Release -> Run workflow mit Branch `main` und dem vorhandenen Draft-Tag (z. B. `v1.2.3`) neu starten. Notes, beide Builds und die Promotion werden erneut geprüft.
-4. Falls ein Retry einen anderen Digest für einen schon existierenden Versionstag erzeugt, wird die Veröffentlichung blockiert. Alte Images nicht überschreiben: Original-Digest aus dem früheren Run sichern, den Gegenpart der identischen Revision herstellen und die Freigabe kontrolliert abschließen.
+3. Unter Actions -> Release -> Run workflow mit Branch `main` und dem vorhandenen Draft-Tag (z. B. `v1.2.3`) neu starten. Notes werden erneut validiert; bei vorhandenem `nak-release-candidates.json` werden dessen Original-Digests verifiziert und **ohne erneute Builds** verwendet. Nur wenn dieser Nachweis fehlt, werden beide Images neu gebaut.
+4. Der gespeicherte Nachweis darf nicht überschrieben werden. Bei abweichendem Release-Tag, Commit oder Registry wird die Veröffentlichung blockiert. Falls ein Retry ohne gespeicherten Nachweis einen anderen Digest für einen schon existierenden Versionstag erzeugt, wird die Veröffentlichung blockiert. Alte Images nicht überschreiben: Original-Digest aus dem früheren Run sichern, den Gegenpart der identischen Revision herstellen und die Freigabe kontrolliert abschließen.
 5. Wenn nach einem fehlgeschlagenen Alias-Update das automatische Rollback scheitert, Aliase mit den vorherigen Digests wiederherstellen. Neu entstandene Aliase ohne früheren Digest gegebenenfalls manuell löschen.
 6. Erst beide exakt versionierten Images, Upgrade-Hinweise, GHCR-Aliase und anschließend die Freigabe des Drafts prüfen. Bis dahin bei produktiven Installationen die letzte vollständig veröffentlichte `APP_VERSION` beibehalten.
 
