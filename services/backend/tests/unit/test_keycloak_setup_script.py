@@ -80,7 +80,7 @@ def test_realm_security_defaults_payload() -> None:
 def test_existing_provisioning_client_is_deleted() -> None:
     module = _load()
     with (
-        patch.object(module.requests, "get", return_value=_response(200, [{"id": "prov-uuid"}])) as get,
+        patch.object(module.requests, "get", return_value=_response(200, [{"id": "prov-uuid", "clientId": "nak-planner-provisioning"}])) as get,
         patch.object(module.requests, "delete", return_value=_response(204)) as delete,
     ):
         removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
@@ -105,12 +105,25 @@ def test_missing_provisioning_client_is_a_no_op() -> None:
     post.assert_not_called()
 
 
+def test_only_the_client_with_the_exact_name_is_deleted() -> None:
+    module = _load()
+    similar = [{"id": "other-uuid", "clientId": "nak-planner-provisioning-2"}]
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, similar)),
+        patch.object(module.requests, "delete") as delete,
+    ):
+        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    assert removed is False
+    delete.assert_not_called()
+
+
 def test_a_response_without_a_client_id_aborts_the_setup() -> None:
     module = _load()
     with (
-        patch.object(module.requests, "get", return_value=_response(200, [{"name": "no-id"}])),
+        patch.object(module.requests, "get", return_value=_response(200, [{"clientId": "nak-planner-provisioning"}])),
         patch.object(module.requests, "delete") as delete,
-        pytest.raises(Exception, match="no client id"),
+        pytest.raises(module.KeycloakSetupError, match="no client id"),
     ):
         _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
 
@@ -132,9 +145,9 @@ def test_a_non_list_response_is_a_no_op() -> None:
 def test_a_failed_deletion_of_the_provisioning_client_aborts_the_setup() -> None:
     module = _load()
     with (
-        patch.object(module.requests, "get", return_value=_response(200, [{"id": "prov-uuid"}])),
+        patch.object(module.requests, "get", return_value=_response(200, [{"id": "prov-uuid", "clientId": "nak-planner-provisioning"}])),
         patch.object(module.requests, "delete", return_value=_response(403)),
-        pytest.raises(Exception, match="provisioning client"),
+        pytest.raises(module.KeycloakSetupError, match="provisioning client"),
     ):
         _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
 

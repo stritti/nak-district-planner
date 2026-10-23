@@ -38,6 +38,10 @@ from typing import Any, Optional
 import requests
 
 
+class KeycloakSetupError(Exception):
+    """A setup step failed in a way the operator has to resolve."""
+
+
 class KeycloakAdminClient:
     """Keycloak Admin API client with OIDC support"""
 
@@ -166,11 +170,15 @@ class KeycloakAdminClient:
         )
         found.raise_for_status()
         clients = found.json()
-        if not isinstance(clients, list) or not clients:
+        if not isinstance(clients, list):
             return False
-        client_uuid = clients[0].get("id") if isinstance(clients[0], dict) else None
+        # Deleting is destructive: act only on a client whose name matches exactly.
+        matching = [c for c in clients if isinstance(c, dict) and c.get("clientId") == client_id]
+        if not matching:
+            return False
+        client_uuid = matching[0].get("id")
         if not isinstance(client_uuid, str) or not client_uuid:
-            raise Exception(
+            raise KeycloakSetupError(
                 f"Failed to delete the provisioning client {client_id}: "
                 "Keycloak returned no client id"
             )
@@ -179,7 +187,7 @@ class KeycloakAdminClient:
         )
         if deleted.status_code != 204:
             print(f"✗ Failed to delete provisioning client: {deleted.status_code} {deleted.text}")
-            raise Exception(f"Failed to delete the provisioning client: {deleted.text}")
+            raise KeycloakSetupError(f"Failed to delete the provisioning client: {deleted.text}")
         print(f"✓ Provisioning client deleted: {client_id} (its secret is no longer valid)")
         return True
 
