@@ -128,9 +128,16 @@ def test_release_requires_verified_notes_and_both_images() -> None:
         assert "github.run_id" in action["with"]["tags"]
         assert "github.run_attempt" in action["with"]["tags"]
         assert "latest" not in action["with"]["tags"]
+    candidate = next(s for s in steps if s.get("id") == "candidate")
+    assert "scripts/release_candidate_manifest.py check" in candidate["run"]
+    for action in actions:
+        assert action["if"] == "${{ steps.candidate.outputs.reuse != 'true' }}"
+    saved = next(s for s in steps if s.get("id") == "saved")
+    assert saved["if"] == "${{ steps.candidate.outputs.reuse != 'true' }}"
+    assert "scripts/release_candidate_manifest.py save" in saved["run"]
     promote = next(s for s in steps if "scripts/promote_release_images.py" in s.get("run", ""))
-    assert promote["env"]["BACKEND_DIGEST"] == "${{ steps.backend.outputs.digest }}"
-    assert promote["env"]["FRONTEND_DIGEST"] == "${{ steps.frontend.outputs.digest }}"
+    assert promote["env"]["BACKEND_DIGEST"] == "${{ steps.candidate.outputs.backend_digest || steps.saved.outputs.backend_digest }}"
+    assert promote["env"]["FRONTEND_DIGEST"] == "${{ steps.candidate.outputs.frontend_digest || steps.saved.outputs.frontend_digest }}"
     assert promote["env"]["RELEASE_TAG"] == "${{ needs.publish-upgrade-notes.outputs.tag_name }}"
 
 
