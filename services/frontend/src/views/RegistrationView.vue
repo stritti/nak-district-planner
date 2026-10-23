@@ -241,16 +241,21 @@ watch(
 
 watch(
   () => form.value.district_id,
-  async (id) => {
+  async (districtId, _previousDistrictId, onCleanup) => {
+    // Vue invalidates the previous watcher before running the next one.
+    // A slower request must never restore options from a former district.
+    let isCurrent = true
+    onCleanup(() => { isCurrent = false })
+
     form.value.congregation_id = null
-    if (!id) {
-      congregations.value = []
-      return
-    }
+    congregations.value = []
+    if (!districtId) return
+
     try {
-      congregations.value = await listCongregationsPublic(id)
+      const options = await listCongregationsPublic(districtId)
+      if (isCurrent) congregations.value = options
     } catch {
-      congregations.value = []
+      if (isCurrent) congregations.value = []
     }
   },
 )
