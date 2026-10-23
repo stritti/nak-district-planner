@@ -3,7 +3,7 @@
 ### Requirement: Registration user linkage SHALL be secure
 If a bearer token is provided in a self-registration request, the system MUST validate it before using its `sub` for linkage. The identity provider MUST attest to ownership of the registration email: `email_verified` SHALL be the Boolean `true` and the token `email` SHALL match the submitted registration email case-insensitively. The system MUST reject any authenticated request without these claims instead of binding it to the token subject.
 
-#### Scenario: Valid token with verified matching email links registration
+#### Scenario: Valid token links registration to subject
 - **WHEN** registration includes a valid bearer token with a nonempty `sub`, a matching `email` and Boolean `email_verified=true`
 - **THEN** system stores the token's `sub` as registration `user_sub`
 
