@@ -25,3 +25,5 @@ Release Please creates the GitHub Release and tag before release notes or Docker
 - Before collecting upgrade notes, the preceding SemVer tag must resolve to a non-draft public GitHub Release. An incomplete or orphaned predecessor blocks successor publication rather than narrowing the notes diff past missing instructions.
 
 - Before alias promotion and again before public release publication, compare the draft tag with all published GitHub Release tags using SemVer precedence. Never promote a superseded draft to stable aliases.
+
+- Persist both candidate image digests as a single GitHub draft release asset *before* writing version tags. Resume retries download and validate this paired record against the release tag, checked-out commit and registry; skip image rebuilds when it exists. A missing asset allows the initial build, but an unreadable or conflicting asset blocks publication.
