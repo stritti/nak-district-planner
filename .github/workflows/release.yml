@@ -97,7 +97,7 @@ jobs:
   docker-build:
     name: Build, verify and publish release images
     needs: publish-upgrade-notes
-    if: ${{ needs.publish-upgrade-notes.result == 'success' }}
+    if: ${{ always() && needs.publish-upgrade-notes.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
