@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 from scripts.publish_release_upgrade_notes import (
     HEADING,
+    BREAKING_HEADING,
+    BREAKING_CHANGE_MARKER,
     NOTES_DIR,
     compose_release_body,
     load_upgrade_notes,
@@ -69,6 +71,45 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
         self.assertIn("**Vor dem Update:**", result)
         self.assertTrue(result.endswith(original))
         self.assertEqual(compose_release_body(result, "v1.0.1", notes), result)
+
+    def test_breaking_upgrade_note_is_prioritized_before_ordinary_changelog(self) -> None:
+        important_note = (
+            "### Incompatible provider migration\n\n"
+            f"{BREAKING_CHANGE_MARKER} Existing config fails startup.\n\n"
+            "**Betroffen:** Existing deployments\n\n"
+            "**Vor dem Update:** Update IdP\n\n"
+            "**Nach dem Update:** Test login\n"
+        )
+        original = "### Features\n\nOther improvements"
+        result = compose_release_body(original, "v1.6.0", [important_note])
+        self.assertIn(BREAKING_HEADING, result)
+        self.assertLess(result.index(BREAKING_HEADING), result.index(original))
+        self.assertEqual(compose_release_body(result, "v1.6.0", [important_note]), result)
+
+    def test_mixed_release_notes_always_highlight_the_breaking_change(self) -> None:
+        ordinary_note = (
+            "### Maintenance\n\n**Betroffen:** Operators\n\n"
+            "**Vor dem Update:** Prepare\n\n**Nach dem Update:** Verify\n"
+        )
+        breaking_note = ordinary_note + "\n" + BREAKING_CHANGE_MARKER
+        self.assertIn(
+            BREAKING_HEADING,
+            compose_release_body("changelog", "v1.6.0", [ordinary_note, breaking_note]),
+        )
+        self.assertIn(
+            BREAKING_HEADING,
+            compose_release_body("changelog", "v1.6.0", [breaking_note, ordinary_note]),
+        )
+
+    def test_keycloak_breaking_note_in_repository_is_valid_and_explicit(self) -> None:
+        note_path = Path(__file__).resolve().parent.parent / NOTES_DIR / "699-keycloak-self-registration.md"
+        body = note_path.read_text(encoding="utf-8")
+        validate_upgrade_note(body, note_path)
+        self.assertIn(BREAKING_CHANGE_MARKER, body)
+        self.assertIn("IDP_PROVISIONING_PROVIDER=keycloak", body)
+        self.assertIn("setup_keycloak_realm.py", body)
+        self.assertIn("SMTP", body)
+        self.assertIn("Rollback", body)
 
     def test_no_upgrade_note_does_not_touch_release_description(self) -> None:
         self.assertEqual(new_note_paths(self.repo, "v1.0.0"), [])
