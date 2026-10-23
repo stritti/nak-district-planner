@@ -6,6 +6,9 @@
 - [x] Add immutable exact version tags, controlled stable alias promotion and best-effort alias rollback.
 - [x] Support retry of a partial draft through explicit workflow dispatch.
 - [x] Add release script failure tests and workflow contract tests.
+- [x] Fix the skipped-ancestor dispatch condition and add regression assertions.
+- [x] Fail closed when the preceding tagged release is still a draft or has no published GitHub Release.
+- [x] Address CodeQL's unused import finding.
 - [x] Update release documentation and production runbook.
 
 ## Verification
