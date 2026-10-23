@@ -23,6 +23,6 @@
 - No database/RLS behavior changes.
 
 ## Tasks
-- [x] **T1 RED:** expand isolated CI gate to domain/ports, planning and services, observe failing F401 diagnostics.
-- [ ] **T2 GREEN:** remove exactly diagnosed unused imports; rerun the CI gate.
+- [x] **T1 RED:** CI run 40028745839 failed F401 as expected on `30f4bf0`: `NotificationType` and `EventApprovalStatus` were unused in `domain/ports/repositories.py`.
+- [x] **T2 GREEN implementation:** remove only the two diagnosed unused imports; verify the identical gate in the new PR head's GitHub Actions.
 - [ ] **T3:** validate OpenSpec and full backend/integration coverage, request a Codex review.
