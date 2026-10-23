@@ -96,3 +96,27 @@ class LeaderRegistration:
             created_at=now,
             updated_at=now,
         )
+
+    def approve(
+        self,
+        *,
+        role: Role,
+        scope_type: ScopeType,
+        scope_id: uuid.UUID,
+        approved_by_sub: str,
+        approved_at: datetime | None = None,
+    ) -> None:
+        """Apply a complete approval transition without adapter-specific concerns."""
+        if self.status != RegistrationStatus.PENDING:
+            raise ValueError("Only pending registrations can be approved")
+        now = approved_at if approved_at is not None else datetime.now(UTC)
+        self.status = RegistrationStatus.APPROVED
+        self.assigned_role = role
+        self.assigned_scope_type = scope_type
+        self.assigned_scope_id = scope_id
+        self.approved_by_sub = approved_by_sub
+        self.approved_at = now
+        self.idp_provision_status = None
+        self.idp_provision_error = None
+        self.idp_provisioned_at = None
+        self.updated_at = now

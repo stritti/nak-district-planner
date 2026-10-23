@@ -392,17 +392,12 @@ async def _create_leader_and_approve(
         ]
     await leader_repo.save(leader)
 
-    now = datetime.now(UTC)
-    reg.status = RegistrationStatus.APPROVED
-    reg.assigned_role = body.role
-    reg.assigned_scope_type = body.scope_type
-    reg.assigned_scope_id = body.scope_id
-    reg.approved_by_sub = auth.user_sub
-    reg.approved_at = now
-    reg.idp_provision_status = None
-    reg.idp_provision_error = None
-    reg.idp_provisioned_at = None
-    reg.updated_at = now
+    reg.approve(
+        role=body.role,
+        scope_type=body.scope_type,
+        scope_id=body.scope_id,
+        approved_by_sub=auth.user_sub,
+    )
 
 
 async def _create_membership_if_linked(

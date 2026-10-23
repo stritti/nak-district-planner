@@ -168,6 +168,68 @@ class TestLeaderRegistrationDomainModel:
         assert reg.created_at == reg.updated_at
 
 
+    def test_approval_transition_updates_all_fields_and_resets_provisioning(self):
+        reg = LeaderRegistration.create(
+            district_id=uuid.uuid4(), name="Test", email="test@example.com"
+        )
+        timestamp = datetime.now(UTC)
+        scope_id = uuid.uuid4()
+        reg.idp_provision_status = "FAILED"
+        reg.idp_provision_error = "previous error"
+        reg.idp_provisioned_at = timestamp
+
+        reg.approve(
+            role=Role.PLANNER,
+            scope_type=ScopeType.CONGREGATION,
+            scope_id=scope_id,
+            approved_by_sub="admin|123",
+            approved_at=timestamp,
+        )
+
+        assert reg.status is RegistrationStatus.APPROVED
+        assert reg.assigned_role is Role.PLANNER
+        assert reg.assigned_scope_type is ScopeType.CONGREGATION
+        assert reg.assigned_scope_id == scope_id
+        assert reg.approved_by_sub == "admin|123"
+        assert reg.approved_at == timestamp
+        assert reg.updated_at == timestamp
+        assert reg.idp_provision_status is None
+        assert reg.idp_provision_error is None
+        assert reg.idp_provisioned_at is None
+
+    @pytest.mark.parametrize("prior_status", [RegistrationStatus.APPROVED, RegistrationStatus.REJECTED])
+    def test_approval_transition_rejects_non_pending_without_mutating_fields(self, prior_status):
+        reg = LeaderRegistration.create(
+            district_id=uuid.uuid4(), name="Test", email="test@example.com"
+        )
+        reg.status = prior_status
+        with pytest.raises(ValueError, match="Only pending"):
+            reg.approve(
+                role=Role.VIEWER,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=reg.district_id,
+                approved_by_sub="admin|123",
+            )
+        assert reg.status is prior_status
+        assert reg.assigned_role is None
+        assert reg.approved_by_sub is None
+
+    def test_approval_timestamp_defaults_to_utc_now(self):
+        reg = LeaderRegistration.create(
+            district_id=uuid.uuid4(), name="Test", email="test@example.com"
+        )
+        before = datetime.now(UTC)
+        reg.approve(
+            role=Role.VIEWER,
+            scope_type=ScopeType.DISTRICT,
+            scope_id=reg.district_id,
+            approved_by_sub="admin|123",
+        )
+        after = datetime.now(UTC)
+        assert before <= reg.approved_at <= after
+        assert reg.approved_at == reg.updated_at
+
+
 class TestRegistrationResponseSchema:
     def test_full_response(self):
         now = datetime.now(UTC)
