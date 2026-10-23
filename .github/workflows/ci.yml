@@ -117,14 +117,17 @@ jobs:
       - name: Ruff lint (pinned version from uv.lock)
         run: uv run ruff check .
 
-      # F401 is globally excluded during legacy cleanup. Enforce it for reviewed
-      # production modules now instead of waiting for a risky repo-wide toggle.
-      # --isolated bypasses the global F401 ignore deliberately.
-      - name: Incremental F401 unused-import gate for registration modules
+      # F401 remains globally excluded during the legacy migration. This
+      # isolated check fails for unused imports in all reviewed domain ports,
+      # planning rules and services; preserve the original registration gate.
+      - name: Incremental F401 unused-import gate for reviewed modules
         run: |
           uv run ruff check --isolated --select F401 \
             app/domain/models/leader_registration.py \
-            app/adapters/api/routers/registrations.py
+            app/adapters/api/routers/registrations.py \
+            app/domain/ports \
+            app/domain/planning \
+            app/domain/services
 
       - name: Check RBAC guard pattern in routers
         run: uv run python scripts/check_rbac_guard_pattern.py
