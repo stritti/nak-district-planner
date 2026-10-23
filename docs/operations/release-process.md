@@ -78,7 +78,7 @@ Die Release-Pipeline besteht aus mehreren GitHub Actions Workflows. Für die eig
 ### 1. `release.yml`: Draft-Release und Readiness-Gate
 
 1. `release-please` legt mit `draft: true` und `force-tag-creation: true` einen **Draft-Release** und einen Git-Tag an.
-2. `publish-upgrade-notes` überprüft SemVer-Tag, Zugehörigkeit zu `main`, Draft-Status und Upgrade-Anweisungen. Ein Fehler blockiert alle folgenden Jobs.
+2. `publish-upgrade-notes` überprüft SemVer-Tag, Zugehörigkeit zu `main`, Draft-Status, den öffentlich veröffentlichten Vorgänger-Tag und Upgrade-Anweisungen. Ein Fehler blockiert alle folgenden Jobs.
 3. `docker-build` erstellt beide Images aus demselben Tag und pusht ausschließlich eindeutige `candidate-<run_id>-<run_attempt>`-Tags.
 4. `scripts/promote_release_images.py` überprüft die beiden Digests und veröffentlicht **danach** beide exakten Versionstags. Bereits vorhandene Versionstags dürfen nicht auf abweichende Digests zeigen.
 5. Stabile Releases promoten erst danach die Aliase `major.minor`, `major` und `latest`. Release Candidates verändern diese Aliase nicht.
@@ -159,6 +159,8 @@ Erstmalig wird dieses Verfahren für die
 4. Falls ein Retry einen anderen Digest für einen schon existierenden Versionstag erzeugt, wird die Veröffentlichung blockiert. Alte Images nicht überschreiben: Original-Digest aus dem früheren Run sichern, den Gegenpart der identischen Revision herstellen und die Freigabe kontrolliert abschließen.
 5. Wenn nach einem fehlgeschlagenen Alias-Update das automatische Rollback scheitert, Aliase mit den vorherigen Digests wiederherstellen. Neu entstandene Aliase ohne früheren Digest gegebenenfalls manuell löschen.
 6. Erst beide exakt versionierten Images, Upgrade-Hinweise, GHCR-Aliase und anschließend die Freigabe des Drafts prüfen. Bis dahin bei produktiven Installationen die letzte vollständig veröffentlichte `APP_VERSION` beibehalten.
+
+Vor einer neuen Veröffentlichung muss der direkte Vorgänger-Tag ein **öffentliches GitHub Release** besitzen. Ist der Vorgänger noch Draft oder wurde das Release bei vorhandenem Tag gelöscht, verweigert der Notes-Schritt die Freigabe des Nachfolgers. Zuerst den ursprünglichen Draft reparieren und veröffentlichen, statt seine Upgrade-Anweisungen zu überspringen.
 
 Ein nicht vorhandener Draft wird als Recovery-Ziel abgelehnt. GitHub und GHCR unterstützen keine atomare Mehrfachveröffentlichung, daher werden Images in Produktion nur über exakte Versions-Tags referenziert.
 
