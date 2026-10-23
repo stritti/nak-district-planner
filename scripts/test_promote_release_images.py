@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from scripts.promote_release_images import PromotionError, ReleasePromoter, command
+from scripts.promote_release_images import PromotionError, ReleasePromoter, command, newer_semver
 
 BACKEND = "sha256:" + "a" * 64
 FRONTEND = "sha256:" + "b" * 64
@@ -27,6 +27,9 @@ class FakePublisher:
         self.calls = []
         self.fail_tag = None
         self.fail_publish = False
+        self.published_tags = ""
+        self.supersede_during_promotion = False
+        self.api_checks = 0
 
     def digest_of(self, ref):
         if "@" in ref:
@@ -44,6 +47,11 @@ class FakePublisher:
             raise PromotionError("Not a draft")
 
     def command(self, *args):
+        if args[:2] == ("gh", "api"):
+            self.api_checks += 1
+            if self.supersede_during_promotion and self.api_checks == 2:
+                return "v1.2.4"
+            return self.published_tags
         if self.fail_publish:
             raise PromotionError("GitHub release edit failed")
         self.published = True
@@ -71,6 +79,59 @@ class PromotionTests(unittest.TestCase):
         fake = FakePublisher(tag="v1.2.3-rc.1")
         fake.execute()
         self.assertEqual([call[1] for call in fake.calls], ["1.2.3-rc.1"] * 2)
+
+    def test_semver_precedence_handles_numeric_and_prerelease_order(self):
+        cases = (
+            ("v1.2.10", "v1.2.9", True),
+            ("v1.2.3-rc.10", "v1.2.3-rc.2", True),
+            ("v1.2.3", "v1.2.3-rc.2", True),
+            ("v1.2.3-rc.1", "v1.2.3", False),
+            ("v1.2.3-alpha", "v1.2.3-beta", False),
+            ("v1.2.3-rc.1.1", "v1.2.3-rc.1", True),
+            ("v1.2.3", "v1.2.3", False),
+            ("nonsense", "v1.2.3", False),
+        )
+        for candidate, current, expected in cases:
+            with self.subTest(candidate=candidate, current=current):
+                self.assertIs(newer_semver(candidate, current), expected)
+
+    def test_recovery_of_superseded_draft_never_changes_aliases(self):
+        fake = FakePublisher()
+        fake.published_tags = "v1.2.4"
+        for service in ("backend", "frontend"):
+            fake.tags[f"{REGISTRY}/{service}:latest"] = PREVIOUS
+        with self.assertRaisesRegex(PromotionError, "superseded draft"):
+            fake.execute()
+        self.assertFalse(fake.published)
+        self.assertEqual(fake.calls, [])
+        for service in ("backend", "frontend"):
+            self.assertEqual(fake.tags[f"{REGISTRY}/{service}:latest"], PREVIOUS)
+
+    def test_older_public_release_allows_normal_promotion(self):
+        fake = FakePublisher()
+        fake.published_tags = "v1.2.2"
+        fake.execute()
+        self.assertTrue(fake.published)
+        self.assertEqual(fake.api_checks, 2)
+
+    def test_superseding_release_appearing_during_promotion_rolls_back(self):
+        fake = FakePublisher()
+        fake.supersede_during_promotion = True
+        for service in ("backend", "frontend"):
+            fake.tags[f"{REGISTRY}/{service}:latest"] = PREVIOUS
+        with self.assertRaisesRegex(PromotionError, "superseded draft"):
+            fake.execute()
+        self.assertFalse(fake.published)
+        for service in ("backend", "frontend"):
+            self.assertEqual(fake.tags[f"{REGISTRY}/{service}:latest"], PREVIOUS)
+
+    def test_unavailable_public_releases_fail_closed(self):
+        fake = FakePublisher()
+        def failing_api(*args):
+            raise PromotionError("GitHub releases API unavailable")
+        with patch("scripts.promote_release_images.command", side_effect=failing_api):
+            with self.assertRaisesRegex(PromotionError, "unavailable"):
+                fake.promoter.ensure_not_superseded()
 
     def test_missing_backend_or_frontend_blocks_all_publication(self):
         for missing in (BACKEND, FRONTEND):
@@ -166,6 +227,7 @@ class PromotionTests(unittest.TestCase):
                 fake.execute()
         self.assertIn("Manual alias recovery required", errors.getvalue())
         self.assertFalse(fake.published)
+
     def test_non_manifest_error_is_not_treated_as_missing(self):
         from subprocess import CompletedProcess
         with patch(
