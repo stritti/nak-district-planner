@@ -127,6 +127,45 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaisesRegex(PromotionError, "Invalid image digest"):
             ReleasePromoter(REGISTRY, "v1.2.3", "not-a-digest", FRONTEND)
 
+    def test_reads_registry_digest_from_buildx_inspect_output(self):
+        from subprocess import CompletedProcess
+        output = f"Name: ghcr.io/org/app:tag\nMediaType: application/vnd.oci.image.index.v1+json\nDigest: {BACKEND}\n"
+        with patch(
+            "scripts.promote_release_images.subprocess.run",
+            return_value=CompletedProcess(["docker"], 0, output, ""),
+        ):
+            self.assertEqual(FakePublisher().promoter.digest_of("ghcr.io/org/app:tag"), BACKEND)
+
+    def test_registry_copy_must_preserve_exact_digest(self):
+        promoter = FakePublisher().promoter
+        with patch("scripts.promote_release_images.command", side_effect=["", f"Digest: {PREVIOUS}"]):
+            with self.assertRaisesRegex(PromotionError, "Digest mismatch"):
+                promoter.tag_image(f"{REGISTRY}/backend", "1.2.3", BACKEND)
+
+    def test_draft_check_rejects_published_release(self):
+        promoter = FakePublisher().promoter
+        with patch("scripts.promote_release_images.command", return_value="false"):
+            with self.assertRaisesRegex(PromotionError, "not a draft"):
+                promoter.ensure_draft()
+
+    def test_release_recovery_rejects_non_draft_state(self):
+        fake = FakePublisher()
+        fake.draft = False
+        with self.assertRaisesRegex(PromotionError, "Not a draft"):
+            fake.execute()
+        self.assertEqual(fake.calls, [])
+
+    def test_missing_old_alias_requires_manual_recovery(self):
+        import contextlib
+        import io
+        fake = FakePublisher()
+        fake.fail_tag = (f"{REGISTRY}/frontend", "latest", FRONTEND)
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            with self.assertRaisesRegex(PromotionError, "Registry push failed"):
+                fake.execute()
+        self.assertIn("Manual alias recovery required", errors.getvalue())
+        self.assertFalse(fake.published)
     def test_non_manifest_error_is_not_treated_as_missing(self):
         from subprocess import CompletedProcess
         with patch(
