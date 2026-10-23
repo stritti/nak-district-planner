@@ -3,10 +3,19 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import * as registrationsApi from '../api/registrations'
+import { useAuthStore } from '../stores/auth'
 import RegistrationView from './RegistrationView.vue'
 
 vi.mock('../api/registrations')
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
+  useRouter: () => ({}),
+}))
+
+const getAuthorizationUrl = vi.hoisted(() => vi.fn())
+vi.mock('../composables/useOIDC', () => ({ useOIDC: () => ({ getAuthorizationUrl }) }))
 
 const districts: registrationsApi.PublicDistrictInfo[] = [
   { id: 'district-1', name: 'Bezirk Eins' },
@@ -20,6 +29,7 @@ const congregations: registrationsApi.PublicCongregationInfo[] = [
 function mountView() {
   return mount(RegistrationView, {
     global: {
+      plugins: [createPinia()],
       stubs: {
         ContextualHelp: true,
         RouterLink: { template: '<a><slot /></a>' },
@@ -29,6 +39,7 @@ function mountView() {
 }
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   vi.clearAllMocks()
   vi.mocked(registrationsApi.listDistrictsPublic).mockResolvedValue(districts)
   vi.mocked(registrationsApi.listCongregationsPublic).mockResolvedValue(congregations)
@@ -106,7 +117,7 @@ describe('RegistrationView', () => {
       special_role: 'Gemeindevorsteher',
       phone: '+49 1234',
       notes: 'Bitte freischalten',
-    })
+    }, null)
     expect(wrapper.text()).toContain('Registrierung eingereicht')
   })
 
@@ -127,7 +138,7 @@ describe('RegistrationView', () => {
       special_role: null,
       phone: null,
       notes: null,
-    }))
+    }), null)
   })
 
   it('shows Error and non-Error submit failures and re-enables the form', async () => {
@@ -147,5 +158,77 @@ describe('RegistrationView', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain('Fehler beim Einreichen der Registrierung.')
+  })
+
+  describe('account creation after the registration', () => {
+    async function submitRegistrationForm(wrapper: ReturnType<typeof mountView>) {
+      await flushPromises()
+      await wrapper.findAll('select')[0].setValue('district-1')
+      await wrapper.get('input[type="text"]').setValue('Erika Beispiel')
+      await wrapper.get('input[type="email"]').setValue('erika@example.org')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+    }
+
+    beforeEach(() => {
+      vi.mocked(registrationsApi.submitRegistration).mockResolvedValue({} as registrationsApi.RegistrationResponse)
+    })
+
+    it('offers to create the account and names the email address that must match', async () => {
+      const wrapper = mountView()
+      await submitRegistrationForm(wrapper)
+
+      const hint = wrapper.get('[data-testid="create-account"]')
+      expect(hint.text()).toContain('erika@example.org')
+      expect(hint.text()).toContain('dieselbe E-Mail-Adresse')
+      expect(hint.get('button').text()).toBe('Konto anlegen')
+      expect(wrapper.find('[data-testid="account-linked"]').exists()).toBe(false)
+    })
+
+    it('starts the login with prompt=create when the account is created', async () => {
+      getAuthorizationUrl.mockResolvedValue('https://auth.example/auth?prompt=create')
+      const hrefSetter = vi.fn()
+      const original = window.location
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { set href(value: string) { hrefSetter(value) } },
+      })
+      try {
+        const wrapper = mountView()
+        await submitRegistrationForm(wrapper)
+
+        await wrapper.get('[data-testid="create-account"] button').trigger('click')
+        await flushPromises()
+
+        expect(getAuthorizationUrl).toHaveBeenCalledWith({ prompt: 'create' })
+        expect(hrefSetter).toHaveBeenCalledWith('https://auth.example/auth?prompt=create')
+      } finally {
+        Object.defineProperty(window, 'location', { configurable: true, value: original })
+      }
+    })
+
+    it('shows a failed redirect and keeps the button usable', async () => {
+      getAuthorizationUrl.mockRejectedValue(new Error('Discovery fehlgeschlagen'))
+      const wrapper = mountView()
+      await submitRegistrationForm(wrapper)
+
+      await wrapper.get('[data-testid="create-account"] button').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('[role="alert"]').text()).toContain('Discovery fehlgeschlagen')
+      expect(wrapper.get('[data-testid="create-account"] button').attributes('disabled')).toBeUndefined()
+    })
+
+    it('sends the access token of a logged-in user and does not offer a second account', async () => {
+      const wrapper = mountView()
+      vi.spyOn(useAuthStore(), 'getToken').mockReturnValue('access-token-1')
+      await submitRegistrationForm(wrapper)
+
+      expect(registrationsApi.submitRegistration).toHaveBeenCalledWith(
+        'district-1', expect.objectContaining({ email: 'erika@example.org' }), 'access-token-1',
+      )
+      expect(wrapper.find('[data-testid="account-linked"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="create-account"]').exists()).toBe(false)
+    })
   })
 })

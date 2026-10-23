@@ -170,6 +170,33 @@ def test_keycloak_administration_is_behind_the_ip_allowlist() -> None:
     )
 
 
+def test_public_keycloak_registration_is_rate_limited() -> None:
+    """Self-registration is open to everyone: its form and submit routes are throttled per client."""
+    routes = _routes("keycloak.yml")
+    registration = routes.split("auth-registration:", 1)[1].split("\n  middlewares:\n", 1)[0]
+    assert "login-actions/registration" in registration
+    assert "protocol/openid-connect/registrations" in registration
+    assert "keycloak-registration-ratelimit" in registration
+    assert "security-headers" in registration
+    limiter = routes.split("keycloak-registration-ratelimit:", 1)[1].split("keycloak-admin-allowlist:", 1)[0]
+    assert "rateLimit:" in limiter and "average: 10" in limiter and "period: 1m" in limiter
+    # The admin routes keep their stricter allowlist and are not touched by the limiter.
+    assert "keycloak-registration-ratelimit" not in routes.split("auth-admin:", 1)[1].split("auth-registration:", 1)[0]
+
+
+def test_existing_traefik_override_rate_limits_keycloak_registration() -> None:
+    labels = _override("existing-traefik.yml")["services"]["keycloak"]["labels"]
+    joined = "\n".join(labels)
+    assert "routers.nak-auth-registration.rule=" in joined
+    assert "login-actions/registration" in joined and "openid-connect/registrations" in joined
+    assert "routers.nak-auth-registration.middlewares=nak-registration-ratelimit,nak-hsts" in joined
+    assert "middlewares.nak-registration-ratelimit.ratelimit.average=10" in joined
+    assert "middlewares.nak-registration-ratelimit.ratelimit.period=1m" in joined
+    # `$` must be escaped for Compose interpolation.
+    rule = next(label for label in labels if "nak-auth-registration.rule" in label)
+    assert rule.endswith("$$`)")
+
+
 # --- Overrides for an existing Traefik / Keycloak (deploy/compose/) ----------
 
 

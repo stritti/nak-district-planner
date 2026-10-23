@@ -102,21 +102,6 @@ class Settings(BaseSettings):
     idp_provisioning_endpoint: str | None = None
     idp_provisioning_api_key: str | None = None
     idp_provisioning_timeout_seconds: float = 10.0
-    idp_provisioning_keycloak_base_url: str | None = None
-    idp_provisioning_keycloak_realm: str | None = None
-    # Confidential client with a service account in the application realm
-    # (client credentials grant; only realm-management manage-users/view-users).
-    idp_provisioning_keycloak_client_id: str | None = None
-    idp_provisioning_keycloak_client_secret: str | None = None
-    # Removed: the master-realm admin password grant. Only read so that the
-    # production guard can refuse a stale configuration.
-    idp_provisioning_keycloak_admin_username: str | None = None
-    idp_provisioning_keycloak_admin_password: str | None = None
-    idp_provisioning_keycloak_invite_on_approval: bool = True
-    idp_provisioning_keycloak_invite_lifespan_seconds: int = Field(
-        default=259200, ge=3600, le=604800
-    )
-    idp_provisioning_keycloak_invite_redirect_uri: str | None = None
     startup_generate_draft_services: bool = False
     use_series_generation: bool = True
     conflict_check_enabled: bool = True
@@ -185,6 +170,23 @@ class Settings(BaseSettings):
             if network.strip():
                 ipaddress.ip_network(network.strip(), strict=False)
         return value
+
+    @model_validator(mode="after")
+    def reject_removed_keycloak_provisioning(self) -> Settings:
+        """Refuse a stale configuration of the removed Keycloak provisioner (all environments).
+
+        Ignoring it silently would leave approvals without an invitation. The backend
+        holds no Keycloak admin credential any more; accounts are created by
+        self-registration in the realm.
+        """
+        if self.idp_provisioning_enabled and self.idp_provisioning_provider == "keycloak":
+            raise ValueError(
+                "IDP_PROVISIONING_PROVIDER=keycloak is no longer supported: the backend holds "
+                "no Keycloak admin credential. Remove IDP_PROVISIONING_PROVIDER=keycloak and all "
+                "IDP_PROVISIONING_KEYCLOAK_* settings (or set IDP_PROVISIONING_ENABLED=false). "
+                "See docs/operations/release-notes/699-keycloak-self-registration.md"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_oidc_settings(self) -> Settings:
@@ -323,44 +325,6 @@ def production_guard(settings: Settings) -> None:
                 and not settings.idp_provisioning_endpoint.startswith("https://")
             ):
                 errors.append("IDP_PROVISIONING_ENDPOINT should use HTTPS in production")
-        elif settings.idp_provisioning_provider == "keycloak":
-            if not settings.idp_provisioning_keycloak_base_url:
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_BASE_URL must be configured when using keycloak provider"
-                )
-            if not settings.idp_provisioning_keycloak_realm:
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider"
-                )
-            if not settings.idp_provisioning_keycloak_client_id:
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_CLIENT_ID must be configured when using keycloak provider"
-                )
-            if settings.idp_provisioning_keycloak_client_secret in (
-                None,
-                "",
-                "replace-with-provisioning-client-secret",
-            ):
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET must be changed from the default value"
-                )
-            if (
-                settings.idp_provisioning_keycloak_admin_username
-                or settings.idp_provisioning_keycloak_admin_password
-            ):
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME/_PASSWORD are no longer supported; "
-                    "remove them and use IDP_PROVISIONING_KEYCLOAK_CLIENT_ID/_CLIENT_SECRET"
-                )
-            if (
-                settings.idp_provisioning_keycloak_invite_redirect_uri
-                and not settings.idp_provisioning_keycloak_invite_redirect_uri.startswith(
-                    "https://"
-                )
-            ):
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI should use HTTPS in production"
-                )
 
     if errors:
         raise RuntimeError(

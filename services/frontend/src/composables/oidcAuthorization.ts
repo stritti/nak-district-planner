@@ -16,7 +16,15 @@ export interface AuthorizationDeps {
   onSessionInstalled: (token: unknown, user: OIDCUser | null) => void
 }
 
-export async function getAuthorizationUrl(deps: AuthorizationDeps): Promise<string> {
+export interface AuthorizationOptions {
+  /** `create` opens the realm's registration form instead of the login form (OIDC prompt=create). */
+  prompt?: 'create'
+}
+
+export async function getAuthorizationUrl(
+  deps: AuthorizationDeps,
+  options: AuthorizationOptions = {},
+): Promise<string> {
   await deps.loadDiscovery()
   const discovery = deps.getDiscovery()
   if (!discovery) throw new Error('Discovery not loaded')
@@ -37,6 +45,7 @@ export async function getAuthorizationUrl(deps: AuthorizationDeps): Promise<stri
     code_challenge_method: 'S256',
     state,
   })
+  if (options.prompt) params.set('prompt', options.prompt)
 
   return `${discovery.authorization_endpoint}?${params.toString()}`
 }

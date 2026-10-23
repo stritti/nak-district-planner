@@ -43,6 +43,7 @@ import { __resetDiscoveryState, loadDiscovery, useDiscoveryState } from './oidcD
 import {
   exchangeCodeForToken as runCodeExchange,
   getAuthorizationUrl as buildAuthorizationUrl,
+  type AuthorizationOptions,
 } from './oidcAuthorization'
 import { restoreRefreshSession } from './oidcSessionRestore'
 import { getCurrentCSRFHeaders } from './useCSRF'
@@ -337,7 +338,8 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     isLoading,
     error,
     loadDiscovery,
-    getAuthorizationUrl: () => buildAuthorizationUrl(authorizationDeps),
+    getAuthorizationUrl: (options?: AuthorizationOptions) =>
+      buildAuthorizationUrl(authorizationDeps, options),
     exchangeCodeForToken: (code: string) => runCodeExchange(authorizationDeps, code),
     refreshToken,
     logout,
