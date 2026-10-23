@@ -173,6 +173,15 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(fake.calls, [])
         self.assertFalse(fake.published)
 
+    def test_partial_version_tag_promotion_reuses_original_digest(self):
+        fake = FakePublisher()
+        fake.tags[f"{REGISTRY}/backend:1.2.3"] = BACKEND
+        fake.execute()
+        self.assertTrue(fake.published)
+        self.assertEqual(fake.tags[f"{REGISTRY}/backend:1.2.3"], BACKEND)
+        self.assertEqual(fake.tags[f"{REGISTRY}/frontend:1.2.3"], FRONTEND)
+        self.assertNotIn((f"{REGISTRY}/backend", "1.2.3", BACKEND), fake.calls)
+
     def test_retry_with_identical_digests_is_idempotent(self):
         fake = FakePublisher()
         fake.execute()
