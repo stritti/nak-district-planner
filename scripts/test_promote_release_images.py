@@ -56,6 +56,7 @@ class FakePublisher:
             raise PromotionError("GitHub release edit failed")
         self.published = True
         self.draft = False
+        return None
 
     def execute(self):
         with patch.object(self.promoter, "digest_of", self.digest_of), \
