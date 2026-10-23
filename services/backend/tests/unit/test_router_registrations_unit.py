@@ -342,7 +342,10 @@ async def test_an_anonymous_registration_sets_no_user() -> None:
 @pytest.mark.asyncio
 async def test_the_validated_subject_is_the_actor_of_the_request_audit() -> None:
     """The audit middleware reads request.state.user; without it the entry looks anonymous."""
-    _, request = await _submit(_credentials(), {"sub": "oidc|erika"})
+    _, request = await _submit(
+        _credentials(),
+        {"sub": "oidc|erika", "email": "max@example.com", "email_verified": True},
+    )
 
     assert request.state.user.sub == "oidc|erika"
 
