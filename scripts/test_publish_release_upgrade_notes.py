@@ -43,9 +43,10 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
             ["git", *args], cwd=self.repo, capture_output=True, text=True, check=True
         ).stdout.strip()
 
-    def commit(self, message: str, tag: str | None = None) -> None:
+    def commit(self, message: str, tag: str | None = None, *, allow_empty: bool = False) -> None:
         self.git("add", ".")
-        self.git("commit", "-qm", message)
+        args = ("commit", "-qm", message, "--allow-empty") if allow_empty else ("commit", "-qm", message)
+        self.git(*args)
         if tag:
             self.git("tag", tag)
 
@@ -124,7 +125,7 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
     def test_unpublished_predecessor_blocks_later_release(self) -> None:
         self.note()
         self.commit("Unresolved draft", tag="v1.0.1")
-        self.commit("Later version", tag="v1.0.2")
+        self.commit("Later version", tag="v1.0.2", allow_empty=True)
         with patch("scripts.publish_release_upgrade_notes.run", return_value="true") as gh:
             with self.assertRaisesRegex(ValueError, "Recover and publish that draft first"):
                 publish(self.repo, "v1.0.2")
@@ -134,8 +135,8 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
         )
 
     def test_missing_predecessor_release_blocks_later_release(self) -> None:
-        self.commit("Orphaned release tag", tag="v1.0.1")
-        self.commit("Later version", tag="v1.0.2")
+        self.commit("Orphaned release tag", tag="v1.0.1", allow_empty=True)
+        self.commit("Later version", tag="v1.0.2", allow_empty=True)
         missing = subprocess.CalledProcessError(1, ["gh", "release", "view"])
         with patch("scripts.publish_release_upgrade_notes.run", side_effect=missing):
             with self.assertRaises(subprocess.CalledProcessError):
@@ -144,12 +145,12 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
     def test_resolved_draft_allows_future_release(self) -> None:
         self.note()
         self.commit("Published predecessor", tag="v1.0.1")
-        self.commit("Later version", tag="v1.0.2")
+        self.commit("Later version", tag="v1.0.2", allow_empty=True)
         with patch("scripts.publish_release_upgrade_notes.run", return_value="false"):
             verify_previous_release_is_published(self.repo, "v1.0.2")
 
     def test_retry_of_same_draft_accepts_published_predecessor(self) -> None:
-        self.commit("Draft retry", tag="v1.0.1")
+        self.commit("Draft retry", tag="v1.0.1", allow_empty=True)
         with patch("scripts.publish_release_upgrade_notes.run", return_value="false"):
             self.assertFalse(publish(self.repo, "v1.0.1"))
 
