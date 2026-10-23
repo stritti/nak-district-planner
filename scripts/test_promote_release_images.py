@@ -136,6 +136,16 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(PromotionError, "unauthorized"):
                 command("docker", "buildx", "imagetools", "inspect", "ref", allow_missing=True)
 
+    def test_missing_version_tag_is_reported_without_blocking_first_promotion(self):
+        from subprocess import CompletedProcess
+        with patch(
+            "scripts.promote_release_images.subprocess.run",
+            return_value=CompletedProcess(["docker"], 1, "", "ERROR: ghcr.io/org/app:1.2.3: not found"),
+        ):
+            self.assertIsNone(
+                command("docker", "buildx", "imagetools", "inspect", "ref", allow_missing=True)
+            )
+
     def test_not_found_manifest_is_missing(self):
         from subprocess import CompletedProcess
         with patch(
