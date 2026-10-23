@@ -42,6 +42,34 @@ def command(*args: str, allow_missing: bool = False) -> str | None:
     raise PromotionError(f"{' '.join(args[:3])} failed: {message or result.returncode}")
 
 
+def newer_semver(candidate: str, current: str) -> bool:
+    """Compare SemVer tags, including prerelease identifier precedence."""
+    newer = VERSION_PATTERN.fullmatch(candidate)
+    baseline = VERSION_PATTERN.fullmatch(current)
+    if newer is None or baseline is None:
+        return False
+    newer_core = tuple(int(newer.group(i)) for i in (1, 2, 3))
+    baseline_core = tuple(int(baseline.group(i)) for i in (1, 2, 3))
+    if newer_core != baseline_core:
+        return newer_core > baseline_core
+    newer_pre, baseline_pre = newer.group(4), baseline.group(4)
+    if newer_pre is None:
+        return baseline_pre is not None
+    if baseline_pre is None:
+        return False
+    newer_ids, baseline_ids = newer_pre.split("."), baseline_pre.split(".")
+    for newer_id, baseline_id in zip(newer_ids, baseline_ids, strict=False):
+        if newer_id == baseline_id:
+            continue
+        newer_numeric, baseline_numeric = newer_id.isdecimal(), baseline_id.isdecimal()
+        if newer_numeric and baseline_numeric:
+            return int(newer_id) > int(baseline_id)
+        if newer_numeric != baseline_numeric:
+            return not newer_numeric
+        return newer_id > baseline_id
+    return len(newer_ids) > len(baseline_ids)
+
+
 @dataclass(frozen=True)
 class Image:
     service: str
@@ -119,8 +147,26 @@ class ReleasePromoter:
         if status != "true":
             raise PromotionError(f"{self.tag} is not a draft release; refusing promotion")
 
+    def ensure_not_superseded(self) -> None:
+        """Reject an older draft after a higher version was publicly released."""
+        release_tags = command(
+            "gh", "api", "--paginate", "repos/{owner}/{repo}/releases?per_page=100",
+            "--jq", ".[] | select(.draft == false) | .tag_name",
+        )
+        if release_tags is None:
+            raise PromotionError("Unable to read published GitHub releases")
+        superseding = [
+            tag for tag in release_tags.splitlines() if newer_semver(tag, self.tag)
+        ]
+        if superseding:
+            raise PromotionError(
+                f"Cannot publish superseded draft {self.tag}: already published "
+                f"newer release(s): {', '.join(superseding)}"
+            )
+
     def run(self) -> None:
         self.ensure_draft()
+        self.ensure_not_superseded()
         self.verify_staging()
         self.ensure_version_tags()
 
@@ -142,6 +188,7 @@ class ReleasePromoter:
                         self.tag_image(repo, alias, image.digest)
             # Draft -> public is the last, fail-closed release-readiness gate.
             self.ensure_draft()
+            self.ensure_not_superseded()
             command("gh", "release", "edit", self.tag, "--draft=false")
         except (PromotionError, OSError):
             failures = []
