@@ -100,7 +100,32 @@ async def test_an_anonymous_registration_is_accepted(app_sessions, district) -> 
 
 
 async def test_a_logged_in_registration_is_bound_to_the_token_subject(app_sessions, district) -> None:
-    response, request = await _submit(app_sessions, district, "erika@example.org", claims={"sub": "oidc|erika"})
+    response, request = await _submit(app_sessions, district, "erika@example.org", claims={"sub": "oidc|erika", "email": "erika@example.org", "email_verified": True})
 
     assert response.user_sub == "oidc|erika"
     assert request.state.user.sub == "oidc|erika"
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"sub": "oidc|wrong", "email": "wrong@example.org", "email_verified": True},
+        {"sub": "oidc|wrong", "email": "erika@example.org", "email_verified": False},
+        {"sub": "oidc|wrong", "email": "erika@example.org", "email_verified": "true"},
+        {"sub": "oidc|wrong", "email_verified": True},
+    ],
+)
+async def test_unverified_or_mismatched_registrant_creates_no_row(
+    app_sessions, district, owner, claims
+) -> None:
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        await _submit(app_sessions, district, "erika@example.org", claims=claims)
+
+    assert exc.value.status_code == 403
+    async with owner.connect() as conn:
+        count = await conn.scalar(
+            text("SELECT count(*) FROM leader_registrations WHERE district_id = :id"),
+            {"id": district},
+        )
+    assert count == 0

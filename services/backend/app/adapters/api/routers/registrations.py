@@ -184,11 +184,24 @@ async def submit_registration(
         try:
             claims = await oidc_adapter.validate_token(credentials.credentials)
             user_sub = claims.get("sub") if isinstance(claims.get("sub"), str) else None
-            if user_sub is None:
+            if not user_sub:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid Bearer token: missing subject",
                     headers={"WWW-Authenticate": "Bearer"},
+                )
+            # A token's subject may only be attached to the registration owner's verified
+            # email. Otherwise an approval for a claimed email could grant access to
+            # another authenticated account and bypass the verified-email login flow.
+            token_email = claims.get("email")
+            if (
+                not isinstance(token_email, str)
+                or token_email.strip().casefold() != str(body.email).strip().casefold()
+                or claims.get("email_verified") is not True
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Registration requires a matching verified email in the token",
                 )
         except TokenValidationError as exc:
             raise HTTPException(
