@@ -60,6 +60,19 @@ The release pipeline SHALL create only draft GitHub Releases until both backend 
 - **THEN** promotion of the older draft is rejected before writing version tags or mutable aliases
 - **AND** the published-release ordering is rechecked before making the draft public
 
+#### Scenario: Retry after only one version tag was promoted
+- **GIVEN** both candidate images have been built and their digests persisted together on the draft GitHub Release
+- **AND** the backend exact version tag exists, but promotion of the frontend failed
+- **WHEN** the operator retries the draft release
+- **THEN** the original paired digests are loaded and validated against the release tag, source revision and image registry
+- **AND** no new image builds replace the original pair
+- **AND** the already published backend version tag remains unchanged
+
+#### Scenario: Candidate manifest is missing, corrupted or wrong for the tag
+- **WHEN** the saved digest manifest has an unexpected schema, revision, registry, tag or incomplete digests
+- **THEN** promotion fails before updating any immutable or mutable release tags
+- **AND** a failed download cannot silently fall back to new builds
+
 #### Scenario: Retry a partial draft release
 - **WHEN** an operator dispatches a retry with an existing draft SemVer tag on main
 - **THEN** the workflow validates notes and both images again without creating a new Release Please release
