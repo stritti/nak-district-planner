@@ -20,6 +20,8 @@ from pathlib import Path
 
 NOTES_DIR = Path("docs/operations/release-notes")
 HEADING = "## WICHTIG: Anpassungen bei produktiven Installationen"
+BREAKING_HEADING = "## BREAKING CHANGE: Anpassungen vor dem Produktionsupdate erforderlich"
+BREAKING_CHANGE_MARKER = "**Breaking Change:**"
 
 
 def _execute(*args: str, cwd: Path, text_mode: bool) -> subprocess.CompletedProcess:
@@ -135,7 +137,8 @@ def compose_release_body(current: str, tag: str, notes: list[str]) -> str:
     if marker in current:
         return current
     content = "\n\n".join(notes)
-    return f"{marker}\n{HEADING}\n\n{content}\n\n---\n\n{current.lstrip()}"
+    heading = BREAKING_HEADING if any(BREAKING_CHANGE_MARKER in note for note in notes) else HEADING
+    return f"{marker}\n{heading}\n\n{content}\n\n---\n\n{current.lstrip()}"
 
 
 def publish(repo: Path, tag: str) -> bool:

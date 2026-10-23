@@ -112,7 +112,13 @@ und geänderte Backup- oder Restore-Abläufe.
    `docs/operations/release-notes/<issue>-<thema>.md` hinzufügen. Kein Release-Tag
    und keine vorweggenommene Versionsnummer im Dateinamen. Bereits veröffentlichte
    Notizen nicht für spätere Releases erneut verwenden.
-2. Der Hinweis beginnt mit einer präzisen `###`-Überschrift und enthält
+2. Bei einem inkompatiblen Betreiber- oder Konfigurationswechsel (insbesondere wenn
+   Bestandskonfigurationen den Start verhindern) **muss** der Hinweis zusätzlich eine
+   eigene Zeile `**Breaking Change:** <konkrete Auswirkung>` unmittelbar nach dem Titel
+   enthalten. Solche Notizen bekommen in den veröffentlichten GitHub Release Notes
+   einen vorangestellten Abschnitt `BREAKING CHANGE`, unabhängig davon, wie Release
+   Please die automatisch generierte Feature-Liste formatiert.
+   Der Hinweis beginnt mit einer präzisen `###`-Überschrift und enthält
    `**Betroffen:**`, `**Vor dem Update:**` und `**Nach dem Update:**` (fett, mit Doppelpunkt, in dieser Reihenfolge am Zeilenanfang)
    Abschnitte. Er nennt alle neuen Pflichtwerte, Vorbedingungen,
    manuelle Schritte und Verifikationen; optionale Änderungen sind als solche
@@ -131,6 +137,33 @@ Erstmalig wird dieses Verfahren für die
 [Produktionshärtung #472](./release-notes/472-production-hardening.md) genutzt.
 
 ---
+
+
+### Pflichtprüfung für v1.6.0 – Keycloak-Selbstregistrierung (#713)
+
+Der Übergang von Keycloak-Provisionierung zu Selbstregistrierung ist für bestehende
+Betreiber eine **inkompatible Betriebsänderung**. Die angegebene Minor-Version 1.6.0
+wird als vorab begonnene Release-Serie beibehalten; dies ist eine dokumentierte
+**Ausnahme von strikt rückwärtskompatibler SemVer-Minor-Versionierung**, keine
+behauptete Rückwärtskompatibilität.
+
+Vor dem Merge von Release-PR #698 die Upgrade-Notiz
+[`699-keycloak-self-registration.md`](./release-notes/699-keycloak-self-registration.md)
+und folgende Schritte nachweisbar prüfen:
+
+- Legacy-Provider-Konfiguration und das Keycloak-Admin-Secret entfernen; Realm-Setup
+  mit `registrationAllowed`, `verifyEmail`, `registrationEmailAsUsername` erfolgreich anwenden
+- Keycloak-SMTP-Bestätigungsmails und Registrierung im Browser prüfen
+- Vor und nach Freigabe den Rollen-/Zugriffspfad einschließlich verweigertem Zugriff testen
+- Backup und Rückfall mit Vorversionskonfiguration inklusive wiederhergestelltem
+  `nak-planner-provisioning`-Client dokumentieren
+- #711 mit grüner CI vor #698 mergen; in der Freigabe prüfen, dass die öffentliche
+  Release-Beschreibung das `BREAKING CHANGE`-Banner vor dem automatisch
+  erzeugten Changelog anzeigt
+
+Die Tests des Docs-Jobs prüfen das Vorhandensein und die Gültigkeit dieser
+konkreten Upgrade-Notiz. Die tatsächliche IdP-/SMTP-Migration bleibt eine
+manuelle Betriebsprüfung und ist nicht aus Unit Tests ableitbar.
 
 ## Release-PR Workflow
 
