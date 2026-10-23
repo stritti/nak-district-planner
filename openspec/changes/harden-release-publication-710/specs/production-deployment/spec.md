@@ -50,6 +50,11 @@ The release pipeline SHALL create only draft GitHub Releases until both backend 
 - **AND** the GitHub Release remains Draft
 - **AND** operators receive recovery instructions for aliases that cannot be rolled back
 
+#### Scenario: A subsequent release follows an unresolved draft
+- **WHEN** the closest preceding SemVer tag on the first-parent history has no public GitHub Release or belongs to an unpublished draft
+- **THEN** the next release fails before collecting upgrade notes or publishing images
+- **AND** the operator must recover the incomplete predecessor so its upgrade instructions cannot be skipped
+
 #### Scenario: Retry a partial draft release
 - **WHEN** an operator dispatches a retry with an existing draft SemVer tag on main
 - **THEN** the workflow validates notes and both images again without creating a new Release Please release
