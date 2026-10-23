@@ -15,6 +15,10 @@ The backend MUST NOT create, modify or invite users in Keycloak and MUST NOT be 
 - **WHEN** the realm setup script runs against a realm that contains the client `nak-planner-provisioning`
 - **THEN** the script deletes that client and creates no client with a service account
 
+#### Scenario: Provisioning client inspection returns an invalid response
+- **WHEN** the realm setup receives an unexpected shape from the Keycloak client-list API
+- **THEN** setup fails rather than treating the former provisioning client as absent
+
 ### Requirement: User accounts SHALL be created by self-registration with a verified email
 The documented realm setup SHALL allow users to register themselves in the application realm only with email verification and the email address as username. Access to protected business endpoints SHALL still require an approved registration linked by `sub` or by a verified email claim.
 

@@ -130,15 +130,15 @@ def test_a_response_without_a_client_id_aborts_the_setup() -> None:
     delete.assert_not_called()
 
 
-def test_a_non_list_response_is_a_no_op() -> None:
+def test_a_non_list_response_fails_closed_before_deletion() -> None:
     module = _load()
     with (
         patch.object(module.requests, "get", return_value=_response(200, {"unexpected": "shape"})),
         patch.object(module.requests, "delete") as delete,
+        pytest.raises(module.KeycloakSetupError, match="unexpected client-list response"),
     ):
-        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+        _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
 
-    assert removed is False
     delete.assert_not_called()
 
 

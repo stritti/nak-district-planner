@@ -17,7 +17,7 @@ Dieses Dokument beschreibt den produktiven Onboarding-Ablauf fuer Benutzer, die 
    - `role` (`DISTRICT_ADMIN`, `CONGREGATION_ADMIN`, `PLANNER`, `VIEWER`)
    - `scope_type` (`DISTRICT` oder `CONGREGATION`)
    - `scope_id` (UUID des Bezirkes oder der Gemeinde)
-5. Bei Genehmigung wird ein `Leader`-Datensatz erstellt; eine `Membership` entsteht sofort, wenn der OIDC-Sub bereits bekannt ist, sonst beim ersten Login nach Freigabe.
+5. Bei Genehmigung wird ein `Leader`-Datensatz erstellt. Eine `Membership` entsteht bei bekannter `user_sub` sofort, bei erfolgreicher optionaler Webhook-Provisionierung nach deren Antwort oder sonst beim ersten Login mit verifizierter E-Mail nach Freigabe.
 6. Für Keycloak legt die Person ihr Konto selbst an, bestätigt die E-Mail-Adresse und setzt ihr Passwort; das Backend verschickt keine Keycloak-Einladung.
 7. Nach Login ist der Benutzer aktiv, sobald mindestens eine Membership vorhanden ist.
 

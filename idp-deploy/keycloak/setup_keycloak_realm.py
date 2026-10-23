@@ -171,7 +171,10 @@ class KeycloakAdminClient:
         found.raise_for_status()
         clients = found.json()
         if not isinstance(clients, list):
-            return False
+            raise KeycloakSetupError(
+                f"Failed to inspect the provisioning client {client_id}: "
+                "Keycloak returned an unexpected client-list response"
+            )
         # Deleting is destructive: act only on a client whose name matches exactly.
         matching = [c for c in clients if isinstance(c, dict) and c.get("clientId") == client_id]
         if not matching:
