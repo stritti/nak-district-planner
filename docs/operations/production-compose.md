@@ -295,6 +295,24 @@ services:
 
 Das funktioniert nur, wenn Keycloak hinter demselben Traefik läuft.
 
+## Rate-Limiting
+
+Die Keycloak-Endpunkte für Registrierung und Login (`/realms/<realm>/protocol/openid-connect/*`, `/realms/<realm>/login-actions/*`) sind über den Edge-Proxy öffentlich erreichbar. Sie müssen mit einem Rate-Limit am Reverse Proxy geschützt werden, sonst können sie ungedrosselt abgerufen werden (Registrierungs- und Login-Versuche, E-Mail-Verifikations-Mails).
+
+Mit Traefik dafür einen `ratelimit`-Middleware-Block auf dem Keycloak-Router konfigurieren, z. B.:
+
+```yaml
+http:
+  middlewares:
+    keycloak-ratelimit:
+      rateLimit:
+        average: 10
+        period: 1m
+        burst: 20
+```
+
+Wichtig: Der Rate-Limit muss pro Client-IP zählen. Dafür die Hinweise unter [Client-IP](#hinweise) beachten (Traefik verwirft client-seitige `X-Forwarded-For`-Werte; Keycloak vertraut nur dem `edge`-Netz). Zusätzlich bleibt die Brute-Force-Erkennung im Realm aktiv (`setup_keycloak_realm.py` setzt `bruteForceProtected`).
+
 ## Hinweise
 
 - **Lokaler Test ohne öffentliches DNS:** Ohne erreichbare Hostnamen kann Let's Encrypt kein Zertifikat ausstellen; Traefik liefert dann ein selbstsigniertes. Das Backend lehnt dieses Zertifikat bei der OIDC-Discovery bewusst ab, die TLS-Prüfung bleibt also an.

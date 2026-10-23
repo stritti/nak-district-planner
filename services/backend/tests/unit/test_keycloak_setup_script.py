@@ -9,6 +9,8 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 SCRIPT = Path(__file__).parents[4] / "idp-deploy" / "keycloak" / "setup_keycloak_realm.py"
 
 
@@ -67,48 +69,93 @@ def test_realm_security_defaults_payload() -> None:
 
     assert put.call_args.args[0] == "http://kc/admin/realms/nak-planner"
     payload = put.call_args.kwargs["json"]
-    assert payload["registrationAllowed"] is False
+    # Self-registration only together with email verification and email as username.
+    assert payload["registrationAllowed"] is True
     assert payload["verifyEmail"] is True
+    assert payload["registrationEmailAsUsername"] is True
     assert payload["bruteForceProtected"] is True
     assert "length(15)" in payload["passwordPolicy"]
 
 
-def _provisioning_fake_get(current_mappings: list[dict]):
-    def fake_get(url, **_kwargs):
-        if url.endswith("clientId=nak-planner-provisioning"):
-            return _response(200, [{"id": "prov-uuid"}])
-        if url.endswith("clientId=realm-management"):
-            return _response(200, [{"id": "rm-uuid"}])
-        if url.endswith("/service-account-user"):
-            return _response(200, {"id": "sa-user"})
-        if url.endswith("/role-mappings/clients/rm-uuid"):
-            return _response(200, current_mappings)
-        role = url.rsplit("/", 1)[-1]
-        return _response(200, {"id": f"{role}-id", "name": role})
-
-    return fake_get
-
-
-def test_provisioning_client_is_confidential_service_account_with_minimal_roles() -> None:
+def test_existing_provisioning_client_is_deleted() -> None:
     module = _load()
-    current_mappings = [{"name": "manage-users"}, {"name": "view-users"}]
-
     with (
-        patch.object(module.requests, "get", side_effect=_provisioning_fake_get(current_mappings)),
-        patch.object(module.requests, "post", side_effect=[_response(201), _response(204)]) as post,
+        patch.object(module.requests, "get", return_value=_response(200, [{"id": "prov-uuid", "clientId": "nak-planner-provisioning"}])) as get,
+        patch.object(module.requests, "delete", return_value=_response(204)) as delete,
     ):
-        _admin(module).ensure_provisioning_client("nak-planner", "nak-planner-provisioning")
+        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
 
-    client_payload = post.call_args_list[0].kwargs["json"]
-    assert client_payload["publicClient"] is False
-    assert client_payload["serviceAccountsEnabled"] is True
-    assert client_payload["standardFlowEnabled"] is False
-    assert client_payload["directAccessGrantsEnabled"] is False
-    mapping = post.call_args_list[1]
-    assert mapping.args[0] == (
-        "http://kc/admin/realms/nak-planner/users/sa-user/role-mappings/clients/rm-uuid"
-    )
-    assert [r["name"] for r in mapping.kwargs["json"]] == ["manage-users", "view-users"]
+    assert removed is True
+    assert get.call_args.args[0].endswith("/clients")
+    assert get.call_args.kwargs["params"] == {"clientId": "nak-planner-provisioning"}
+    assert delete.call_args.args[0] == "http://kc/admin/realms/nak-planner/clients/prov-uuid"
+
+
+def test_missing_provisioning_client_is_a_no_op() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, [])),
+        patch.object(module.requests, "delete") as delete,
+        patch.object(module.requests, "post") as post,
+    ):
+        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    assert removed is False
+    delete.assert_not_called()
+    post.assert_not_called()
+
+
+def test_only_the_client_with_the_exact_name_is_deleted() -> None:
+    module = _load()
+    similar = [{"id": "other-uuid", "clientId": "nak-planner-provisioning-2"}]
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, similar)),
+        patch.object(module.requests, "delete") as delete,
+    ):
+        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    assert removed is False
+    delete.assert_not_called()
+
+
+def test_a_response_without_a_client_id_aborts_the_setup() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, [{"clientId": "nak-planner-provisioning"}])),
+        patch.object(module.requests, "delete") as delete,
+        pytest.raises(module.KeycloakSetupError, match="no client id"),
+    ):
+        _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    delete.assert_not_called()
+
+
+def test_a_non_list_response_is_a_no_op() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, {"unexpected": "shape"})),
+        patch.object(module.requests, "delete") as delete,
+    ):
+        removed = _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    assert removed is False
+    delete.assert_not_called()
+
+
+def test_a_failed_deletion_of_the_provisioning_client_aborts_the_setup() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "get", return_value=_response(200, [{"id": "prov-uuid", "clientId": "nak-planner-provisioning"}])),
+        patch.object(module.requests, "delete", return_value=_response(403)),
+        pytest.raises(module.KeycloakSetupError, match="provisioning client"),
+    ):
+        _admin(module).remove_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+
+def test_the_setup_creates_no_client_with_a_service_account() -> None:
+    module = _load()
+    assert not hasattr(module.KeycloakAdminClient, "ensure_provisioning_client")
+    assert not hasattr(module.KeycloakAdminClient, "PROVISIONING_ROLES")
 
 
 def test_frontend_client_is_created_public() -> None:
@@ -124,6 +171,8 @@ def test_frontend_client_is_created_public() -> None:
     payload = post.call_args.kwargs["json"]
     assert payload["publicClient"] is True
     assert "public" not in payload
+    # Keycloak 26.8 rejects unknown fields ("Unrecognized field"); only ClientRepresentation names.
+    assert "validRedirectUris" not in payload
     assert payload["redirectUris"] == ["https://app/auth/callback", "https://app/"]
 
 
@@ -215,14 +264,18 @@ def test_main_uses_custom_health_url() -> None:
     assert get.call_args_list[0].args[0] == "https://auth.example/realms/nak-planner"
 
 
-def test_existing_provisioning_client_extra_roles_are_revoked() -> None:
+def test_main_removes_the_provisioning_client_and_prints_no_provisioning_settings(capsys) -> None:
     module = _load()
-    current = [{"name": "manage-users"}, {"name": "view-users"}, {"name": "realm-admin"}]
-    with (
-        patch.object(module.requests, "get", side_effect=_provisioning_fake_get(current)),
-        patch.object(module.requests, "post", side_effect=[_response(409), _response(204)]),
-        patch.object(module.requests, "delete", return_value=_response(204)) as delete,
-    ):
-        _admin(module).ensure_provisioning_client("nak-planner", "nak-planner-provisioning")
+    admin = _run_main(module)
 
-    assert delete.call_args.kwargs["json"] == [{"name": "realm-admin"}]
+    admin.remove_provisioning_client.assert_called_once_with("nak-planner", "nak-planner-provisioning")
+    output = capsys.readouterr().out
+    assert "IDP_PROVISIONING_KEYCLOAK" not in output
+    assert "self-registration" in output.lower()
+
+
+def test_main_passes_a_custom_provisioning_client_id_to_the_removal() -> None:
+    module = _load()
+    admin = _run_main(module, "--provisioning-client-id", "legacy-provisioner")
+
+    admin.remove_provisioning_client.assert_called_once_with("nak-planner", "legacy-provisioner")
