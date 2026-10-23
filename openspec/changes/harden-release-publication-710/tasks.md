@@ -9,6 +9,7 @@
 - [x] Fix the skipped-ancestor dispatch condition and add regression assertions.
 - [x] Fail closed when the preceding tagged release is still a draft or has no published GitHub Release.
 - [x] Address CodeQL's unused import finding.
+- [x] Reject superseded drafts and test SemVer ordering, rollback and external publication races.
 - [x] Update release documentation and production runbook.
 
 ## Verification
