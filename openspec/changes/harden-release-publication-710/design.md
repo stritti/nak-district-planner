@@ -23,3 +23,5 @@ Release Please creates the GitHub Release and tag before release notes or Docker
 
 - `docker-build` uses an explicit `always()` status function with a strict successful-notes condition, so a skipped `release-please` ancestor does not suppress manual recovery.
 - Before collecting upgrade notes, the preceding SemVer tag must resolve to a non-draft public GitHub Release. An incomplete or orphaned predecessor blocks successor publication rather than narrowing the notes diff past missing instructions.
+
+- Before alias promotion and again before public release publication, compare the draft tag with all published GitHub Release tags using SemVer precedence. Never promote a superseded draft to stable aliases.
