@@ -24,7 +24,7 @@ VERSION_PATTERN = re.compile(
     r"(?:-([0-9A-Za-z][0-9A-Za-z.-]*))?$"
 )
 INSPECT_DIGEST = re.compile(r"^Digest:\s*(sha256:[0-9a-f]{64})\s*$", re.MULTILINE)
-NOT_FOUND = ("manifest unknown", "manifest not found", "404 not found", "name unknown")
+NOT_FOUND = ("manifest unknown", "manifest not found", "404 not found", "name unknown", ": not found")
 
 
 class PromotionError(RuntimeError):
