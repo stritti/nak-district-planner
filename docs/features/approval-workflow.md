@@ -11,7 +11,7 @@ Dieses Dokument beschreibt den produktiven Onboarding-Ablauf fuer Benutzer, die 
 ## Ablauf (Überblick)
 
 1. Benutzer registriert sich ueber die oeffentliche Registrierungsseite (`POST /api/v1/districts/{id}/registrations`).
-2. Optional mitgesendeter Bearer-Token wird validiert; bei ungueltigem Token wird `401` geliefert.
+2. Optional mitgesendeter Bearer-Token wird validiert: ungültig ergibt `401`; eine direkte Verknüpfung mit `user_sub` erfordert eine zur Registrierungsadresse passende und im Token ausdrücklich verifizierte E-Mail (`email_verified=true`), sonst `403`.
 3. Registrierung landet als `PENDING` im Bezirk.
 4. Bezirksadministrator genehmigt (`POST .../{registration_id}/approve`):
    - `role` (`DISTRICT_ADMIN`, `CONGREGATION_ADMIN`, `PLANNER`, `VIEWER`)

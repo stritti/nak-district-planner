@@ -326,7 +326,7 @@ async def _submit(credentials, claims):
 
 @pytest.mark.asyncio
 async def test_a_logged_in_registrant_is_known_to_row_level_security_before_the_insert() -> None:
-    db, _ = await _submit(_credentials(), {"sub": "oidc|erika"})
+    db, _ = await _submit(_credentials(), {"sub": "oidc|erika", "email": "max@example.com", "email_verified": True})
 
     statements = [(str(c.args[0]), c.args[1]) for c in db.execute.await_args_list]
     assert any("app.current_user_sub" in sql and params == {"sub": "oidc|erika"} for sql, params in statements)
@@ -352,3 +352,48 @@ async def test_an_anonymous_registration_has_no_actor() -> None:
     _, request = await _submit(None, {})
 
     assert not hasattr(request.state, "user")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"sub": "oidc|erika", "email": "different@example.com", "email_verified": True},
+        {"sub": "oidc|erika", "email": "max@example.com", "email_verified": False},
+        {"sub": "oidc|erika", "email": "max@example.com", "email_verified": "true"},
+        {"sub": "oidc|erika", "email": "max@example.com"},
+        {"sub": "oidc|erika", "email_verified": True},
+    ],
+)
+async def test_authenticated_registration_requires_matching_verified_email(claims) -> None:
+    """Do not bind a valid subject to an email the identity provider has not verified."""
+    db = AsyncMock()
+    district_repo, reg_repo = AsyncMock(), AsyncMock()
+    district_repo.get.return_value = District.create(name="D")
+    adapter = AsyncMock()
+    adapter.validate_token.return_value = claims
+
+    with patch("app.adapters.api.routers.registrations.api_deps.get_oidc_adapter", return_value=adapter):
+        with pytest.raises(HTTPException) as exc:
+            await rr.submit_registration(
+                uuid.uuid4(),
+                RegistrationCreate(name="Max", email="max@example.com"),
+                db,
+                request=SimpleNamespace(state=SimpleNamespace()),
+                credentials=_credentials(),
+                district_repo=district_repo,
+                reg_repo=reg_repo,
+            )
+
+    assert exc.value.status_code == 403
+    db.execute.assert_not_awaited()
+    reg_repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_verified_token_email_comparison_is_case_insensitive() -> None:
+    db, request = await _submit(
+        _credentials(),
+        {"sub": "oidc|max", "email": "MAX@example.com", "email_verified": True},
+    )
+    assert request.state.user.sub == "oidc|max"
+    db.execute.assert_awaited()
