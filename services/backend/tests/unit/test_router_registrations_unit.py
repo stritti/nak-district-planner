@@ -295,3 +295,40 @@ async def test_approval_rejects_a_single_choice_whose_role_does_not_fit():
     with pytest.raises(HTTPException) as err:
         await _approve_with(reg, _approve_body(district_id=district_id), district_id)
     assert err.value.status_code == 422
+
+
+def _credentials():
+    return type("Cred", (), {"credentials": "token"})()
+
+
+async def _submit(credentials, claims):
+    db = AsyncMock()
+    district_repo = AsyncMock()
+    district_repo.get.return_value = District.create(name="D")
+    adapter = AsyncMock()
+    adapter.validate_token.return_value = claims
+    with patch("app.adapters.api.routers.registrations.api_deps.get_oidc_adapter", return_value=adapter):
+        await rr.submit_registration(
+            uuid.uuid4(),
+            RegistrationCreate(name="Max", email="max@example.com"),
+            db,
+            credentials=credentials,
+            district_repo=district_repo,
+            reg_repo=AsyncMock(),
+        )
+    return db
+
+
+@pytest.mark.asyncio
+async def test_a_logged_in_registrant_is_known_to_row_level_security_before_the_insert() -> None:
+    db = await _submit(_credentials(), {"sub": "oidc|erika"})
+
+    statements = [(str(c.args[0]), c.args[1]) for c in db.execute.await_args_list]
+    assert any("app.current_user_sub" in sql and params == {"sub": "oidc|erika"} for sql, params in statements)
+
+
+@pytest.mark.asyncio
+async def test_an_anonymous_registration_sets_no_user() -> None:
+    db = await _submit(None, {})
+
+    assert not any("app.current_user_sub" in str(c.args[0]) for c in db.execute.await_args_list)

@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from app.adapters.api import deps as api_deps
 from app.adapters.api.deps import (
@@ -193,6 +194,14 @@ async def submit_registration(
                 detail="Invalid or expired Bearer token",
                 headers={"WWW-Authenticate": "Bearer"},
             ) from exc
+
+    if user_sub is not None:
+        # Authenticated first-time registration: the insert policy compares the row's user_sub
+        # with this setting. The transaction began before the token was read (district lookup),
+        # so the setting is applied to it directly.
+        await db.execute(
+            text("SELECT set_config('app.current_user_sub', :sub, true)"), {"sub": user_sub}
+        )
 
     await ensure_congregation_in_district(db, district_id, body.congregation_id)
     reg = LeaderRegistration.create(
