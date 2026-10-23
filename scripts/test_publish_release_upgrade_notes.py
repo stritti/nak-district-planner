@@ -23,6 +23,7 @@ from scripts.publish_release_upgrade_notes import (
     publish,
     run,
     validate_upgrade_note,
+    verify_previous_release_is_published,
 )
 
 
@@ -84,7 +85,8 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
         self.commit("Improve old note", tag="v1.0.2")
         self.assertEqual(new_note_paths(self.repo, "v1.0.2"), [])
         self.assertEqual(previous_release_tag(self.repo, "v1.0.2"), "v1.0.1")
-        self.assertFalse(publish(self.repo, "v1.0.2"))
+        with patch("scripts.publish_release_upgrade_notes.verify_previous_release_is_published"):
+            self.assertFalse(publish(self.repo, "v1.0.2"))
 
     def test_multiple_new_notes_have_deterministic_order(self) -> None:
         self.note("b.md")
@@ -119,6 +121,42 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
             [p.name for p in new_note_paths(self.repo, "v1.0.2")], ["second.md"]
         )
 
+    def test_unpublished_predecessor_blocks_later_release(self) -> None:
+        self.note()
+        self.commit("Unresolved draft", tag="v1.0.1")
+        self.commit("Later version", tag="v1.0.2")
+        with patch("scripts.publish_release_upgrade_notes.run", return_value="true") as gh:
+            with self.assertRaisesRegex(ValueError, "Recover and publish that draft first"):
+                publish(self.repo, "v1.0.2")
+        gh.assert_called_once_with(
+            "gh", "release", "view", "v1.0.1", "--json", "isDraft", "--jq", ".isDraft",
+            cwd=self.repo,
+        )
+
+    def test_missing_predecessor_release_blocks_later_release(self) -> None:
+        self.commit("Orphaned release tag", tag="v1.0.1")
+        self.commit("Later version", tag="v1.0.2")
+        missing = subprocess.CalledProcessError(1, ["gh", "release", "view"])
+        with patch("scripts.publish_release_upgrade_notes.run", side_effect=missing):
+            with self.assertRaises(subprocess.CalledProcessError):
+                publish(self.repo, "v1.0.2")
+
+    def test_resolved_draft_allows_future_release(self) -> None:
+        self.note()
+        self.commit("Published predecessor", tag="v1.0.1")
+        self.commit("Later version", tag="v1.0.2")
+        with patch("scripts.publish_release_upgrade_notes.run", return_value="false"):
+            verify_previous_release_is_published(self.repo, "v1.0.2")
+
+    def test_retry_of_same_draft_accepts_published_predecessor(self) -> None:
+        self.commit("Draft retry", tag="v1.0.1")
+        with patch("scripts.publish_release_upgrade_notes.run", return_value="false"):
+            self.assertFalse(publish(self.repo, "v1.0.1"))
+
+    def test_initial_release_without_predecessor_requires_no_api_call(self) -> None:
+        with patch("scripts.publish_release_upgrade_notes.run") as gh:
+            verify_previous_release_is_published(self.repo, "v1.0.0")
+        gh.assert_not_called()
     def test_labels_mentioned_mid_paragraph_are_not_valid_sections(self) -> None:
         with self.assertRaisesRegex(ValueError, "Betroffen"):
             validate_upgrade_note(
@@ -153,6 +191,8 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
 
         def fake_run(*args: str, cwd: Path) -> str:
             if args[:3] == ("gh", "release", "view"):
+                if "--json" in args and "isDraft" in args:
+                    return "false"
                 return "### Features\n\nExisting changelog\n"
             if args[:3] == ("gh", "release", "edit"):
                 captured["body"] = Path(args[5]).read_text(encoding="utf-8")
