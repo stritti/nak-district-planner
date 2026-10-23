@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 from scripts.publish_release_upgrade_notes import (
     HEADING,
+    BREAKING_HEADING,
+    BREAKING_CHANGE_MARKER,
     NOTES_DIR,
     compose_release_body,
     load_upgrade_notes,
@@ -23,6 +25,7 @@ from scripts.publish_release_upgrade_notes import (
     publish,
     run,
     validate_upgrade_note,
+    verify_previous_release_is_published,
 )
 
 
@@ -42,9 +45,10 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
             ["git", *args], cwd=self.repo, capture_output=True, text=True, check=True
         ).stdout.strip()
 
-    def commit(self, message: str, tag: str | None = None) -> None:
+    def commit(self, message: str, tag: str | None = None, *, allow_empty: bool = False) -> None:
         self.git("add", ".")
-        self.git("commit", "-qm", message)
+        args = ("commit", "-qm", message, "--allow-empty") if allow_empty else ("commit", "-qm", message)
+        self.git(*args)
         if tag:
             self.git("tag", tag)
 
@@ -70,6 +74,45 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
         self.assertTrue(result.endswith(original))
         self.assertEqual(compose_release_body(result, "v1.0.1", notes), result)
 
+    def test_breaking_upgrade_note_is_prioritized_before_ordinary_changelog(self) -> None:
+        important_note = (
+            "### Incompatible provider migration\n\n"
+            f"{BREAKING_CHANGE_MARKER} Existing config fails startup.\n\n"
+            "**Betroffen:** Existing deployments\n\n"
+            "**Vor dem Update:** Update IdP\n\n"
+            "**Nach dem Update:** Test login\n"
+        )
+        original = "### Features\n\nOther improvements"
+        result = compose_release_body(original, "v1.6.0", [important_note])
+        self.assertIn(BREAKING_HEADING, result)
+        self.assertLess(result.index(BREAKING_HEADING), result.index(original))
+        self.assertEqual(compose_release_body(result, "v1.6.0", [important_note]), result)
+
+    def test_mixed_release_notes_always_highlight_the_breaking_change(self) -> None:
+        ordinary_note = (
+            "### Maintenance\n\n**Betroffen:** Operators\n\n"
+            "**Vor dem Update:** Prepare\n\n**Nach dem Update:** Verify\n"
+        )
+        breaking_note = ordinary_note + "\n" + BREAKING_CHANGE_MARKER
+        self.assertIn(
+            BREAKING_HEADING,
+            compose_release_body("changelog", "v1.6.0", [ordinary_note, breaking_note]),
+        )
+        self.assertIn(
+            BREAKING_HEADING,
+            compose_release_body("changelog", "v1.6.0", [breaking_note, ordinary_note]),
+        )
+
+    def test_keycloak_breaking_note_in_repository_is_valid_and_explicit(self) -> None:
+        note_path = Path(__file__).resolve().parent.parent / NOTES_DIR / "699-keycloak-self-registration.md"
+        body = note_path.read_text(encoding="utf-8")
+        validate_upgrade_note(body, note_path)
+        self.assertIn(BREAKING_CHANGE_MARKER, body)
+        self.assertIn("IDP_PROVISIONING_PROVIDER=keycloak", body)
+        self.assertIn("setup_keycloak_realm.py", body)
+        self.assertIn("SMTP", body)
+        self.assertIn("Rollback", body)
+
     def test_no_upgrade_note_does_not_touch_release_description(self) -> None:
         self.assertEqual(new_note_paths(self.repo, "v1.0.0"), [])
         self.assertEqual(compose_release_body("existing text", "v1.0.0", []), "existing text")
@@ -84,7 +127,8 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
         self.commit("Improve old note", tag="v1.0.2")
         self.assertEqual(new_note_paths(self.repo, "v1.0.2"), [])
         self.assertEqual(previous_release_tag(self.repo, "v1.0.2"), "v1.0.1")
-        self.assertFalse(publish(self.repo, "v1.0.2"))
+        with patch("scripts.publish_release_upgrade_notes.verify_previous_release_is_published"):
+            self.assertFalse(publish(self.repo, "v1.0.2"))
 
     def test_multiple_new_notes_have_deterministic_order(self) -> None:
         self.note("b.md")
@@ -119,6 +163,42 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
             [p.name for p in new_note_paths(self.repo, "v1.0.2")], ["second.md"]
         )
 
+    def test_unpublished_predecessor_blocks_later_release(self) -> None:
+        self.note()
+        self.commit("Unresolved draft", tag="v1.0.1")
+        self.commit("Later version", tag="v1.0.2", allow_empty=True)
+        with patch("scripts.publish_release_upgrade_notes.run", return_value="true") as gh:
+            with self.assertRaisesRegex(ValueError, "Recover and publish that draft first"):
+                publish(self.repo, "v1.0.2")
+        gh.assert_called_once_with(
+            "gh", "release", "view", "v1.0.1", "--json", "isDraft", "--jq", ".isDraft",
+            cwd=self.repo,
+        )
+
+    def test_missing_predecessor_release_blocks_later_release(self) -> None:
+        self.commit("Orphaned release tag", tag="v1.0.1", allow_empty=True)
+        self.commit("Later version", tag="v1.0.2", allow_empty=True)
+        missing = subprocess.CalledProcessError(1, ["gh", "release", "view"])
+        with patch("scripts.publish_release_upgrade_notes.run", side_effect=missing):
+            with self.assertRaises(subprocess.CalledProcessError):
+                publish(self.repo, "v1.0.2")
+
+    def test_resolved_draft_allows_future_release(self) -> None:
+        self.note()
+        self.commit("Published predecessor", tag="v1.0.1")
+        self.commit("Later version", tag="v1.0.2", allow_empty=True)
+        with patch("scripts.publish_release_upgrade_notes.run", return_value="false"):
+            verify_previous_release_is_published(self.repo, "v1.0.2")
+
+    def test_retry_of_same_draft_accepts_published_predecessor(self) -> None:
+        self.commit("Draft retry", tag="v1.0.1", allow_empty=True)
+        with patch("scripts.publish_release_upgrade_notes.run", return_value="false"):
+            self.assertFalse(publish(self.repo, "v1.0.1"))
+
+    def test_initial_release_without_predecessor_requires_no_api_call(self) -> None:
+        with patch("scripts.publish_release_upgrade_notes.run") as gh:
+            verify_previous_release_is_published(self.repo, "v1.0.0")
+        gh.assert_not_called()
     def test_labels_mentioned_mid_paragraph_are_not_valid_sections(self) -> None:
         with self.assertRaisesRegex(ValueError, "Betroffen"):
             validate_upgrade_note(
@@ -153,6 +233,8 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
 
         def fake_run(*args: str, cwd: Path) -> str:
             if args[:3] == ("gh", "release", "view"):
+                if "--json" in args and "isDraft" in args:
+                    return "false"
                 return "### Features\n\nExisting changelog\n"
             if args[:3] == ("gh", "release", "edit"):
                 captured["body"] = Path(args[5]).read_text(encoding="utf-8")
