@@ -242,7 +242,7 @@ Nach einem fehlerhaften Build, einer ungültigen Upgrade-Note oder einem Registr
 
 Bei Fehlern während der Alias-Promotion versucht die Pipeline die vorherigen Digests wiederherzustellen. Falls ein Alias vorher nicht existierte oder ein Registry-Fehler die Rücksetzung verhindert, ist die Korrektur manuell erforderlich. GitHub und GHCR bieten keine atomare Alias-Freigabe für mehrere Container-Packages. Produktivsysteme dürfen deshalb **niemals** mutable Aliase als `APP_VERSION` verwenden.
 
-Die detaillierten Recovery-Schritte stehen unter [Release-Recovery](/operations/release-process#release-recovery-bei-partieller-veroffentlichung). Ein Git-Tag oder ein unvollständiges Draft-Release bedeutet nicht, dass die Version produktionsbereit ist. Ein späterer Release wird blockiert, solange der direkte Vorgänger-Tag noch ein Draft ist oder kein öffentliches GitHub Release besitzt. Unvollständige Drafts müssen zuerst repariert werden.
+Die detaillierten Recovery-Schritte stehen unter [Release-Recovery](/operations/release-process#release-recovery-bei-partieller-veroffentlichung). Ein Git-Tag oder ein unvollständiges Draft-Release bedeutet nicht, dass die Version produktionsbereit ist. Ein späterer Release wird blockiert, solange der direkte Vorgänger-Tag noch ein Draft ist oder kein öffentliches GitHub Release besitzt. Ein älterer Draft darf umgekehrt nicht mehr promotet werden, wenn eine neuere Version öffentlich veröffentlicht ist, um GHCR-Aliase nicht zurückzusetzen. Unvollständige Drafts müssen zuerst repariert werden.
 ## 4. Rollback
 
 1. Fehlerbild und betroffene Version dokumentieren.
