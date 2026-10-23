@@ -15,6 +15,6 @@ Installationen, die das Backend Keycloak-Benutzer anlegen und einladen lassen (`
 **Nach dem Update:**
 
 - Prüfen, dass API, Worker und Beat starten und `alembic current` unverändert ist (keine Migration).
-- Eine Testregistrierung durchspielen: auf der Registrierungsseite einreichen, „Konto anlegen“ wählen, das Konto mit **derselben** E-Mail-Adresse anlegen und bestätigen, als Bezirksadmin freigeben, dann anmelden. Vor der Freigabe antworten geschützte Endpunkte mit `403` („Freigabe ausstehend“), danach hat die Person ihre Rolle.
+- Eine Testregistrierung durchspielen: auf der Registrierungsseite einreichen, „Konto anlegen“ wählen, das Konto mit **derselben** E-Mail-Adresse anlegen (Name und E-Mail), die Adresse über den Link in der Bestätigungsmail bestätigen, danach ein Passwort festlegen, als Bezirksadmin freigeben, dann anmelden. Vor der Freigabe antworten geschützte Endpunkte mit `403` („Freigabe ausstehend“), danach hat die Person ihre Rolle.
 - Bewerber informieren, deren Registrierung noch aussteht oder die bereits eine Einladung erhalten haben: Neue Freigaben verschicken keine Einladung mehr; bereits verschickte Einladungslinks bleiben bis zum Ablauf gültig (höchstens sieben Tage). Wer noch kein Konto hat, legt es über die Registrierungsseite oder den Login an.
 - Rollback: vorherige App-Version und Konfiguration verwenden. Der gelöschte Provisioning-Client muss dann neu angelegt werden (Setup-Skript der Vorversion).

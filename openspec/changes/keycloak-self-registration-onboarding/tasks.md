@@ -22,7 +22,7 @@
 
 - [x] 4.1 `docs/features/approval-workflow.md`, `docs/operations/production-compose.md`, `idp-deploy/keycloak/OIDC-SETUP.md` und `idp-deploy/keycloak/README.md` beschreiben Selbstregistrierung, Auto-Link per verifizierter E-Mail, Bot-Schutz (Proxy-Rate-Limit, optional reCAPTCHA) und den Hinweis zu Webhook-Provisionern; verifiziert durch `npm run docs:build`.
 - [x] 4.2 Upgrade-Notiz in `docs/operations/release-notes/` gemäß `.github/CONTRIBUTING.md` (Betroffen / Vor dem Update / Nach dem Update), inklusive Löschen des Provisioning-Clients, Information ausstehender Bewerber und dem Hinweis, dass sie `679-keycloak-provisioning-service-account.md` (1.5.0) ablöst; verifiziert durch Review.
-- [ ] 4.3 Manuelle Abnahme gegen den mitgelieferten Keycloak: neues Konto über „Konto anlegen“ registrieren, E-Mail verifizieren, einloggen; ohne Freigabe `403`, nach Freigabe mit gleicher E-Mail Zugriff (Auto-Link); verifiziert durch Protokoll im PR. _Teilweise gegen Keycloak 26.8.1 belegt (Realm-Setup, Löschen des Clients, Registrierungsformular mit `prompt=create`); Bestätigungsmail, Login ohne Freigabe (403) und Auto-Link nach Freigabe stehen vor dem Release noch aus._
+- [x] 4.3 Manuelle Abnahme gegen den mitgelieferten Keycloak: neues Konto über „Konto anlegen“ registrieren, E-Mail verifizieren, einloggen; ohne Freigabe `403`, nach Freigabe mit gleicher E-Mail Zugriff (Auto-Link); verifiziert durch Protokoll im PR. _Durchgeführt gegen Keycloak 26.8.1, Mailpit, PostgreSQL (NOBYPASSRLS-Rolle) und das laufende Backend: 12 von 12 Prüfungen (siehe PR #704); dabei drei Fehler gefunden und behoben (#705, #706, #707)._
 - [x] 4.4 `npx -y @fission-ai/openspec@1.14.1 validate --all --strict --no-interactive` läuft fehlerfrei.
 
 ## Workflow follow-up
