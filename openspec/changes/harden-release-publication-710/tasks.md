@@ -10,6 +10,8 @@
 - [x] Fail closed when the preceding tagged release is still a draft or has no published GitHub Release.
 - [x] Address CodeQL's unused import finding.
 - [x] Reject superseded drafts and test SemVer ordering, rollback and external publication races.
+- [x] Persist paired candidate digests as a draft asset and reuse them on manual retries without rebuilding.
+- [x] Cover partial version promotion, missing/tampered assets and GitHub upload/download failures.
 - [x] Update release documentation and production runbook.
 
 ## Verification
