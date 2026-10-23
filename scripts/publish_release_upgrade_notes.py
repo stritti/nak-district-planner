@@ -4,8 +4,9 @@
 
 """Prepend release-specific production upgrade instructions to GitHub Release notes.
 
-Only note files first added since the preceding release tag are included. Existing
-CHANGELOG content from release-please remains intact. No note means no modification.
+Only note files first added since the preceding published release tag are included.
+An unresolved earlier draft or a tag without a public GitHub Release blocks a
+later release rather than omitting required upgrade instructions.
 """
 
 from __future__ import annotations
@@ -66,6 +67,24 @@ def previous_release_tag(repo: Path, tag: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def verify_previous_release_is_published(repo: Path, tag: str) -> None:
+    """Do not allow a failed draft to be skipped by the next release."""
+    previous = previous_release_tag(repo, tag)
+    if previous is None:
+        return
+    # The closest ancestor tag must be a public GitHub Release. A leftover tag
+    # with no Release is also unsafe: its notes must not silently become the
+    # baseline for the next publication.
+    is_draft = run(
+        "gh", "release", "view", previous, "--json", "isDraft", "--jq", ".isDraft",
+        cwd=repo,
+    ).strip()
+    if is_draft != "false":
+        raise ValueError(
+            f"Cannot publish {tag}: previous release {previous} is not publicly "
+            "published. Recover and publish that draft first."
+        )
+
 def new_note_paths(repo: Path, tag: str) -> list[Path]:
     """Find notes introduced in this release; never reprint older notes."""
     run("git", "rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}", cwd=repo)
@@ -124,6 +143,7 @@ def compose_release_body(current: str, tag: str, notes: list[str]) -> str:
 
 def publish(repo: Path, tag: str) -> bool:
     """Update the GitHub Release only if new actionable notes were added."""
+    verify_previous_release_is_published(repo, tag)
     notes = load_upgrade_notes(repo, tag)
     if not notes:
         print(f"No production configuration changes introduced in {tag}.")
@@ -143,14 +163,14 @@ def publish(repo: Path, tag: str) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", required=True, help="Published GitHub release tag")
+    parser.add_argument("--tag", required=True, help="Draft GitHub release tag")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     # Do not publish a note from an unrelated checkout.
     checked_out = run("git", "rev-parse", "HEAD", cwd=repo).strip()
     tagged = run("git", "rev-parse", f"refs/tags/{args.tag}^{{commit}}", cwd=repo).strip()
     if checked_out != tagged:
-        raise SystemExit("The checkout does not match the published release tag.")
+        raise SystemExit("The checkout does not match the draft release tag.")
     publish(repo, args.tag)
 
 
