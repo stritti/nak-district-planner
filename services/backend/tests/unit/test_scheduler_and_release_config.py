@@ -115,7 +115,7 @@ def test_release_requires_verified_notes_and_both_images() -> None:
 
     build = release["jobs"]["docker-build"]
     assert build["needs"] == "publish-upgrade-notes"
-    assert build["if"] == "${{ needs.publish-upgrade-notes.result == 'success' }}"
+    assert build["if"] == "${{ always() && needs.publish-upgrade-notes.result == 'success' }}"
     steps = build["steps"]
     actions = [s for s in steps if s.get("uses", "").startswith("docker/build-push-action@")]
     assert [s["id"] for s in actions] == ["backend", "frontend"]
@@ -137,7 +137,7 @@ def test_failed_notes_cannot_publish_images() -> None:
     notes = release["jobs"]["publish-upgrade-notes"]
     build = release["jobs"]["docker-build"]
     assert build["needs"] == "publish-upgrade-notes"
-    assert build["if"] == "${{ needs.publish-upgrade-notes.result == 'success' }}"
+    assert build["if"] == "${{ always() && needs.publish-upgrade-notes.result == 'success' }}"
     assert any("scripts/publish_release_upgrade_notes.py" in s.get("run", "") for s in notes["steps"])
 
 
