@@ -119,7 +119,7 @@ def test_release_requires_verified_notes_and_both_images() -> None:
     steps = build["steps"]
     actions = [s for s in steps if s.get("uses", "").startswith("docker/build-push-action@")]
     assert [s["id"] for s in actions] == ["backend", "frontend"]
-    for service, action in zip(("backend", "frontend"), actions):
+    for service, action in zip(("backend", "frontend"), actions, strict=True):
         assert action["with"]["push"] is True
         assert action["with"]["context"] == f"services/{service}"
         assert f"/{service}:candidate-" in action["with"]["tags"]
