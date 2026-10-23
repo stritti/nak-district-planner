@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -166,6 +167,7 @@ async def test_registration_submit_rejects_foreign_congregation() -> None:
             DISTRICT,
             RegistrationCreate(name="Max", email="max@example.com", congregation_id=FOREIGN_ID),
             _db(),
+            request=SimpleNamespace(state=SimpleNamespace()),
             credentials=None,
             district_repo=_found(District.create(name="D")),
             reg_repo=reg_repo,

@@ -20,10 +20,12 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from app.adapters.api import deps as api_deps
 from app.adapters.api.deps import (
@@ -162,6 +164,7 @@ async def submit_registration(
     district_id: uuid.UUID,
     body: RegistrationCreate,
     db: DbSession,
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_optional_bearer),
     district_repo: SqlDistrictRepository = Depends(get_district_repository),
     reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
@@ -193,6 +196,17 @@ async def submit_registration(
                 detail="Invalid or expired Bearer token",
                 headers={"WWW-Authenticate": "Bearer"},
             ) from exc
+
+    if user_sub is not None:
+        # The audit middleware reads the actor from the request state; this public route
+        # validates the token itself, so the entry would otherwise look anonymous.
+        request.state.user = SimpleNamespace(sub=user_sub, email=None)
+        # Authenticated first-time registration: the insert policy compares the row's user_sub
+        # with this setting. The transaction began before the token was read (district lookup),
+        # so the setting is applied to it directly.
+        await db.execute(
+            text("SELECT set_config('app.current_user_sub', :sub, true)"), {"sub": user_sub}
+        )
 
     await ensure_congregation_in_district(db, district_id, body.congregation_id)
     reg = LeaderRegistration.create(
