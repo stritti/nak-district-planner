@@ -38,6 +38,18 @@ def _domain_action(action: AuditAction) -> domain.AuditAction:
     return domain.AuditAction[action.name]
 
 
+def _fit(column: str, value: str | None) -> str | None:
+    """Cut ``value`` to the length of its column; an overlong text must not make the insert fail.
+
+    A failed insert here turns a request into a 503 (the audit trail is mandatory), and the
+    texts come from outside: database error messages, user agents, forwarded headers.
+    """
+    limit = AuditLogORM.__table__.c[column].type.length
+    if value is None or limit is None or len(value) <= limit:
+        return value
+    return value[: limit - 1] + "…"
+
+
 def _as_uuid(value: uuid.UUID | str | None) -> uuid.UUID | None:
     """Tenant IDs from middleware path parameters arrive as strings."""
     if value is None or isinstance(value, uuid.UUID):
@@ -71,22 +83,22 @@ class SqlAuditLogRepository:
         orm_audit_log = AuditLogORM(
             id=uuid.uuid4(),
             timestamp=audit_log.timestamp or datetime.now(UTC),
-            user_sub=audit_log.user_sub,
-            user_email=audit_log.user_email,
+            user_sub=_fit("user_sub", audit_log.user_sub),
+            user_email=_fit("user_email", audit_log.user_email),
             user_roles=audit_log.user_roles,
             action=_orm_action(audit_log.action),
-            resource_type=audit_log.resource_type,
+            resource_type=_fit("resource_type", audit_log.resource_type),
             resource_id=_as_uuid(audit_log.resource_id),
             district_id=_as_uuid(audit_log.district_id),
             congregation_id=_as_uuid(audit_log.congregation_id),
             changes=audit_log.changes,
             old_values=audit_log.old_values,
             new_values=audit_log.new_values,
-            ip_address=audit_log.ip_address,
-            user_agent=audit_log.user_agent,
-            request_id=audit_log.request_id,
+            ip_address=_fit("ip_address", audit_log.ip_address),
+            user_agent=_fit("user_agent", audit_log.user_agent),
+            request_id=_fit("request_id", audit_log.request_id),
             status=_orm_status(audit_log.status),
-            error_message=audit_log.error_message,
+            error_message=_fit("error_message", audit_log.error_message),
             extra_metadata=audit_log.extra_metadata,
             created_at=datetime.now(UTC),
         )
