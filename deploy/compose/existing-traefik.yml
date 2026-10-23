@@ -52,6 +52,15 @@ services:
       - traefik.http.routers.nak-auth-admin.middlewares=nak-keycloak-admin,nak-hsts
       - traefik.http.routers.nak-auth-admin.service=nak-auth
       - traefik.http.middlewares.nak-keycloak-admin.ipallowlist.sourcerange=${KEYCLOAK_ADMIN_ALLOWED_IPS:-127.0.0.1/32}
+      # Public self-registration: limit form loads and submissions per client address.
+      - traefik.http.routers.nak-auth-registration.rule=Host(`${AUTH_HOST}`) && PathRegexp(`^/realms/[^/]+/(login-actions/registration|protocol/openid-connect/registrations)$$`)
+      - traefik.http.routers.nak-auth-registration.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.nak-auth-registration.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.nak-auth-registration.middlewares=nak-registration-ratelimit,nak-hsts
+      - traefik.http.routers.nak-auth-registration.service=nak-auth
+      - traefik.http.middlewares.nak-registration-ratelimit.ratelimit.average=10
+      - traefik.http.middlewares.nak-registration-ratelimit.ratelimit.period=1m
+      - traefik.http.middlewares.nak-registration-ratelimit.ratelimit.burst=10
       - traefik.http.services.nak-auth.loadbalancer.server.port=8080
 
 networks:

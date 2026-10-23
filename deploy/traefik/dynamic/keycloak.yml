@@ -22,7 +22,23 @@ http:
       tls:
         certResolver: letsencrypt
 
+    # Public self-registration (the backend creates no accounts): limit form loads and
+    # submissions per client address against automated sign-ups and account probing.
+    auth-registration:
+      rule: Host(`{{ env "AUTH_HOST" }}`) && PathRegexp(`^/realms/[^/]+/(login-actions/registration|protocol/openid-connect/registrations)$`)
+      entryPoints: [websecure]
+      service: keycloak
+      middlewares: [keycloak-registration-ratelimit, security-headers]
+      tls:
+        certResolver: letsencrypt
+
   middlewares:
+    keycloak-registration-ratelimit:
+      rateLimit:
+        average: 10
+        period: 1m
+        burst: 10
+
     keycloak-admin-allowlist:
       ipAllowList:
         # The template actions sit in comments so this file stays valid YAML

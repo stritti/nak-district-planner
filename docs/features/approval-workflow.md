@@ -32,13 +32,14 @@ flowchart TD
   C --> D{OIDC-Sub bekannt?}
   D -->|Ja| E[Membership anlegen]
   D -->|Nein| F[Membership beim Login zuordnen]
-  E --> G{IdP-Provisionierung aktiv?}
+  E --> G{Webhook-Provisionierung aktiv?}
   F --> G
-  G -->|Ja| H[IdP-Benutzer suchen oder anlegen]
-  H --> I[Einladungsmail optional senden]
-  G -->|Nein| J[Provisionierungsstatus speichern]
-  I --> J
+  G -->|Ja| H[Externen Provisioner aufrufen]
+  G -->|Nein| J[Kein Aufruf an den IdP]
+  H --> I[Provisionierungsstatus speichern]
 ```
+
+Ein Keycloak-Konto legt die Person selbst an (siehe [Konto anlegen und erster Login](#konto-anlegen-und-erster-login)); das Backend ruft Keycloak nicht auf.
 
 ### Schritt 1–3: Leader, Status, Membership
 
@@ -67,48 +68,22 @@ if reg.user_sub is not None:
     )
 ```
 
-### Schritt 4: IdP-Provisioning
+### Schritt 4: Optionale Webhook-Provisionierung
 
 **Datei:** `services/backend/app/adapters/idp/provisioning.py`
 
-Der Provisioner wird über `get_idp_provisioner()` ermittelt. Verfügbare Provider:
+Der Provisioner wird über `get_idp_provisioner()` ermittelt:
 
 | Provider | Konfiguration | Beschreibung |
 |----------|--------------|-------------|
-| `keycloak` | `IDP_PROVISIONING_PROVIDER=keycloak` + Keycloak-Admin-URL/Realm/Credentials | Direkte Kommunikation mit der Keycloak Admin API |
 | `webhook` | `IDP_PROVISIONING_PROVIDER=webhook` + `IDP_PROVISIONING_ENDPOINT` | POST an externen Provisioning-Service |
-| deaktiviert | `IDP_PROVISIONING_ENABLED=false` (Default) | Keine IdP-Provisionierung |
+| deaktiviert | `IDP_PROVISIONING_ENABLED=false` (Default) | Kein Aufruf an den IdP |
 
-Falls kein Provider konfiguriert ist (`get_idp_provisioner()` gibt `None` zurück), wird die Freigabe trotzdem durchgeführt — nur ohne IdP-Anlage.
+Das Backend hält **kein** Keycloak-Admin-Credential: Ein Keycloak-Provisioner existiert nicht mehr, und `IDP_PROVISIONING_ENABLED=true` mit `IDP_PROVISIONING_PROVIDER=keycloak` verweigert in jeder Umgebung den Start (Hinweis auf die Upgrade-Notiz [`699-keycloak-self-registration.md`](../operations/release-notes/699-keycloak-self-registration.md)). Jedes Admin-Recht mit dem Scope `manage` in Keycloak erlaubt Kontoübernahmen (E-Mail ändern und Einladung auslösen, OTP-/WebAuthn-Credentials löschen, externe Identität verknüpfen), auch mit feingranularen Berechtigungen (FGAP v2).
 
-### Schritt 4a–4c: Keycloak-Provisionierung im Detail
+Falls kein Provider konfiguriert ist (`get_idp_provisioner()` gibt `None` zurück), wird die Freigabe trotzdem durchgeführt, nur ohne Aufruf an den IdP. Ein unbekannter Provider-Wert wird als Warnung protokolliert.
 
-**Datei:** `services/backend/app/adapters/idp/keycloak_provisioner.py`
-
-```mermaid
-flowchart TD
-  A[Admin-Token abrufen] --> B[Benutzer per E-Mail suchen]
-  B --> C{Benutzer vorhanden?}
-  C -->|Nein| D[Benutzer anlegen]
-  C -->|Ja und verifiziert| E[Vorhandenen Benutzer berücksichtigen]
-  C -->|Ja, unverifiziert| F[Keine automatische Verknüpfung]
-  D --> G{Einladung aktiviert?}
-  E --> G
-  G -->|Ja| H[VERIFY_EMAIL und UPDATE_PASSWORD auslösen]
-  G -->|Nein| I[Ergebnis dokumentieren]
-  H --> I
-  F --> I
-```
-
-**Wichtig:** Die `_trigger_invite`-Methode sendet die Keycloak-eigene Einladungsmail. Der Benutzer muss darin:
-1. Seine **E-Mail-Adresse bestätigen** (`VERIFY_EMAIL`)
-2. Ein **Passwort setzen** (`UPDATE_PASSWORD`)
-
-Erst nach diesen beiden Schritten ist der Account aktiv und der Login möglich.
-
-**Sicherheit (#461):** Ein bereits existierendes Keycloak-Konto wird nur dann an die Registrierung gebunden (`user_sub`), wenn Keycloak dessen E-Mail als verifiziert führt (`emailVerified=true`). Andernfalls (auch nach einem 409-Konflikt beim Anlegen) bleibt die Registrierung unverknüpft, der Status lautet `EXISTING_UNVERIFIED` bzw. `EXISTING_UNVERIFIED_INVITED`, und die Einladungsmail (falls aktiviert) geht an die Adresse selbst. Die Verknüpfung erfolgt dann beim ersten Login mit verifizierter E-Mail (siehe Post-Login-Verknüpfung).
-
-### Schritt 4 (Alternativ): Webhook-Provisionierung
+### Webhook-Provisionierung im Detail
 
 **Datei:** `services/backend/app/adapters/idp/webhook_provisioner.py`
 
@@ -151,13 +126,17 @@ if reg.user_sub is None and provision_result.user_sub:
     await SqlMembershipRepository(db).upsert_by_scope(...)
 ```
 
-## Passwort beim ersten Login — Infrastruktur im Detail
+## Konto anlegen und erster Login
 
-Der gesamte Ablauf von der Registrierung bis zum ersten Login setzt sich aus drei unabhängigen, aber zusammenwirkenden Mechanismen zusammen:
+Der Ablauf von der Registrierung bis zum ersten Login besteht aus drei unabhängigen, zusammenwirkenden Mechanismen:
 
-### 1. IdP-Provisioning (bei Freigabe, s. o.)
+### 1. Selbstregistrierung in Keycloak
 
-Der Benutzer wird im IdP angelegt und erhält eine E-Mail mit Link zum Passwort-Setzen (`UPDATE_PASSWORD` als Required Action). Solange der Benutzer kein Passwort gesetzt hat, kann er sich nicht einloggen.
+Jede Person legt ihr Konto selbst an. Nach dem Absenden der Registrierung bietet die Seite „Konto anlegen“ an; der Button startet den OIDC-Login mit `prompt=create`, und Keycloak zeigt das Registrierungsformular des Realms. Das Realm-Setup (`idp-deploy/keycloak/setup_keycloak_realm.py`) aktiviert dafür `registrationAllowed`, `verifyEmail` und `registrationEmailAsUsername`: Die E-Mail-Adresse ist der Benutzername und muss über den Link in der Bestätigungsmail verifiziert werden. Ist die Person bereits angemeldet, sendet die Registrierungsseite den Access-Token mit, und die Registrierung bekommt sofort ihre `user_sub`.
+
+Ein Konto ohne freigegebene Registrierung hat keinen Zugriff: Geschützte Endpunkte antworten mit `403` („Freigabe ausstehend“). Die offene Registrierung ist deshalb kein Zugriffsrisiko, aber ein Spam-Risiko (siehe [Selbstregistrierung schützen](../operations/production-compose.md#selbstregistrierung-schutzen)). Das Registrierungsformular verrät, ob eine E-Mail-Adresse schon ein Konto hat; das Rate-Limit am Reverse Proxy begrenzt das Abtasten.
+
+Die Person muss für das Konto **dieselbe E-Mail-Adresse** verwenden wie in der Registrierung. Weicht sie ab, greift die Verknüpfung nicht, und der Zugriff bleibt bei „Freigabe ausstehend“; ein Bezirksadmin kann die Registrierung dann mit der richtigen Adresse neu anlegen lassen.
 
 ### 2. Auto-Create User beim ersten Login (Backend)
 
@@ -236,41 +215,17 @@ Liefert der IdP den Claim nicht, wird nicht automatisch verknüpft; der Benutzer
 
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
-| `IDP_PROVISIONING_ENABLED` | `false` | Provisionierung aktivieren |
-| `IDP_PROVISIONING_PROVIDER` | `webhook` | `keycloak` oder `webhook` |
-| `IDP_PROVISIONING_ENDPOINT` | `None` | URL für Webhook-Provisioner |
-| `IDP_PROVISIONING_API_KEY` | `None` | API-Key für Webhook-Provisioner |
-| `IDP_PROVISIONING_TIMEOUT_SECONDS` | `10.0` | Timeout für HTTP-Requests |
-| `IDP_PROVISIONING_KEYCLOAK_BASE_URL` | `None` | Keycloak-Basis-URL (z. B. `https://auth.example.com`) |
-| `IDP_PROVISIONING_KEYCLOAK_REALM` | `None` | Keycloak-Realm-Name |
-| `IDP_PROVISIONING_KEYCLOAK_CLIENT_ID` | `None` | Confidential Client mit Service Account im App-Realm |
-| `IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET` | `None` | Secret dieses Clients |
-| `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL` | `true` | Einladungsmail bei Freigabe senden |
-| `IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS` | `259200` | Gültigkeit des Einladungslinks (3600 bis 604800 Sekunden) |
-| `IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI` | `None` | Rücksprung in die App nach dem Passwortsetzen; muss eine gültige Redirect-URI des Clients `OIDC_CLIENT_ID` sein |
+| `IDP_PROVISIONING_ENABLED` | `false` | Webhook-Provisionierung aktivieren |
+| `IDP_PROVISIONING_PROVIDER` | `webhook` | nur `webhook`; `keycloak` verweigert den Start |
+| `IDP_PROVISIONING_ENDPOINT` | `None` | URL für Webhook-Provisioner |
+| `IDP_PROVISIONING_API_KEY` | `None` | API-Key für Webhook-Provisioner |
+| `IDP_PROVISIONING_TIMEOUT_SECONDS` | `10.0` | Timeout für HTTP-Requests |
 
-`IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME`/`_PASSWORD` werden nicht mehr unterstützt. Sind sie in Produktion noch gesetzt, verweigert der `production_guard` den Start.
+Die früheren Variablen `IDP_PROVISIONING_KEYCLOAK_*` sind entfernt und wirken nicht mehr. Wer noch einen externen Provisioner (Webhook) mit eigenem Keycloak-Zugang betreibt, verantwortet dessen Rechte selbst; für ihn gelten dieselben Übernahmerisiken.
 
-### Zugang des Backends zu Keycloak
+### Keycloak: Selbstregistrierung einrichten
 
-Das Backend holt sich per `client_credentials` ein Token im App-Realm (`/realms/<Realm>/protocol/openid-connect/token`), nie im Realm `master`. Der Service Account des Clients hat nur die Rollen `manage-users` und `view-users` des Clients `realm-management`. Damit kann er Benutzer dieses Realms suchen, anlegen und Einladungen auslösen, aber keine Realm-Einstellungen, Clients oder andere Realms ändern. `idp-deploy/keycloak/setup_keycloak_realm.py` legt den Client an; das Secret steht im Tab *Credentials* des Clients und wird nicht ausgegeben.
-
-### Einladungsmail und SMTP
-
-Die Einladung (`VERIFY_EMAIL`, `UPDATE_PASSWORD`) verschickt Keycloak selbst. Ein eigener Mailserver ist nicht nötig: Im Realm unter *Realm settings → Email* dasselbe SMTP-Relay eintragen, das die App über `SMTP_*` nutzt (STARTTLS, eigene Absenderadresse), und mit *Test connection* prüfen. Der Link gilt `IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS` lang; danach sendet ein Realm-Admin die Einladung in der Keycloak-Konsole erneut (Benutzer → *Credentials* → *Credential reset* mit „Verify Email“ und „Update Password“).
-
-### Produktions-Konfiguration (Keycloak)
-
-```bash
-IDP_PROVISIONING_ENABLED=true
-IDP_PROVISIONING_PROVIDER=keycloak
-IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://auth.example.com
-IDP_PROVISIONING_KEYCLOAK_REALM=nak-planner
-IDP_PROVISIONING_KEYCLOAK_CLIENT_ID=nak-planner-provisioning
-IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET=<secret>
-IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=true
-IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI=https://planner.example.org/
-```
+`idp-deploy/keycloak/setup_keycloak_realm.py` setzt im Realm `registrationAllowed`, `verifyEmail` und `registrationEmailAsUsername` gemeinsam auf `true` und löscht einen vorhandenen Client `nak-planner-provisioning` (sein Secret wird damit ungültig). Manuell: *Realm settings → Login* → *User registration*, *Email as username* und *Verify email* aktivieren. Für die Bestätigungsmail im Realm unter *Realm settings → Email* dasselbe SMTP-Relay wie für die App eintragen (STARTTLS, eigene Absenderadresse) und mit *Test connection* prüfen.
 
 ## Datenbank-Felder der Registration
 
@@ -322,8 +277,7 @@ APPROVED + IDP: FAILED           →  roter Badge "IDP: FAILED"
 | Komponente | Datei |
 |-----------|-------|
 | Approval-Endpoint | `services/backend/app/adapters/api/routers/registrations.py` (ab Zeile 270) |
-| Provisioner-Factory | `services/backend/app/adapters/idp/provisioning.py` |
-| Keycloak-Provisioner | `services/backend/app/adapters/idp/keycloak_provisioner.py` |
+| Provisioner-Factory (nur Webhook) | `services/backend/app/adapters/idp/provisioning.py` |
 | Webhook-Provisioner | `services/backend/app/adapters/idp/webhook_provisioner.py` |
 | Basis-Protokoll | `services/backend/app/adapters/idp/base.py` |
 | Auto-Create + Login-Verknüpfung | `services/backend/app/adapters/api/deps.py` (Zeile 55–201) |
