@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM, LeaderORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.adapters.db.session import AuditedSession, _set_tenant_gucs
@@ -148,6 +149,10 @@ async def seed(owner: AsyncEngine) -> AsyncIterator[Seed]:
             text("DELETE FROM memberships WHERE user_sub LIKE :p"), {"p": f"audit-{s.run}-%"}
         )
         await conn.execute(text("DELETE FROM users WHERE sub LIKE :p"), {"p": f"audit-{s.run}-%"})
+        await conn.execute(
+            text("DELETE FROM leader_assignments WHERE district_id = :d"), {"d": s.district_id}
+        )
+        await conn.execute(text("DELETE FROM leaders WHERE district_id = :d"), {"d": s.district_id})
         for table in ("calendar_integrations", "planning_slots", "congregations"):
             await conn.execute(
                 text(f"DELETE FROM {table} WHERE district_id = :d"),  # noqa: S608
@@ -249,6 +254,57 @@ async def test_congregation_member_can_audit_assignment_on_own_slot(
     assert {(row["district_id"], row["congregation_id"]) for row in rows} == {
         (seed.district_id, seed.congregation_id)
     }
+
+
+def _new_leader(seed: Seed) -> LeaderORM:
+    now = datetime.now(UTC)
+    leader = LeaderORM(
+        id=uuid.uuid4(), district_id=seed.district_id, name="Hans Audit", is_active=True,
+        hidden_from_lists=False, created_at=now, updated_at=now,
+    )
+    leader.assignments = [
+        LeaderAssignmentORM(
+            id=uuid.uuid4(), district_id=seed.district_id, congregation_id=seed.congregation_id,
+            is_home=True, created_at=now, updated_at=now,
+        )
+    ]
+    return leader
+
+
+async def test_creating_and_changing_a_leader_is_audited_with_its_home_congregation(
+    owner, app_engine, seed
+) -> None:
+    """Regression: the leader table lost its congregation column; every leader write failed."""
+    leader = _new_leader(seed)
+    async with acting_as(app_engine, seed.sub("planner"), ["PLANNER"]) as session:
+        session.add(leader)
+        await session.commit()
+        leader.hidden_from_lists = True
+        await session.commit()
+
+    rows = await _audit_rows(owner, leader.id)
+    assert [row["action"] for row in rows] == ["CREATE", "UPDATE"]
+    assert {(row["district_id"], row["congregation_id"]) for row in rows} == {
+        (seed.district_id, seed.congregation_id)
+    }
+    assert rows[1]["new_values"] == {"hidden_from_lists": True}
+
+
+async def test_a_congregation_admin_can_change_a_leader_of_their_congregation(
+    owner, app_engine, seed
+) -> None:
+    leader = _new_leader(seed)
+    async with acting_as(app_engine, seed.sub("planner"), ["PLANNER"]) as session:
+        session.add(leader)
+        await session.commit()
+    async with acting_as(app_engine, seed.sub("gemeinde"), ["CONGREGATION_ADMIN"]) as session:
+        stored = await session.get(LeaderORM, leader.id)
+        stored.is_active = False
+        await session.commit()
+
+    rows = await _audit_rows(owner, leader.id)
+    assert [row["action"] for row in rows] == ["CREATE", "UPDATE"]
+    assert rows[1]["congregation_id"] == seed.congregation_id
 
 
 async def test_system_worker_credential_rotation_is_audited_without_secrets(
