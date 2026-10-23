@@ -112,6 +112,8 @@ def test_release_requires_verified_notes_and_both_images() -> None:
     assert "gh release view" in verify["run"]
     assert "isDraft" in verify["run"]
     assert any("scripts/publish_release_upgrade_notes.py" in s.get("run", "") for s in note_steps)
+    notes_script = (REPO_ROOT / "scripts/publish_release_upgrade_notes.py").read_text(encoding="utf-8")
+    assert "verify_previous_release_is_published(repo, tag)" in notes_script
 
     build = release["jobs"]["docker-build"]
     assert build["needs"] == "publish-upgrade-notes"
