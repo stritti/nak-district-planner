@@ -205,7 +205,7 @@ Dieser Abschnitt beschreibt Vorschläge für die technische Umsetzung. Er wird i
 Die Anwendung nutzt **Keycloak** als Identity Provider. Dies ermöglicht:
 - Login über **Google**, **Microsoft** und weitere OAuth2-Provider (Social Login)
 - Eigene Benutzernamen-/Passwort-Anmeldung über Keycloak selbst
-- Einladungsworkflow via Keycloak (E-Mail-Einladung, Selbstregistrierung mit Freigabe, manuelle Anlage)
+- Konto-Anlage über Keycloak: Selbstregistrierung mit verifizierter E-Mail und Freigabe in der App (das Backend legt keine Keycloak-Benutzer an)
 - Audit-Log für Login-Ereignisse bereits in Keycloak integriert
 
 Das Backend verifiziert ausschließlich JWT-Access-Tokens, die von Keycloak ausgestellt wurden (JWKS-Validierung). Passwörter werden **nicht** im Backend gespeichert.
@@ -355,7 +355,7 @@ Die folgenden Entscheidungen wurden im Rahmen der Konzeptentwicklung getroffen u
 | 1 | Rollenvererbung | Die maßgebliche RBAC-Hierarchie lautet `DISTRICT_ADMIN > CONGREGATION_ADMIN > PLANNER > VIEWER`. Höhere Rollen schließen niedrigere Berechtigungen nur innerhalb des nach den Scope-Regeln wirksamen Bereichs ein; Rechte übertragen sich nicht auf fremde Einheiten. |
 | 2 | Bezirkszuordnung | Ein Benutzer kann mehrere Bezirks- und Gemeindemitgliedschaften besitzen, auch über Bezirksgrenzen hinweg. Jede Mitgliedschaft speichert Scope und Rolle in `memberships`. `users.is_superadmin` ist davon unabhängig. Die neue Ein-Rolle-pro-Scope-Constraint wird im zugehörigen OpenSpec-Change eingeführt. |
 | 3 | Gemeindegruppen | Keine eigene Berechtigungsstufe für Gruppen. Gruppen dienen der Kooperation (gemeinsame Gottesdienste, gegenseitige Unterstützung) und werden vollständig durch `district_admin` verwaltet. |
-| 4 | Einladungsworkflow | **Alle drei Varianten** werden unterstützt: E-Mail-Einladung (durch `district_admin`), Selbstregistrierung mit Freigabe, manuelle Anlage durch `system_admin`. Technisch über Keycloak abgebildet. |
+| 4 | Einladungsworkflow | Selbstregistrierung mit Freigabe: Die Person legt ihr Keycloak-Konto selbst an (verifizierte E-Mail), ein `district_admin` gibt die Registrierung in der App frei. Das Backend sendet keine Einladungen und legt keine Keycloak-Benutzer an; eine manuelle Anlage durch einen Keycloak-Admin bleibt möglich. |
 | 5 | Sichtbarkeit ServiceAssignments | **Ja.** `congregation_admin` kann die Dienstleiter-Namen aller Gemeinden im gleichen Bezirk in der Matrixansicht sehen. |
 | 6 | Datenschutz bei Export-Tokens | **Jeder** angemeldete Benutzer darf Export-Tokens für den eigenen Zuständigkeitsbereich erstellen (PUBLIC und INTERNAL). Die Sichtbarkeit ergibt sich aus den Datenzugriffsrechten der jeweiligen Rolle. |
 | 7 | Authentifizierung / SSO | **Keycloak** wird als Identity Provider eingebunden. Google- und Microsoft-Login werden über Keycloak aktiviert. |

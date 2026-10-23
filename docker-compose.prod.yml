@@ -310,8 +310,8 @@ networks:
   # Databases and cache: no route to the outside.
   data:
     internal: true
-  # Keycloak and its database; the backend reaches the Keycloak admin API
-  # here (IDP_PROVISIONING_KEYCLOAK_BASE_URL=http://keycloak:8080).
+  # Keycloak and its database; the backend reaches Keycloak here (OIDC discovery and
+  # token endpoints when configured with the internal URL). It holds no admin credential.
   idp:
     internal: true
 

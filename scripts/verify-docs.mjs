@@ -8,7 +8,7 @@ import { resolve } from 'node:path'
 // Rendered VitePress pages may contain unrelated icons: assert all Mermaid blocks.
 for (const [page, expectedDiagrams] of [
   ['guide/workflows.html', 3],
-  ['features/approval-workflow.html', 3]
+  ['features/approval-workflow.html', 2]
 ]) {
   const html = readFileSync(resolve('docs/.vitepress/dist', page), 'utf8')
   const svgDiagrams = [...html.matchAll(/<div class="vp-diagram"[^>]*>\s*<div[^>]*>\s*<svg\b/gi)]
@@ -20,4 +20,4 @@ for (const [page, expectedDiagrams] of [
   assert.doesNotMatch(html, /language-mermaid/, `${page}: Mermaid source remained unrendered`)
 }
 
-console.log('All six Mermaid diagrams rendered to SVG.')
+console.log('All five Mermaid diagrams rendered to SVG.')

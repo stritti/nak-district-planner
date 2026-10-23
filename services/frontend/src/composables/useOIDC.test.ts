@@ -98,6 +98,17 @@ describe('authorization', () => {
     expect(sessionStorage.getItem('oidc_code_verifier')).toBeTruthy()
     expect(sessionStorage.getItem('oidc_state')).toBe(url.searchParams.get('state'))
     expect(localStorage.length).toBe(0)
+    expect(url.searchParams.has('prompt')).toBe(false)
+  })
+
+  it('passes prompt=create through to open the registration form', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(discoveryResponse()))
+    const oidc = createOidc()
+
+    const url = new URL(await oidc.getAuthorizationUrl({ prompt: 'create' }))
+
+    expect(url.searchParams.get('prompt')).toBe('create')
+    expect(sessionStorage.getItem('oidc_state')).toBe(url.searchParams.get('state'))
   })
 
   it('rejects a code exchange when the PKCE verifier is missing', async () => {
