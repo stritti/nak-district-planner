@@ -117,8 +117,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Reuse verified release digest pair if present
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
+          IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+        run: |
+          python3 scripts/release_candidate_manifest.py check \
+            --tag "$RELEASE_TAG" \
+            --revision "$(git rev-parse HEAD)" \
+            --registry "$IMAGE_REGISTRY" \
+            --output "$GITHUB_OUTPUT"
+
       # Run-scoped staging tags never modify an existing release or stable alias.
       - name: Build and push backend candidate
+        if: ${{ steps.candidate.outputs.reuse != 'true' }}
         id: backend
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -129,6 +143,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
       - name: Build and push frontend candidate
+        if: ${{ steps.candidate.outputs.reuse != 'true' }}
         id: frontend
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -138,13 +153,31 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-      - name: Verify both digests, promote tags and publish GitHub release
+      - name: Save verified digest pair on draft for failure recovery
+        id: saved
+        if: ${{ steps.candidate.outputs.reuse != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
           IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
           BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
           FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+        run: |
+          python3 scripts/release_candidate_manifest.py save \
+            --tag "$RELEASE_TAG" \
+            --revision "$(git rev-parse HEAD)" \
+            --registry "$IMAGE_REGISTRY" \
+            --backend-digest "$BACKEND_DIGEST" \
+            --frontend-digest "$FRONTEND_DIGEST" \
+            --output "$GITHUB_OUTPUT"
+
+      - name: Verify both digests, promote tags and publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
+          IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+          BACKEND_DIGEST: ${{ steps.candidate.outputs.backend_digest || steps.saved.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ steps.candidate.outputs.frontend_digest || steps.saved.outputs.frontend_digest }}
         run: |
           python3 scripts/promote_release_images.py \
             --registry "$IMAGE_REGISTRY" \
