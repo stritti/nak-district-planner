@@ -234,6 +234,15 @@ docker compose up -d --force-recreate backend worker beat
 
 Das Passwort muss exakt `APP_DB_PASSWORD` aus der `.env` entsprechen. Wird `APP_DB_PASSWORD` geändert, in der Datenbank und in der `.env` gemeinsam ändern und die Dienste mit `up -d --force-recreate` neu erzeugen; `docker compose restart` liest die `.env` nicht neu ein. Am einfachsten sind Passwörter ohne Sonderzeichen (`openssl rand -hex 24`), weil sie in der Datenbank-URL stehen.
 
+### 3.3 Readiness-Gate für GitHub Releases und GHCR
+
+Ein Merge des Release-PRs erzeugt zunächst nur einen Draft-Release mit Git-Tag. Die Version wird erst nach validierten betrieblichen Upgrade-Hinweisen und erfolgreichem Push und Digest-Check für **Backend und Frontend** öffentlich freigegeben. Stabile GHCR-Aliase `latest`, `major`, `major.minor` werden erst nach beiden exakten Versionstags aktualisiert.
+
+Nach einem fehlerhaften Build, einer ungültigen Upgrade-Note oder einem Registry-Fehler bleibt das Release Draft. Für einen manuellen Retry in GitHub Actions den Workflow **Release** auf `main` per **Run workflow** mit `release_tag` (z. B. `v1.2.3`) starten. Derselbe Digest für einen schon vorhandenen Versionstag ist erlaubt, ein abweichender Digest wird abgewiesen. Bei Konflikten Original-Digests und vorherige Alias-Zuordnungen aus dem fehlgeschlagenen Run prüfen; Versionstags nicht überschreiben.
+
+Bei Fehlern während der Alias-Promotion versucht die Pipeline die vorherigen Digests wiederherzustellen. Falls ein Alias vorher nicht existierte oder ein Registry-Fehler die Rücksetzung verhindert, ist die Korrektur manuell erforderlich. GitHub und GHCR bieten keine atomare Alias-Freigabe für mehrere Container-Packages. Produktivsysteme dürfen deshalb **niemals** mutable Aliase als `APP_VERSION` verwenden.
+
+Die detaillierten Recovery-Schritte stehen unter [Release-Recovery](/operations/release-process#release-recovery-bei-partieller-veroffentlichung). Ein Git-Tag oder ein unvollständiges Draft-Release bedeutet nicht, dass die Version produktionsbereit ist.
 ## 4. Rollback
 
 1. Fehlerbild und betroffene Version dokumentieren.
