@@ -28,6 +28,7 @@ from typing import Any
 
 from sqlalchemy import insert, inspect, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import NO_VALUE
 from sqlalchemy.orm.util import identity_key
 
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditLogORM, AuditStatus
@@ -61,6 +62,20 @@ Tenant = tuple[uuid.UUID | None, uuid.UUID | None]
 
 def _own_tenant(_: Session, row: Any) -> Tenant:
     return row.district_id, row.congregation_id
+
+
+def _leader_tenant(_: Session, row: LeaderORM) -> Tenant:
+    """A leader belongs to its district; the home congregation (else the first one) scopes the entry.
+
+    The congregation is not a column of ``leaders`` any more. The assignments are read only
+    when they are already loaded: this runs inside a flush, where a lazy load is not allowed.
+    """
+    loaded = inspect(row).attrs.assignments.loaded_value
+    assignments = [] if loaded is NO_VALUE else list(loaded)
+    chosen = next((a for a in assignments if a.is_home), None) or (
+        assignments[0] if assignments else None
+    )
+    return row.district_id, chosen.congregation_id if chosen else None
 
 
 def _planning_slot_tenant(session: Session, row: ServiceAssignmentORM) -> Tenant:
@@ -104,7 +119,7 @@ class AuditedResource:
 
 AUDITED_RESOURCES: dict[type, AuditedResource] = {
     LeaderORM: AuditedResource(
-        "leader", ("is_active", "hidden_from_lists", "service_end_date"), _own_tenant
+        "leader", ("is_active", "hidden_from_lists", "service_end_date"), _leader_tenant
     ),
     # Who serves in which congregation with which role is a rights-relevant fact.
     LeaderAssignmentORM: AuditedResource(

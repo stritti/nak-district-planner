@@ -25,7 +25,7 @@ from app.adapters.db.domain_audit import (
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditStatus
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.adapters.db.orm_models.leader import LeaderAssignmentORM
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM, LeaderORM
 from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
@@ -125,6 +125,39 @@ class TestEntryFor:
             "is_home": True,
         }
         assert entry.resource.tenant(MagicMock(), assignment) == (DISTRICT, CONGREGATION)
+
+    def test_a_leader_is_audited_in_its_district_and_home_congregation(self) -> None:
+        """Leaders have no congregation column any more; the home assignment scopes the entry."""
+        other = uuid.uuid4()
+        leader = LeaderORM(id=uuid.uuid4(), district_id=DISTRICT, name="Hans", is_active=True)
+        leader.assignments = [
+            LeaderAssignmentORM(id=uuid.uuid4(), district_id=DISTRICT, congregation_id=other, is_home=False),
+            LeaderAssignmentORM(id=uuid.uuid4(), district_id=DISTRICT, congregation_id=CONGREGATION, is_home=True),
+        ]
+
+        entry = entry_for(AuditAction.CREATE, leader)
+
+        assert entry.resource.resource_type == "leader"
+        assert entry.resource.tenant(MagicMock(), leader) == (DISTRICT, CONGREGATION)
+
+    def test_a_leader_without_a_home_uses_its_first_assignment_and_without_any_the_district(self) -> None:
+        first = uuid.uuid4()
+        leader = LeaderORM(id=uuid.uuid4(), district_id=DISTRICT, name="Hans", is_active=True)
+        assert leader.assignments == []
+        tenant = entry_for(AuditAction.UPDATE, leader).resource.tenant
+        assert tenant(MagicMock(), leader) == (DISTRICT, None)
+
+        leader.assignments = [
+            LeaderAssignmentORM(id=uuid.uuid4(), district_id=DISTRICT, congregation_id=first, is_home=False)
+        ]
+        assert tenant(MagicMock(), leader) == (DISTRICT, first)
+
+    def test_a_district_level_home_assignment_scopes_the_entry_to_the_district(self) -> None:
+        leader = LeaderORM(id=uuid.uuid4(), district_id=DISTRICT, name="Anna", is_active=True)
+        leader.assignments = [
+            LeaderAssignmentORM(id=uuid.uuid4(), district_id=DISTRICT, congregation_id=None, is_home=True)
+        ]
+        assert entry_for(AuditAction.CREATE, leader).resource.tenant(MagicMock(), leader) == (DISTRICT, None)
 
     def test_delete_keeps_the_last_state(self) -> None:
         entry = entry_for(AuditAction.DELETE, _assignment(uuid.uuid4()))
