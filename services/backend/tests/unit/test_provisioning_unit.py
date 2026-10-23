@@ -16,33 +16,20 @@ def test_disabled_returns_none():
         assert get_idp_provisioner() is None
 
 
-def test_keycloak_provisioner_returned():
-    with patch("app.adapters.idp.provisioning.settings") as mock_settings:
+def test_an_unknown_provider_returns_none_and_logs_a_warning(caplog):
+    with (
+        patch("app.adapters.idp.provisioning.settings") as mock_settings,
+        caplog.at_level("WARNING", logger="app.adapters.idp.provisioning"),
+    ):
         mock_settings.idp_provisioning_enabled = True
-        mock_settings.idp_provisioning_provider = "keycloak"
-        mock_settings.idp_provisioning_keycloak_base_url = "https://kc.example.com"
-        mock_settings.idp_provisioning_keycloak_realm = "nak"
-        mock_settings.idp_provisioning_keycloak_client_id = "nak-planner-provisioning"
-        mock_settings.idp_provisioning_keycloak_client_secret = "secret"
-        mock_settings.idp_provisioning_timeout_seconds = 10.0
-        mock_settings.idp_provisioning_keycloak_invite_on_approval = True
-
-        provisioner = get_idp_provisioner()
-        assert provisioner is not None
-        # Should be a KeycloakProvisioningAdapter
-        assert "Keycloak" in type(provisioner).__name__
-
-
-def test_keycloak_missing_config_returns_none():
-    with patch("app.adapters.idp.provisioning.settings") as mock_settings:
-        mock_settings.idp_provisioning_enabled = True
-        mock_settings.idp_provisioning_provider = "keycloak"
-        mock_settings.idp_provisioning_keycloak_base_url = None  # Missing
-        mock_settings.idp_provisioning_keycloak_realm = "nak"
-        mock_settings.idp_provisioning_keycloak_client_id = "nak-planner-provisioning"
-        mock_settings.idp_provisioning_keycloak_client_secret = "secret"
+        mock_settings.idp_provisioning_provider = "webhk"
 
         assert get_idp_provisioner() is None
+
+    assert any(
+        "Unknown IDP_PROVISIONING_PROVIDER" in record.message and "webhk" in record.message
+        for record in caplog.records
+    )
 
 
 def test_webhook_provisioner_returned():
