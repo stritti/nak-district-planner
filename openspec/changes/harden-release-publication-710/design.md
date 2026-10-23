@@ -1,0 +1,29 @@
+## Context
+
+Release Please creates the GitHub Release and tag before release notes or Docker builds. GitHub/GHCR do not provide an atomic multi-package transaction.
+
+## Decisions
+
+1. Use Release Please `draft: true` plus `force-tag-creation: true` so release history and its previous tag are available while the public release stays hidden.
+2. Validate the release tag, ancestry on `main`, draft status and actionable upgrade notes before builds.
+3. Use two sequential Buildx candidate pushes from the same tagged checkout, producing independent digests. Release promotion starts only when both complete.
+4. Verify staged image digests before writing either exact version tag. Existing version tags are never repointed. Verify each resulting tag digest.
+5. Promote stable aliases (`major.minor`, `major`, `latest`) only after both exact tags have been created; prereleases skip aliases. Serialize release runs using GitHub Actions concurrency.
+6. Record previous aliases and restore them on registry promotion or GitHub publication failure where an earlier alias exists. Aliases without a previous tag require manual recovery.
+7. Publish the GitHub Release only after both images, notes and aliases are ready. Add `workflow_dispatch` for explicit retries of an existing draft, without rerunning release-please.
+
+## Trade-offs
+
+- Tags in two GHCR repositories cannot move atomically. All production deployments use exact `APP_VERSION` rather than aliases; temporary alias skew remains possible.
+- Partial version-tag promotion can survive failures. Retried builds with different digests deliberately fail closed and require manual recovery using the original digest.
+- Force-created Git tags are visible before the draft is published; only published GitHub Releases signal availability.
+
+
+## Review hardening
+
+- `docker-build` uses an explicit `always()` status function with a strict successful-notes condition, so a skipped `release-please` ancestor does not suppress manual recovery.
+- Before collecting upgrade notes, the preceding SemVer tag must resolve to a non-draft public GitHub Release. An incomplete or orphaned predecessor blocks successor publication rather than narrowing the notes diff past missing instructions.
+
+- Before alias promotion and again before public release publication, compare the draft tag with all published GitHub Release tags using SemVer precedence. Never promote a superseded draft to stable aliases.
+
+- Persist both candidate image digests as a single GitHub draft release asset *before* writing version tags. Resume retries download and validate this paired record against the release tag, checked-out commit and registry; skip image rebuilds when it exists. A missing asset allows the initial build, but an unreadable or conflicting asset blocks publication.

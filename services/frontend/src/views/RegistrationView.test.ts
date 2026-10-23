@@ -26,6 +26,16 @@ const congregations: registrationsApi.PublicCongregationInfo[] = [
   { id: 'cong-2', name: 'Gemeinde B' },
 ]
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((fulfill, fail) => {
+    resolve = fulfill
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 function mountView() {
   return mount(RegistrationView, {
     global: {
@@ -69,6 +79,60 @@ describe('RegistrationView', () => {
     await districtSelect.setValue('')
     await flushPromises()
     expect(wrapper.text()).not.toContain('Gemeinde A')
+  })
+
+  it('ignores a late response from a district that is no longer selected', async () => {
+    const first = deferred<registrationsApi.PublicCongregationInfo[]>()
+    const second = deferred<registrationsApi.PublicCongregationInfo[]>()
+    vi.mocked(registrationsApi.listCongregationsPublic).mockImplementation((id) =>
+      id === 'district-1' ? first.promise : second.promise,
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    const districtSelect = wrapper.findAll('select')[0]
+
+    await districtSelect.setValue('district-1')
+    await districtSelect.setValue('district-2')
+    second.resolve([{ id: 'cong-b', name: 'Gemeinde Bezirk Zwei' }])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Gemeinde Bezirk Zwei')
+
+    first.resolve([{ id: 'cong-a', name: 'Gemeinde Bezirk Eins' }])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Gemeinde Bezirk Zwei')
+    expect(wrapper.text()).not.toContain('Gemeinde Bezirk Eins')
+  })
+
+  it('keeps the congregation list empty when a cancelled request finishes after reset', async () => {
+    const previous = deferred<registrationsApi.PublicCongregationInfo[]>()
+    vi.mocked(registrationsApi.listCongregationsPublic).mockReturnValue(previous.promise)
+    const wrapper = mountView()
+    await flushPromises()
+    const districtSelect = wrapper.findAll('select')[0]
+
+    await districtSelect.setValue('district-1')
+    await districtSelect.setValue('')
+    previous.resolve([{ id: 'stale', name: 'Veraltete Gemeinde' }])
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Veraltete Gemeinde')
+    expect(wrapper.find('option[value="stale"]').exists()).toBe(false)
+  })
+
+  it('does not clear current congregations when an obsolete request rejects', async () => {
+    const first = deferred<registrationsApi.PublicCongregationInfo[]>()
+    vi.mocked(registrationsApi.listCongregationsPublic).mockImplementation((id) =>
+      id === 'district-1' ? first.promise : Promise.resolve([{ id: 'second', name: 'Aktuelle Gemeinde' }]),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    const districtSelect = wrapper.findAll('select')[0]
+
+    await districtSelect.setValue('district-1')
+    await districtSelect.setValue('district-2')
+    await flushPromises()
+    first.reject(new Error('obsolete request'))
+    await flushPromises()
+    expect(wrapper.text()).toContain('Aktuelle Gemeinde')
   })
 
   it('fails closed to an empty congregation list when loading congregations fails', async () => {

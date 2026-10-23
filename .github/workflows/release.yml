@@ -4,18 +4,30 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing draft release tag to resume (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+
+# Alias promotion is not atomic across GHCR packages; serialize all releases.
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
 
 permissions:
-  contents: write
-  issues: write
-  packages: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
     name: Create or Update Release PR
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created || steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -25,7 +37,7 @@ jobs:
           RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
         run: |
           if [ -z "$RELEASE_PLEASE_TOKEN" ]; then
-            echo "::error::RELEASE_PLEASE_TOKEN is required so release PR updates trigger the required CI gates."
+            echo "::error::RELEASE_PLEASE_TOKEN is required so release PR updates trigger required CI gates."
             exit 1
           fi
 
@@ -38,42 +50,62 @@ jobs:
           manifest-file: .release-please-manifest.json
 
   publish-upgrade-notes:
-    name: Publish production upgrade instructions
+    name: Validate and prepare draft release notes
     needs: release-please
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    if: ${{ always() && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.releases_created == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag_name: ${{ steps.verify.outputs.tag_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ inputs.release_tag || needs.release-please.outputs.tag_name }}
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Prepend actionable production upgrade instructions
+      - name: Validate release tag and draft state
+        id: verify
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::Invalid SemVer release tag"
+            exit 1
+          fi
+          git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}"
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Release tag is not on main"
+            exit 1
+          fi
+          if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" != true ]; then
+            echo "::error::Refusing to modify a non-draft release"
+            exit 1
+          fi
+          echo "tag_name=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Prepend and validate production upgrade instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.verify.outputs.tag_name }}
         run: python3 scripts/publish_release_upgrade_notes.py --tag "$RELEASE_TAG"
 
   docker-build:
-    name: docker-build
-    needs: [release-please, publish-upgrade-notes]
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    name: Build, verify and publish release images
+    needs: publish-upgrade-notes
+    if: ${{ always() && needs.publish-upgrade-notes.result == 'success' }}
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [backend, frontend]
-        include:
-          - service: backend
-            context: services/backend
-          - service: frontend
-            context: services/frontend
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -85,23 +117,70 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-            type=semver,pattern={{major}},value=${{ needs.release-please.outputs.tag_name }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-            type=raw,value=latest,enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
+      - name: Reuse verified release digest pair if present
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
+          IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+        run: |
+          python3 scripts/release_candidate_manifest.py check \
+            --tag "$RELEASE_TAG" \
+            --revision "$(git rev-parse HEAD)" \
+            --registry "$IMAGE_REGISTRY" \
+            --output "$GITHUB_OUTPUT"
 
-      - name: Build and push image
+      # Run-scoped staging tags never modify an existing release or stable alias.
+      - name: Build and push backend candidate
+        if: ${{ steps.candidate.outputs.reuse != 'true' }}
+        id: backend
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ matrix.context }}
+          context: services/backend
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          tags: ghcr.io/${{ github.repository }}/backend:candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build and push frontend candidate
+        if: ${{ steps.candidate.outputs.reuse != 'true' }}
+        id: frontend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/frontend
+          push: true
+          tags: ghcr.io/${{ github.repository }}/frontend:candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Save verified digest pair on draft for failure recovery
+        id: saved
+        if: ${{ steps.candidate.outputs.reuse != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
+          IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+        run: |
+          python3 scripts/release_candidate_manifest.py save \
+            --tag "$RELEASE_TAG" \
+            --revision "$(git rev-parse HEAD)" \
+            --registry "$IMAGE_REGISTRY" \
+            --backend-digest "$BACKEND_DIGEST" \
+            --frontend-digest "$FRONTEND_DIGEST" \
+            --output "$GITHUB_OUTPUT"
+
+      - name: Verify both digests, promote tags and publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
+          IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+          BACKEND_DIGEST: ${{ steps.candidate.outputs.backend_digest || steps.saved.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ steps.candidate.outputs.frontend_digest || steps.saved.outputs.frontend_digest }}
+        run: |
+          python3 scripts/promote_release_images.py \
+            --registry "$IMAGE_REGISTRY" \
+            --tag "$RELEASE_TAG" \
+            --backend-digest "$BACKEND_DIGEST" \
+            --frontend-digest "$FRONTEND_DIGEST"

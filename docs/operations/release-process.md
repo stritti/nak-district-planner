@@ -75,40 +75,23 @@ git commit -m "docs: Release-Prozess dokumentiert"
 
 Die Release-Pipeline besteht aus mehreren GitHub Actions Workflows. Für die eigentliche Veröffentlichung sind `release.yml` und die Docker-Builds maßgeblich.
 
-### 1. `release.yml` – Release Please + Docker-Veröffentlichung
+### 1. `release.yml`: Draft-Release und Readiness-Gate
 
-```text
-Push auf main
-     │
-     ▼
-RELEASE_PLEASE_TOKEN prüfen
-     │
-     ▼
-googleapis/release-please-action
-     │
-     ├─── Kein neuer Commit mit relevantem Typ
-     │         → Nichts passiert
-     │
-     └─── Neuer relevanter Commit erkannt
-               │
-               ├─── Release-PR existiert noch nicht
-               │         → Release-PR wird erstellt / aktualisiert
-               │           (CHANGELOG.md + Versions-Bump in Dateien)
-               │
-               └─── Release-PR wird gemergt
-                         → GitHub Release + Git-Tag
-                         → docker-build im selben Workflow-Run
-                           (needs: release-please, releases_created == 'true')
-                         → Docker-Images mit erlaubten Versions-Tags veröffentlicht
-```
+1. `release-please` legt mit `draft: true` und `force-tag-creation: true` einen **Draft-Release** und einen Git-Tag an.
+2. `publish-upgrade-notes` überprüft SemVer-Tag, Zugehörigkeit zu `main`, Draft-Status, den öffentlich veröffentlichten Vorgänger-Tag und Upgrade-Anweisungen. Ein Fehler blockiert alle folgenden Jobs.
+3. `docker-build` prüft zunächst, ob bereits ein unveränderlicher Digest-Nachweis (`nak-release-candidates.json`) als Asset des Draft-Releases existiert. Wenn ja, nutzt der Workflow genau dieses geprüfte Paar und überspringt neue Builds. Andernfalls erstellt er beide Images aus demselben Tag, pusht ausschließlich eindeutige `candidate-<run_id>-<run_attempt>`-Tags und speichert das Paar mit Release-Tag, Quell-Commit und Registry am Draft, bevor eine Promotion beginnt.
+4. `scripts/promote_release_images.py` überprüft die beiden Digests und veröffentlicht **danach** beide exakten Versionstags. Bereits vorhandene Versionstags dürfen nicht auf abweichende Digests zeigen.
+5. Stabile Releases promoten erst danach die Aliase `major.minor`, `major` und `latest`. Release Candidates verändern diese Aliase nicht.
+6. **Erst zuletzt** macht `gh release edit --draft=false` den GitHub Release öffentlich.
 
-`release.yml` verwendet ausschließlich `RELEASE_PLEASE_TOKEN`. Ein Fallback auf `GITHUB_TOKEN` ist absichtlich nicht erlaubt, weil von `GITHUB_TOKEN` erzeugte Aktualisierungen des Release-PRs die für das Ruleset erforderlichen Pull-Request-Workflows unterdrücken können. Fehlt das Secret, bricht der Workflow mit einer expliziten Fehlermeldung ab.
+Die Concurrency-Gruppe `release-publication` serialisiert alle Runs. GHCR kann Tags in zwei Paketen nicht atomar ändern: Während der Alias-Promotion ist eine kurze Versionsabweichung möglich. Produktion verwendet deshalb **nur exakte Versionstags** mit `APP_VERSION`, niemals mutable Aliase.
 
+Schlägt die Alias-Promotion oder die GitHub-Veröffentlichung fehl, versucht das Skript die vorherigen Alias-Digests wiederherzustellen. Bei fehlenden alten Aliases ist eine manuelle Bereinigung nötig. Der Release bleibt Draft. Der Workflow verwendet weiterhin `RELEASE_PLEASE_TOKEN` für Release Please und `GITHUB_TOKEN` für GHCR und Draft-Änderungen.
 ### 2. `build.yml` – Docker-Build-Prüfung ohne Veröffentlichung
 
 Dieser Workflow prüft Docker Compose und die Dockerfiles bei Pushes auf `main` oder `develop` sowie bei Pull Requests. Die Builds verwenden ausdrücklich `push: false`; der Workflow meldet sich nicht bei GHCR an und benötigt keine Schreibrechte für Packages. Es werden keine Branch- oder SHA-Images veröffentlicht. Die Checks `Build Backend Image` und `Build Frontend Image` bleiben für das Release-Gate erhalten.
 
-Nur `release.yml` veröffentlicht Images, nachdem Release Please nach dem Merge eines Release-PRs einen GitHub Release und den zugehörigen Git-Tag erstellt hat. Beide Service-Images werden aus diesem Git-Tag gebaut. Für normale Commits und Pull Requests werden keine zusätzlichen Git-Tags angelegt.
+Nur `release.yml` veröffentlicht Images. Release Please erzeugt den Tag zusammen mit einem unveröffentlichten Draft-Release. Beide Service-Images werden aus diesem Git-Tag gebaut. Für normale Commits und Pull Requests werden keine zusätzlichen Git-Tags angelegt.
 
 ### 3. `docs.yml` – Dokumentations-Build und Pages-Deployment
 
@@ -129,7 +112,13 @@ und geänderte Backup- oder Restore-Abläufe.
    `docs/operations/release-notes/<issue>-<thema>.md` hinzufügen. Kein Release-Tag
    und keine vorweggenommene Versionsnummer im Dateinamen. Bereits veröffentlichte
    Notizen nicht für spätere Releases erneut verwenden.
-2. Der Hinweis beginnt mit einer präzisen `###`-Überschrift und enthält
+2. Bei einem inkompatiblen Betreiber- oder Konfigurationswechsel (insbesondere wenn
+   Bestandskonfigurationen den Start verhindern) **muss** der Hinweis zusätzlich eine
+   eigene Zeile `**Breaking Change:** <konkrete Auswirkung>` unmittelbar nach dem Titel
+   enthalten. Solche Notizen bekommen in den veröffentlichten GitHub Release Notes
+   einen vorangestellten Abschnitt `BREAKING CHANGE`, unabhängig davon, wie Release
+   Please die automatisch generierte Feature-Liste formatiert.
+   Der Hinweis beginnt mit einer präzisen `###`-Überschrift und enthält
    `**Betroffen:**`, `**Vor dem Update:**` und `**Nach dem Update:**` (fett, mit Doppelpunkt, in dieser Reihenfolge am Zeilenanfang)
    Abschnitte. Er nennt alle neuen Pflichtwerte, Vorbedingungen,
    manuelle Schritte und Verifikationen; optionale Änderungen sind als solche
@@ -137,18 +126,9 @@ und geänderte Backup- oder Restore-Abläufe.
 3. Im Release-PR prüfen, dass Hinweise für sämtliche Betreiberaktionen seit
    dem vorherigen Release vorhanden und fachlich korrekt sind. Änderungen
    ohne manuellen Handlungsbedarf benötigen keine solche Datei.
-4. Nach der Veröffentlichung durch release-please bestimmt der
-   `publish-upgrade-notes`-Job alle **seit dem letzten Release neu hinzugefügten**
-   Notizen und stellt sie ganz an den **Anfang der GitHub-Release-Beschreibung**
-   unter `WICHTIG: Anpassungen bei produktiven Installationen`. Der bisherige
-   automatisch erzeugte CHANGELOG bleibt unverändert darunter. Bereits
-   veröffentlichte Notizen erscheinen in Folgeversionen nicht erneut.
-5. Ohne neue Upgrade-Hinweise bleibt die Release-Beschreibung unverändert.
-   Ungültige Notizen oder fehlgeschlagene Veröffentlichung lassen den Job
-   fehlschlagen. Der anschließende `docker-build`-Job wartet auf dessen Erfolg,
-   damit Release-Images nicht ohne vorgeschriebene Betreiberanweisungen
-   veröffentlicht werden. Die eigentliche Erstellung des GitHub Releases
-   durch release-please findet vorher statt.
+4. Vor der öffentlichen Veröffentlichung ergänzt `publish-upgrade-notes` ausschließlich den **Draft** um neue Hinweise. Ältere Hinweise werden nicht dupliziert; der generierte CHANGELOG bleibt unverändert.
+5. Bei ungültigen Hinweisen oder GitHub-API-Fehlern werden die Image-Builds und die Release-Veröffentlichung blockiert.
+6. Der Draft wird erst nach erfolgreicher Image-Digest-/Tag-Promotion veröffentlicht.
 
 Der Publisher ist idempotent; erneute Workflows erzeugen keine Duplikate.
 Die zugehörigen Regressionstests laufen im Dokumentations-CI-Job
@@ -157,6 +137,33 @@ Erstmalig wird dieses Verfahren für die
 [Produktionshärtung #472](./release-notes/472-production-hardening.md) genutzt.
 
 ---
+
+
+### Pflichtprüfung für v1.6.0 – Keycloak-Selbstregistrierung (#713)
+
+Der Übergang von Keycloak-Provisionierung zu Selbstregistrierung ist für bestehende
+Betreiber eine **inkompatible Betriebsänderung**. Die angegebene Minor-Version 1.6.0
+wird als vorab begonnene Release-Serie beibehalten; dies ist eine dokumentierte
+**Ausnahme von strikt rückwärtskompatibler SemVer-Minor-Versionierung**, keine
+behauptete Rückwärtskompatibilität.
+
+Vor dem Merge von Release-PR #698 die Upgrade-Notiz
+[`699-keycloak-self-registration.md`](./release-notes/699-keycloak-self-registration.md)
+und folgende Schritte nachweisbar prüfen:
+
+- Legacy-Provider-Konfiguration und das Keycloak-Admin-Secret entfernen; Realm-Setup
+  mit `registrationAllowed`, `verifyEmail`, `registrationEmailAsUsername` erfolgreich anwenden
+- Keycloak-SMTP-Bestätigungsmails und Registrierung im Browser prüfen
+- Vor und nach Freigabe den Rollen-/Zugriffspfad einschließlich verweigertem Zugriff testen
+- Backup und Rückfall mit Vorversionskonfiguration inklusive wiederhergestelltem
+  `nak-planner-provisioning`-Client dokumentieren
+- #711 mit grüner CI vor #698 mergen; in der Freigabe prüfen, dass die öffentliche
+  Release-Beschreibung das `BREAKING CHANGE`-Banner vor dem automatisch
+  erzeugten Changelog anzeigt
+
+Die Tests des Docs-Jobs prüfen das Vorhandensein und die Gültigkeit dieser
+konkreten Upgrade-Notiz. Die tatsächliche IdP-/SMTP-Migration bleibt eine
+manuelle Betriebsprüfung und ist nicht aus Unit Tests ableitbar.
 
 ## Release-PR Workflow
 
@@ -171,12 +178,28 @@ Erstmalig wird dieses Verfahren für die
 5. Ein Maintainer prüft den Release-PR einschließlich aller Required Status Checks und mergt ihn erst nach bestandenem Gate.
 6. release-please erstellt automatisch:
    - Einen Git-Tag
-   - Einen GitHub Release mit dem CHANGELOG als Beschreibung
-7. Der `publish-upgrade-notes`-Job ergänzt bei manuellen Betriebsänderungen die GitHub-Release-Beschreibung um verbindliche Upgrade-Schritte.
-8. Erst danach veröffentlicht `docker-build` (`needs: [release-please, publish-upgrade-notes]`) die Docker-Images aus dem Release-Tag.
+   - Einen **Draft**-GitHub-Release mit dem CHANGELOG als Beschreibung
+7. `publish-upgrade-notes` validiert die Betriebsanweisungen und ergänzt den Draft-Release.
+8. `docker-build` baut beide Staging-Images, verifiziert die Digests, promotet Versionstags und danach stabile Aliase. Zuletzt wird der GitHub Release veröffentlicht.
 
 ---
 
+## Release-Recovery bei partieller Veröffentlichung
+
+1. Fehler im Actions-Job und Draft-Status unter GitHub Releases prüfen. Der Draft darf nicht manuell vorzeitig freigegeben werden.
+2. In GHCR für **beide** Dienste den Digest des Kandidaten und eines möglicherweise schon gesetzten Versionstags vergleichen. Fertige Versionstags sind write-once.
+3. Unter Actions -> Release -> Run workflow mit Branch `main` und dem vorhandenen Draft-Tag (z. B. `v1.2.3`) neu starten. Notes werden erneut validiert; bei vorhandenem `nak-release-candidates.json` werden dessen Original-Digests verifiziert und **ohne erneute Builds** verwendet. Nur wenn dieser Nachweis fehlt, werden beide Images neu gebaut.
+4. Der gespeicherte Nachweis darf nicht überschrieben werden. Bei abweichendem Release-Tag, Commit oder Registry wird die Veröffentlichung blockiert. Falls ein Retry ohne gespeicherten Nachweis einen anderen Digest für einen schon existierenden Versionstag erzeugt, wird die Veröffentlichung blockiert. Alte Images nicht überschreiben: Original-Digest aus dem früheren Run sichern, den Gegenpart der identischen Revision herstellen und die Freigabe kontrolliert abschließen.
+5. Wenn nach einem fehlgeschlagenen Alias-Update das automatische Rollback scheitert, Aliase mit den vorherigen Digests wiederherstellen. Neu entstandene Aliase ohne früheren Digest gegebenenfalls manuell löschen.
+6. Erst beide exakt versionierten Images, Upgrade-Hinweise, GHCR-Aliase und anschließend die Freigabe des Drafts prüfen. Bis dahin bei produktiven Installationen die letzte vollständig veröffentlichte `APP_VERSION` beibehalten.
+
+Bei einem Recovery-Versuch prüft der Promotionsschritt außerdem sämtliche öffentlichen GitHub Releases. Existiert bereits eine **höhere SemVer-Version**, wird der ältere Draft vor Änderungen an GHCR-Versionstags oder Aliases abgewiesen. Unmittelbar vor der öffentlichen Freigabe erfolgt die Prüfung erneut. Das schützt vor einem Downgrade von `latest` und weiteren stabilen Aliases.
+
+Vor einer neuen Veröffentlichung muss der direkte Vorgänger-Tag ein **öffentliches GitHub Release** besitzen. Ist der Vorgänger noch Draft oder wurde das Release bei vorhandenem Tag gelöscht, verweigert der Notes-Schritt die Freigabe des Nachfolgers. Zuerst den ursprünglichen Draft reparieren und veröffentlichen, statt seine Upgrade-Anweisungen zu überspringen.
+
+Ein nicht vorhandener Draft wird als Recovery-Ziel abgelehnt. GitHub und GHCR unterstützen keine atomare Mehrfachveröffentlichung, daher werden Images in Produktion nur über exakte Versions-Tags referenziert.
+
+---
 ## Historie: v1.0 Release-Candidate-Phase (abgeschlossen)
 
 Vor `v1.0.0` wird mindestens ein echter Release Candidate veröffentlicht. Während dieser Phase ist Release Please auf die Prerelease-Versionierungsstrategie mit `prerelease-type: rc` eingestellt.
@@ -304,7 +327,7 @@ Die stabilen Aliase `1.0`, `1` und `latest` werden von einem RC nicht verändert
 
 ## Manuelles Auslösen
 
-Ein direktes Auslösen der Release-Pipeline über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden durch Pushes auf `main` gestartet. Der Dokumentations-Workflow unterstützt zusätzlich `workflow_dispatch`.
+Neue Releases werden nach dem Merge eines Release-PRs auf `main` automatisch gestartet. Für **Recovery** unterstützt `release.yml` `workflow_dispatch` mit dem Input `release_tag` und Branch `main`. Dabei wird nur ein existierender Draft mit gültigem SemVer-Tag akzeptiert; Release Please läuft nicht erneut. Der Dokumentations-Workflow unterstützt ebenfalls `workflow_dispatch`.
 
 ---
 
