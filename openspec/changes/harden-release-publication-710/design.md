@@ -18,3 +18,8 @@ Release Please creates the GitHub Release and tag before release notes or Docker
 - Partial version-tag promotion can survive failures. Retried builds with different digests deliberately fail closed and require manual recovery using the original digest.
 - Force-created Git tags are visible before the draft is published; only published GitHub Releases signal availability.
 
+
+## Review hardening
+
+- `docker-build` uses an explicit `always()` status function with a strict successful-notes condition, so a skipped `release-please` ancestor does not suppress manual recovery.
+- Before collecting upgrade notes, the preceding SemVer tag must resolve to a non-draft public GitHub Release. An incomplete or orphaned predecessor blocks successor publication rather than narrowing the notes diff past missing instructions.
