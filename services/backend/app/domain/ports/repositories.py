@@ -24,9 +24,9 @@ from app.domain.models.invitation import (
 from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.leader_unavailability import LeaderUnavailability
-from app.domain.models.notification import Notification, NotificationType
+from app.domain.models.notification import Notification
 from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 from app.domain.planning.conflict_result import ScheduledService
