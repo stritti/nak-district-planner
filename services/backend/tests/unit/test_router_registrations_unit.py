@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -43,6 +44,7 @@ async def test_submit_registration_paths() -> None:
             district_id,
             RegistrationCreate(name="Max", email="max@example.com"),
             db,
+            request=SimpleNamespace(state=SimpleNamespace()),
             credentials=None,
             district_repo=district_repo,
             reg_repo=reg_repo,
@@ -57,6 +59,7 @@ async def test_submit_registration_paths() -> None:
                 district_id,
                 RegistrationCreate(name="Max", email="max@example.com"),
                 db,
+                request=SimpleNamespace(state=SimpleNamespace()),
                 credentials=type("Cred", (), {"credentials": "bad"})(),
                 district_repo=district_repo,
                 reg_repo=reg_repo,
@@ -303,6 +306,7 @@ def _credentials():
 
 async def _submit(credentials, claims):
     db = AsyncMock()
+    request = SimpleNamespace(state=SimpleNamespace())
     district_repo = AsyncMock()
     district_repo.get.return_value = District.create(name="D")
     adapter = AsyncMock()
@@ -312,16 +316,17 @@ async def _submit(credentials, claims):
             uuid.uuid4(),
             RegistrationCreate(name="Max", email="max@example.com"),
             db,
+            request=request,
             credentials=credentials,
             district_repo=district_repo,
             reg_repo=AsyncMock(),
         )
-    return db
+    return db, request
 
 
 @pytest.mark.asyncio
 async def test_a_logged_in_registrant_is_known_to_row_level_security_before_the_insert() -> None:
-    db = await _submit(_credentials(), {"sub": "oidc|erika"})
+    db, _ = await _submit(_credentials(), {"sub": "oidc|erika"})
 
     statements = [(str(c.args[0]), c.args[1]) for c in db.execute.await_args_list]
     assert any("app.current_user_sub" in sql and params == {"sub": "oidc|erika"} for sql, params in statements)
@@ -329,6 +334,21 @@ async def test_a_logged_in_registrant_is_known_to_row_level_security_before_the_
 
 @pytest.mark.asyncio
 async def test_an_anonymous_registration_sets_no_user() -> None:
-    db = await _submit(None, {})
+    db, _ = await _submit(None, {})
 
     assert not any("app.current_user_sub" in str(c.args[0]) for c in db.execute.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_the_validated_subject_is_the_actor_of_the_request_audit() -> None:
+    """The audit middleware reads request.state.user; without it the entry looks anonymous."""
+    _, request = await _submit(_credentials(), {"sub": "oidc|erika"})
+
+    assert request.state.user.sub == "oidc|erika"
+
+
+@pytest.mark.asyncio
+async def test_an_anonymous_registration_has_no_actor() -> None:
+    _, request = await _submit(None, {})
+
+    assert not hasattr(request.state, "user")

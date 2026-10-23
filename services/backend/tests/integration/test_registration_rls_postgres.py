@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -76,27 +77,30 @@ async def _submit(app_sessions, district_id, email, *, claims=None):
     TenantContext.clear_context()
     adapter = AsyncMock()
     adapter.validate_token.return_value = claims or {}
+    request = SimpleNamespace(state=SimpleNamespace())
     async with app_sessions() as session:
         with patch.object(router.api_deps, "get_oidc_adapter", return_value=adapter):
             response = await router.submit_registration(
                 district_id,
                 RegistrationCreate(name="Erika Beispiel", email=email),
                 session,
+                request=request,
                 credentials=type("Cred", (), {"credentials": "t"})() if claims else None,
                 district_repo=SqlDistrictRepository(session),
                 reg_repo=SqlLeaderRegistrationRepository(session),
             )
         await session.commit()
-    return response
+    return response, request
 
 
 async def test_an_anonymous_registration_is_accepted(app_sessions, district) -> None:
-    response = await _submit(app_sessions, district, "anon@example.org")
+    response, _ = await _submit(app_sessions, district, "anon@example.org")
 
     assert response.user_sub is None and response.status.value == "PENDING"
 
 
 async def test_a_logged_in_registration_is_bound_to_the_token_subject(app_sessions, district) -> None:
-    response = await _submit(app_sessions, district, "erika@example.org", claims={"sub": "oidc|erika"})
+    response, request = await _submit(app_sessions, district, "erika@example.org", claims={"sub": "oidc|erika"})
 
     assert response.user_sub == "oidc|erika"
+    assert request.state.user.sub == "oidc|erika"
