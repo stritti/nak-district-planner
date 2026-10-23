@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from scripts.promote_release_images import Image, PromotionError, ReleasePromoter, command
+from scripts.promote_release_images import PromotionError, ReleasePromoter, command
 
 BACKEND = "sha256:" + "a" * 64
 FRONTEND = "sha256:" + "b" * 64
