@@ -160,6 +160,8 @@ Erstmalig wird dieses Verfahren für die
 5. Wenn nach einem fehlgeschlagenen Alias-Update das automatische Rollback scheitert, Aliase mit den vorherigen Digests wiederherstellen. Neu entstandene Aliase ohne früheren Digest gegebenenfalls manuell löschen.
 6. Erst beide exakt versionierten Images, Upgrade-Hinweise, GHCR-Aliase und anschließend die Freigabe des Drafts prüfen. Bis dahin bei produktiven Installationen die letzte vollständig veröffentlichte `APP_VERSION` beibehalten.
 
+Bei einem Recovery-Versuch prüft der Promotionsschritt außerdem sämtliche öffentlichen GitHub Releases. Existiert bereits eine **höhere SemVer-Version**, wird der ältere Draft vor Änderungen an GHCR-Versionstags oder Aliases abgewiesen. Unmittelbar vor der öffentlichen Freigabe erfolgt die Prüfung erneut. Das schützt vor einem Downgrade von `latest` und weiteren stabilen Aliases.
+
 Vor einer neuen Veröffentlichung muss der direkte Vorgänger-Tag ein **öffentliches GitHub Release** besitzen. Ist der Vorgänger noch Draft oder wurde das Release bei vorhandenem Tag gelöscht, verweigert der Notes-Schritt die Freigabe des Nachfolgers. Zuerst den ursprünglichen Draft reparieren und veröffentlichen, statt seine Upgrade-Anweisungen zu überspringen.
 
 Ein nicht vorhandener Draft wird als Recovery-Ziel abgelehnt. GitHub und GHCR unterstützen keine atomare Mehrfachveröffentlichung, daher werden Images in Produktion nur über exakte Versions-Tags referenziert.
