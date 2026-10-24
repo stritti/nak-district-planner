@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import uuid
 from contextvars import ContextVar
-from typing import Optional
 
 # Context variables for tenant information
 current_tenant: ContextVar[uuid.UUID | None] = ContextVar("current_tenant", default=None)

@@ -9,7 +9,7 @@ we'll focus on testing the basic structure and error handling.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx

@@ -117,27 +117,6 @@ jobs:
       - name: Ruff lint (pinned version from uv.lock)
         run: uv run ruff check .
 
-      # F401 stays globally excluded until the legacy audit is complete.
-      # This isolated gate enforces unused imports across reviewed registration,
-      # domain, application and integration-adapter modules.
-      - name: Incremental F401 unused-import gate for reviewed modules
-        run: |
-          uv run ruff check --isolated --select F401 \
-            app/domain/models/leader_registration.py \
-            app/adapters/api/routers/registrations.py \
-            app/domain/ports \
-            app/domain/planning \
-            app/domain/services \
-            app/domain/models \
-            app/application \
-            app/adapters/auth \
-            app/adapters/idp \
-            app/adapters/mail \
-            app/adapters/version_check \
-            app/adapters/calendar \
-            app/adapters/worker \
-            app/adapters/api/schemas
-
       - name: Check RBAC guard pattern in routers
         run: uv run python scripts/check_rbac_guard_pattern.py
 

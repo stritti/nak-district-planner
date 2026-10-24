@@ -10,7 +10,7 @@ The async DB session is patched so no real database access is performed.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timezone
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

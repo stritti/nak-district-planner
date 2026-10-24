@@ -18,7 +18,6 @@ Create Date: 2026-06-25 20:00:00.000000
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Union
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql

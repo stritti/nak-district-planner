@@ -15,7 +15,6 @@ from app.adapters.api.routers import event_duties as api
 from app.adapters.api.schemas.event_duty import (
     AssignmentWrite,
     CategoryCreate,
-    ConfigurationWrite,
     SuggestionUpdate,
     SuggestionWrite,
 )

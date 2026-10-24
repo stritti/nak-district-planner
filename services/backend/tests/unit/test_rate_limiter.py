@@ -4,10 +4,10 @@
 """Unit tests for Rate Limiter."""
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from starlette.responses import Response
 from starlette.testclient import TestClient
 

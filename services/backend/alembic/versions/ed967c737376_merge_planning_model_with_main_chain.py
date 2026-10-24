@@ -12,9 +12,6 @@ Create Date: 2026-06-10 13:53:19.975904
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Union
-
-from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "ed967c737376"

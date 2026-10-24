@@ -22,12 +22,10 @@ from app.adapters.api.schemas.reminder_configs import (
     ReminderConfigResponse,
     ReminderConfigUpdate,
 )
-from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.repositories.district_reminder_config import (
     SqlDistrictReminderConfigRepository,
 )
 from app.domain.models.district_reminder_config import DistrictReminderConfig
-from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/reminder-configs", tags=["reminder-configs"])
 

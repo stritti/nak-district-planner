@@ -41,3 +41,39 @@ from app.adapters.db.orm_models.recurring_event import (
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.adapters.db.orm_models.slot_gap_alert import SlotGapAlertORM
 from app.adapters.db.orm_models.user import UserORM
+
+# Keep import-time SQLAlchemy registration and intentional public re-exports.
+__all__ = [
+    "AuditLogORM",
+    "CalendarIntegrationORM",
+    "CongregationORM",
+    "CongregationGroupORM",
+    "DeletedGenerationKeyORM",
+    "DistrictORM",
+    "DistrictReminderConfigORM",
+    "ReminderDeliveryORM",
+    "DutyNameSuggestionORM",
+    "EventDutyAssignmentORM",
+    "EventDutyCategoryORM",
+    "EventTypeDutyConfigurationORM",
+    "EventInstanceORM",
+    "EventMailHookORM",
+    "ExportTokenORM",
+    "ExternalEventCandidateORM",
+    "ExternalEventLinkORM",
+    "CongregationInvitationORM",
+    "InvitationOverwriteRequestORM",
+    "LeaderAssignmentORM",
+    "LeaderORM",
+    "LeaderRegistrationORM",
+    "LeaderUnavailabilityORM",
+    "MembershipORM",
+    "NotificationORM",
+    "PlanningSeriesORM",
+    "PlanningSlotORM",
+    "RecurringEventDecisionORM",
+    "RecurringEventTemplateORM",
+    "ServiceAssignmentORM",
+    "SlotGapAlertORM",
+    "UserORM",
+]
