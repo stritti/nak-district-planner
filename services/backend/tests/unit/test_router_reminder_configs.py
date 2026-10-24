@@ -6,9 +6,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
