@@ -22,9 +22,7 @@ from datetime import UTC, date, datetime, time, timedelta
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
     PlanningSlot,
