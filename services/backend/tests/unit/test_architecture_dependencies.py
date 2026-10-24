@@ -69,7 +69,6 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
     ),
     "feiertage_service.py": _debt(
         "legacy holiday import still works with persistence adapters",
-        "app.adapters.db.repositories.event_instance",
         "app.adapters.db.repositories.planning_slot",
         "sqlalchemy.ext.asyncio",
     ),

@@ -10,4 +10,4 @@ No code imports or exports change in this PR; the modules that handle OIDC, auth
 - A previously demonstrated negative test of the unchanged isolated Ruff rule is available in issue #715 (CI runs 40086639329 and 40030528685, both failed on actual unused imports). A new rule invocation is not created in this PR.
 
 ## Remaining work
-Application scope in PR #722 is independent; the workflow changes may require rebasing when one PR merges. Adapter API/DB modules and test modules must be audited before the global F401 ignore can be removed. Newly discovered baseline frontend dependency advisories are tracked separately as #723; do not weaken the security gate.
+PR #722 has merged: the conflict with its `app/application` addition is resolved by preserving both the full application directory and these six adapter directories in the same gate. Security issue #723 is closed after PR #725 and an entirely successful `main` Security Scans workflow. Remaining adapter API/DB modules and test modules must be audited before the global F401 ignore can be removed.

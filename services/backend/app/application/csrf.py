@@ -11,7 +11,6 @@ import hashlib
 import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Optional
 
 from app.config import settings
 

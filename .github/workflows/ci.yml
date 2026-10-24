@@ -118,8 +118,8 @@ jobs:
         run: uv run ruff check .
 
       # F401 stays globally excluded until the legacy audit is complete.
-      # Enforce it independently for reviewed domain, registration and
-      # integration adapter packages; never suppress real unused imports.
+      # This isolated gate enforces unused imports across reviewed registration,
+      # domain, application and integration-adapter modules.
       - name: Incremental F401 unused-import gate for reviewed modules
         run: |
           uv run ruff check --isolated --select F401 \
@@ -129,6 +129,7 @@ jobs:
             app/domain/planning \
             app/domain/services \
             app/domain/models \
+            app/application \
             app/adapters/auth \
             app/adapters/idp \
             app/adapters/mail \
