@@ -10,7 +10,7 @@ import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 
 class LeaderRank(StrEnum):
