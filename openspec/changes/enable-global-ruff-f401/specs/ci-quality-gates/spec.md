@@ -11,8 +11,8 @@ The standard backend CI SHALL run pinned Ruff `uv run ruff check .` with F401 en
 - **WHEN** all imports are used or explicitly exported
 - **THEN** the pinned full-backend Ruff check passes without special directory allowlists
 
-### Requirement: Registration and compatibility imports SHALL be preserved
-The ORM registry SHALL import its 32 known mapped classes and declare public exports so Alembic registers them with `Base.metadata`. Compatibility imports used as documented patch targets SHALL remain available.
+### Requirement: ORM registration and compatibility symbols SHALL be preserved
+The ORM registry SHALL import its 32 known mapped classes and declare public exports so Alembic registers them with `Base.metadata`. Compatibility symbols used as documented patch targets SHALL remain available without unused-import suppressions.
 
 #### Scenario: ORM metadata registration
 - **WHEN** the ORM registry loads

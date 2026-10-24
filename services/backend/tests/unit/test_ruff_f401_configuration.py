@@ -61,3 +61,11 @@ def test_orm_imports_remain_explicit_exports_and_register_tables() -> None:
     for name in exports:
         model = getattr(orm_models, name)
         assert model.__table__.key in Base.metadata.tables
+
+
+def test_calendar_router_retains_crypto_monkeypatch_target() -> None:
+    """Existing clients and tests can patch the legacy calendar-router symbol."""
+    from app.adapters.api.routers import calendar_integrations
+    from app.application.crypto import encrypt_credentials
+
+    assert calendar_integrations.encrypt_credentials is encrypt_credentials
