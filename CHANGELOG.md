@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.6.0](https://github.com/stritti/nak-district-planner/compare/v1.5.0...v1.6.0) (2026-10-24)
+
+
+### Features
+
+* **holidays:** import the four Advent Sundays as church feast days ([#697](https://github.com/stritti/nak-district-planner/issues/697)) ([c5b2f6c](https://github.com/stritti/nak-district-planner/commit/c5b2f6c13f8b474e0818d4c07d6d5bc529ff2382))
+* **onboarding:** Keycloak self-registration, no admin secret in the backend ([#699](https://github.com/stritti/nak-district-planner/issues/699)) ([b70546f](https://github.com/stritti/nak-district-planner/commit/b70546f3dca4e7b1f9e9e43d86541b8fc04bbee2))
+
+
+### Bug Fixes
+
+* **audit:** cut overlong text to the column limits instead of failing the entry ([#706](https://github.com/stritti/nak-district-planner/issues/706)) ([6517eb2](https://github.com/stritti/nak-district-planner/commit/6517eb23d6d0d9abc76bccc9ae3aa1680a801e25))
+* **audit:** leader writes failed after the congregation column was removed ([#705](https://github.com/stritti/nak-district-planner/issues/705)) ([3f290b2](https://github.com/stritti/nak-district-planner/commit/3f290b22173a81a9eae53ac7c5e0ba391fd6a7d5))
+* **frontend:** discard stale congregation request results ([#712](https://github.com/stritti/nak-district-planner/issues/712)) ([#716](https://github.com/stritti/nak-district-planner/issues/716)) ([d4dd886](https://github.com/stritti/nak-district-planner/commit/d4dd886d638392d23c29468d6f0a1ddd4a70043e))
+* **registrations:** a logged-in registrant is known to row-level security ([#707](https://github.com/stritti/nak-district-planner/issues/707)) ([3ed9e4b](https://github.com/stritti/nak-district-planner/commit/3ed9e4b6f5e89edfc583fb1c113ee71123bc8ff2))
+* **release:** gate publication on both images and upgrade notes ([#710](https://github.com/stritti/nak-district-planner/issues/710)) ([#711](https://github.com/stritti/nak-district-planner/issues/711)) ([3868711](https://github.com/stritti/nak-district-planner/commit/3868711b015abf2aa2f6c8b74aefb596da95915a))
+* **release:** prominently flag Keycloak incompatible upgrade ([#713](https://github.com/stritti/nak-district-planner/issues/713)) ([#717](https://github.com/stritti/nak-district-planner/issues/717)) ([2687c94](https://github.com/stritti/nak-district-planner/commit/2687c94b29aaafd1867a6fb087d887ea71c5d069))
+* **security:** update Happy DOM and fast-uri for GHSA advisories ([#723](https://github.com/stritti/nak-district-planner/issues/723)) ([#725](https://github.com/stritti/nak-district-planner/issues/725)) ([080a6e1](https://github.com/stritti/nak-district-planner/commit/080a6e166807f14a4488aa8c40ad61d88c11d16e))
+* **security:** verify registration email before linking OIDC subject ([#708](https://github.com/stritti/nak-district-planner/issues/708)) ([#709](https://github.com/stritti/nak-district-planner/issues/709)) ([70edda8](https://github.com/stritti/nak-district-planner/commit/70edda83eec9dbd61bbb333a78d362d3fd5cb240))
+
 ## [1.5.0](https://github.com/stritti/nak-district-planner/compare/v1.4.0...v1.5.0) (2026-10-22)
 
 
