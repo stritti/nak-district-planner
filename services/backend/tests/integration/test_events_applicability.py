@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, date, datetime, time
-from types import SimpleNamespace
+from datetime import date, time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient

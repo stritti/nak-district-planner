@@ -16,7 +16,7 @@ from app.application.external_candidate_ingestion import (
 from app.domain.models.calendar_integration import CalendarIntegration, CalendarType
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 
 START = datetime(2026, 7, 1, 10, tzinfo=UTC)
