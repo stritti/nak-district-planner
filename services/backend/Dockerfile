@@ -1,4 +1,4 @@
-FROM python:3.15.0-slim
+FROM python:3.14.8-slim
 
 # Install the same uv version used by CI to keep builds reproducible.
 COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
