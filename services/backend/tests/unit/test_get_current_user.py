@@ -6,7 +6,7 @@
 Tests cover JWT validation, user creation, and dependency injection.
 """
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -295,4 +295,3 @@ class TestSqlNotificationRepository:
         assert items == []
 
 
-import unittest.mock  # noqa: E402 (needed for the sentinel above)
