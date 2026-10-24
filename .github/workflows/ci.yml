@@ -117,9 +117,9 @@ jobs:
       - name: Ruff lint (pinned version from uv.lock)
         run: uv run ruff check .
 
-      # F401 remains globally excluded during the legacy migration. This
-      # isolated check fails for unused imports in all reviewed domain ports,
-      # planning rules and services; preserve the original registration gate.
+      # F401 stays globally excluded until the legacy audit is complete.
+      # Enforce it independently for reviewed domain, registration and
+      # integration adapter packages; never suppress real unused imports.
       - name: Incremental F401 unused-import gate for reviewed modules
         run: |
           uv run ruff check --isolated --select F401 \
