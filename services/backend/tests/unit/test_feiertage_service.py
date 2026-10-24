@@ -10,7 +10,6 @@ from datetime import date, datetime, time, timedelta
 from itertools import pairwise
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from app.application.feiertage_service import (
     ADVENT_SUNDAYS,
     ENTSCHLAFENEN_MONATE,

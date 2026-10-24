@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-
 # revision identifiers, used by Alembic.
 revision: str = "ed967c737376"
 down_revision: str | None = ("0011_planning_model_foundation", "e4b2a9d7f110")

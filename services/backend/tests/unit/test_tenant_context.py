@@ -5,10 +5,7 @@
 
 import uuid
 
-
-from app.tenant import (
-    TenantContext,
-)
+from app.tenant import TenantContext
 
 
 class TestTenantContextGet:
