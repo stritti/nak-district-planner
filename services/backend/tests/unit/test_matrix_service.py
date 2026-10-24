@@ -6,14 +6,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 
 import pytest
 
 from app.application.matrix_service import MatrixService
 from app.config import settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import PlanningSlot
 
 
 @pytest.fixture

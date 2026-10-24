@@ -5,16 +5,7 @@
 
 import uuid
 
-import pytest
-
-from app.tenant import (
-    TenantContext,
-    current_congregation,
-    current_district,
-    current_tenant,
-    current_user_roles,
-    current_user_sub,
-)
+from app.tenant import TenantContext
 
 
 class TestTenantContextGet:

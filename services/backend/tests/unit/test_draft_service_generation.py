@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 
@@ -16,7 +16,7 @@ from app.application.draft_service_generation import (
 )
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
-from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
+from app.domain.models.event_instance import EventInstance, EventSource
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
 

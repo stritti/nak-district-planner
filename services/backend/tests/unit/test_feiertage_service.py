@@ -6,11 +6,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from itertools import pairwise
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from app.application.feiertage_service import (
     ADVENT_SUNDAYS,

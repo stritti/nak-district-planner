@@ -8,7 +8,7 @@ All HTTP calls are intercepted via a mock httpx.AsyncClient — no network neede
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx

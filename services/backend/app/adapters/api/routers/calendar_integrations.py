@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -34,7 +33,7 @@ from app.adapters.calendar.url_guard import UnsafeCalendarUrlError, validate_cal
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.worker.tasks import record_sync_attempt
-from app.application.crypto import CryptoError, encrypt_credentials
+from app.application.crypto import CryptoError
 from app.application.services.calendar_integration_commands import (
     CalendarIntegrationCreateCommand,
     CalendarIntegrationUpdateCommand,

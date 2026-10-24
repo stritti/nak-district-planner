@@ -6,7 +6,7 @@
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, delete, func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.adapters.db.locks import acquire_account_xact_lock, acquire_advisory_xact_lock
@@ -29,7 +29,7 @@ from app.domain.models.event_duty import (
     display_name,
     normalize_name,
 )
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.planning.conflict_result import ScheduledService
 from app.domain.planning.duty_conflicts import ScheduledDuty
 from app.domain.ports.event_duties import EventDutiesRepository
