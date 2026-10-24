@@ -24,11 +24,9 @@ from app.adapters.api.schemas.event_hooks import (
     EventHookUpdate,
     EventTypeInfo,
 )
-from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
 from app.domain.events import EventType
 from app.domain.models.event_mail_hook import EVENT_PLACEHOLDERS, EventMailHook
-from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/event-hooks", tags=["event-hooks"])
 

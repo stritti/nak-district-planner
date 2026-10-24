@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.invitation import CongregationInvitationORM
