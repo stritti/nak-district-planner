@@ -7,7 +7,8 @@ from logging.config import fileConfig
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-import app.adapters.db.orm_models
+# Register every ORM table with Base.metadata before running Alembic.
+from app.adapters.db import orm_models as orm_models
 from alembic import context
 from app.adapters.db.base import Base
 from app.config import settings
