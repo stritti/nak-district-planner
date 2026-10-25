@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
-//     SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-only
 
 import { computed, type Ref } from 'vue'
 import type { EventResponse } from '../api/events'
