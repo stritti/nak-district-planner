@@ -98,7 +98,8 @@ def _matrix_repos(
 async def test_expected_dates_includes_matching_weekdays() -> None:
     from_date = datetime(2026, 4, 6, tzinfo=UTC).date()  # Monday
     to_date = from_date + timedelta(days=6)
-    dates = r._expected_dates([{"weekday": 0, "time": "20:00"}], from_date, to_date)
+    from app.adapters.api.matrix_builder import _expected_dates
+    dates = _expected_dates([{"weekday": 0, "time": "20:00"}], from_date, to_date)
     assert dates == ["2026-04-06"]
 
 
@@ -695,7 +696,7 @@ async def test_matrix_shows_later_same_day_service_conflict_when_primary_is_clea
 
 @pytest.mark.asyncio
 async def test_matrix_conflicts_follow_the_conflict_check_switch(monkeypatch) -> None:
-    monkeypatch.setattr("app.adapters.api.routers.districts.settings.conflict_check_enabled", False)
+    monkeypatch.setattr("app.adapters.api.matrix_builder.settings.conflict_check_enabled", False)
     district_id = uuid.uuid4()
     nord = Congregation.create(name="Nord", district_id=district_id)
     sued = Congregation.create(name="Sued", district_id=district_id)
