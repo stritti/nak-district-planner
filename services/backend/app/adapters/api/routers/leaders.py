@@ -34,8 +34,6 @@ from app.adapters.auth.permissions import (
     require_role_in_district,
 )
 from app.adapters.db.locks import acquire_advisory_xact_lock
-from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import (
     ROLE_LEVEL_MESSAGE,
     Leader,
@@ -45,6 +43,10 @@ from app.domain.models.leader import (
     role_fits_level,
 )
 from app.domain.models.role import Role
+from app.domain.ports.repositories import (
+    DistrictRepository,
+    LeaderRepository,
+)
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
 
@@ -119,8 +121,8 @@ async def list_leaders(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    districts: SqlDistrictRepository = Depends(get_district_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    districts: DistrictRepository = Depends(get_district_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
     include_inactive: bool = False,
 ) -> list[LeaderResponse]:
     require_role_in_district(auth, Role.VIEWER, district_id)
@@ -142,8 +144,8 @@ async def create_leader(
     body: LeaderCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    districts: SqlDistrictRepository = Depends(get_district_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    districts: DistrictRepository = Depends(get_district_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> LeaderResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
     if not await districts.get(district_id):
@@ -209,7 +211,7 @@ async def update_leader(
     body: LeaderUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> LeaderResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
@@ -273,7 +275,7 @@ async def inline_update_leader(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> LeaderResponse:
     """Only non-workflow contact/name fields support inline updates."""
     if if_match is None:
@@ -305,7 +307,7 @@ async def link_self_to_leader(
     body: LeaderSelfLinkRequest,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
     repo = leaders_repo
     # Inspect the target's scope before acquiring the write locks.
@@ -351,8 +353,8 @@ async def unlink_self_from_leader(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    districts: SqlDistrictRepository = Depends(get_district_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    districts: DistrictRepository = Depends(get_district_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
     repo = leaders_repo
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
@@ -377,8 +379,8 @@ async def get_self_link(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    districts: SqlDistrictRepository = Depends(get_district_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    districts: DistrictRepository = Depends(get_district_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
     repo = leaders_repo
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
@@ -408,7 +410,7 @@ def _assignment_error(code: str, message: str) -> HTTPException:
 
 
 async def _locked_leader(
-    repo: SqlLeaderRepository, district_id: uuid.UUID, leader_id: uuid.UUID
+    repo: LeaderRepository, district_id: uuid.UUID, leader_id: uuid.UUID
 ) -> Leader:
     leader = await repo.get_for_update(leader_id)
     if not leader or leader.district_id != district_id:
@@ -443,7 +445,7 @@ async def add_leader_assignment(
     body: LeaderAssignmentCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> LeaderAssignmentResponse:
     _require_assignment_rights(auth, district_id, body.congregation_id)
     await ensure_congregation_in_district(db, district_id, body.congregation_id)
@@ -474,7 +476,7 @@ async def update_leader_assignment(
     body: LeaderAssignmentUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> LeaderAssignmentResponse:
     if body.is_home is False:
@@ -511,7 +513,7 @@ async def remove_leader_assignment(
     assignment_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> None:
     leader = await _locked_leader(leaders_repo, district_id, leader_id)
@@ -537,7 +539,7 @@ async def delete_leader(
     leader_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> None:
     require_role_in_district(auth, Role.PLANNER, district_id)
     repo = leaders_repo

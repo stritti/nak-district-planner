@@ -36,11 +36,7 @@ from app.adapters.api.tenant_references import (
 )
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
-from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event_duty import SERVICE_LEADER_LABEL
 from app.domain.models.event_instance import EventInstance, EventVisibility
 from app.domain.models.export_token import ExportToken, TokenType
@@ -51,6 +47,12 @@ from app.domain.models.planning_slot import (
 )
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
+from app.domain.ports.repositories import (
+    EventInstanceRepository,
+    LeaderRepository,
+    PlanningSlotRepository,
+    ServiceAssignmentRepository,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -196,10 +198,10 @@ async def export_calendar_ics(
     session: DbSession,
     approval_status: Literal["confirmed_only", "include_planned"] | None = Query(None),
     token_repo: SqlExportTokenRepository = Depends(get_export_token_repository),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    sa_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    leader_repo_dep: SqlLeaderRepository = Depends(get_leader_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    sa_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leader_repo_dep: LeaderRepository = Depends(get_leader_repository),
 ) -> Response:
     from sqlalchemy import text
 

@@ -24,18 +24,20 @@ from app.adapters.api.schemas.invitation import (
     OverwriteRequestResponse,
 )
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.adapters.db.repositories.invitation_overwrite_request import (
     SqlInvitationOverwriteRequestRepository,
 )
-from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.invitation_service import (
     apply_overwrite_decision,
     create_invitations_for_event,
     delete_invitation,
 )
 from app.domain.models.role import Role
+from app.domain.ports.repositories import (
+    EventInstanceRepository,
+    InvitationRepository,
+    PlanningSlotRepository,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["invitations"])
 
@@ -50,7 +52,7 @@ async def create_invitations(
     body: InvitationCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> list[InvitationResponse]:
     planning_slot = await slot_repo.get(event_id)
     if planning_slot is None:
@@ -88,8 +90,8 @@ async def list_event_invitations(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    inv_repo: SqlInvitationRepository = Depends(get_invitation_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    inv_repo: InvitationRepository = Depends(get_invitation_repository),
 ) -> list[InvitationResponse]:
     planning_slot = await slot_repo.get(event_id)
     if planning_slot is None:
@@ -121,8 +123,8 @@ async def remove_invitation(
     invitation_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    inv_repo: SqlInvitationRepository = Depends(get_invitation_repository),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    inv_repo: InvitationRepository = Depends(get_invitation_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> None:
     invitation = await inv_repo.get(invitation_id)
     if invitation is None:
@@ -195,8 +197,8 @@ async def list_overwrite_requests(
     req_repo: SqlInvitationOverwriteRequestRepository = Depends(
         get_invitation_overwrite_request_repository
     ),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
 ) -> list[OverwriteRequestResponse]:
     require_role_in_district(auth, Role.VIEWER, district_id)
 
@@ -244,8 +246,8 @@ async def decide_overwrite_request(
     req_repo: SqlInvitationOverwriteRequestRepository = Depends(
         get_invitation_overwrite_request_repository
     ),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
 ) -> OverwriteRequestResponse:
 
     existing = await req_repo.get(request_id)

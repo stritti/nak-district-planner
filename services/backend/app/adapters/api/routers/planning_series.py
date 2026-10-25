@@ -25,11 +25,13 @@ from app.adapters.api.schemas.planning_series import (
 from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import require_role_in_district, require_superadmin
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
-from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.role import Role
+from app.domain.ports.repositories import (
+    PlanningSeriesRepository,
+    PlanningSlotRepository,
+)
 
 router = APIRouter(prefix="/api/v1/planning-series", tags=["planning-series"])
 
@@ -79,7 +81,7 @@ async def create_planning_series(
     body: PlanningSeriesCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    repo: PlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Create a new PlanningSeries.
 
@@ -110,7 +112,7 @@ async def get_planning_series(
     series_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    repo: PlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Get a PlanningSeries by ID.
 
@@ -135,7 +137,7 @@ async def update_planning_series(
     body: PlanningSeriesUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    repo: PlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Update a PlanningSeries.
 
@@ -186,8 +188,8 @@ async def generate_slots_for_series(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
-    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    series_repo: PlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for a specific PlanningSeries.
 
@@ -231,8 +233,8 @@ async def generate_slots_for_district(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
-    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    series_repo: PlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for all active PlanningSeries in a district.
 
@@ -267,8 +269,8 @@ async def generate_all_slots(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
-    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    series_repo: PlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for all active PlanningSeries across all districts.
 

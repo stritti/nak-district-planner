@@ -33,10 +33,8 @@ from app.adapters.api.schemas.service_assignment import (
 from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.locks import acquire_account_xact_lock, acquire_advisory_xact_lock
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.domain.event_payloads import assignment_confirmed
 from app.domain.models.event_instance import EventInstance
@@ -44,6 +42,12 @@ from app.domain.models.leader import normalize_leader_name
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+from app.domain.ports.repositories import (
+    EventInstanceRepository,
+    LeaderRepository,
+    PlanningSlotRepository,
+    ServiceAssignmentRepository,
+)
 
 router = APIRouter(
     prefix="/api/v1/events/{event_id}/assignments",
@@ -51,7 +55,7 @@ router = APIRouter(
 )
 
 
-async def _touch_slot(slots: SqlPlanningSlotRepository, planning_slot: PlanningSlot) -> None:
+async def _touch_slot(slots: PlanningSlotRepository, planning_slot: PlanningSlot) -> None:
     """Bump the slot revision: assignments are part of the exported event (UC-05).
 
     ICS feeds derive DTSTAMP/LAST-MODIFIED/SEQUENCE from the slot's updated_at;
@@ -124,7 +128,7 @@ def _violated_constraint(exc: IntegrityError) -> str | None:
 
 
 async def _save(
-    assignments_repo: SqlServiceAssignmentRepository, assignment: ServiceAssignment
+    assignments_repo: ServiceAssignmentRepository, assignment: ServiceAssignment
 ) -> None:
     """Persist; the unique index allows one assignment per planning slot."""
     try:
@@ -161,7 +165,7 @@ def _assignment_result(
 
 
 async def _require_event_revision(
-    instance_repo: SqlEventInstanceRepository,
+    instance_repo: EventInstanceRepository,
     planning_slot: PlanningSlot,
     if_match: str | None,
 ) -> EventInstance | None:
@@ -185,9 +189,9 @@ async def create_assignment(
     body: ServiceAssignmentCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slots: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> InlineAssignmentResult:
     planning_slot = await slots.get_for_update(event_id)
@@ -227,8 +231,8 @@ async def list_assignments(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    slots: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> list[ServiceAssignmentResponse]:
     planning_slot = await slots.get(event_id)
     if not planning_slot:
@@ -249,9 +253,9 @@ async def inline_change_assignment(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
-    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    slots: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> InlineAssignmentResult:
     """Change an assigned minister atomically against the event's strong revision.
 
@@ -318,10 +322,10 @@ async def update_assignment(
     body: ServiceAssignmentUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slots: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> InlineAssignmentResult:
     # Lock the slot before reading its assignment: dependent event updates hold
@@ -381,7 +385,7 @@ async def update_assignment(
 
 
 async def _leader_display_name(
-    leaders_repo: SqlLeaderRepository, assignment: ServiceAssignment
+    leaders_repo: LeaderRepository, assignment: ServiceAssignment
 ) -> str:
     if assignment.leader_name:
         return assignment.leader_name
@@ -397,9 +401,9 @@ async def delete_assignment(
     assignment_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slots: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> None:
     # Lock the slot before reading its assignment: dependent event updates hold

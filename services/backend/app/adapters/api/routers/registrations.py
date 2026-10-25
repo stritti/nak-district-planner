@@ -46,11 +46,6 @@ from app.adapters.api.schemas.registration import (
 from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.oidc import TokenValidationError
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
-from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
 from app.domain.event_payloads import registration_received
@@ -93,13 +88,21 @@ class RegistrationPendingOverviewResponse(BaseModel):
     by_district: list[RegistrationPendingCountResponse]
 
 
+from app.adapters.db.repositories.membership import SqlMembershipRepository
+from app.domain.ports.repositories import (
+    CongregationRepository,
+    DistrictRepository,
+    LeaderRegistrationRepository,
+    LeaderRepository,
+)
+
 public_router = APIRouter(prefix="/api/v1/public", tags=["registrations-public"])
 
 
 @public_router.get("/districts", response_model=list[PublicDistrictInfo])
 async def list_districts_public(
     db: DbSession,
-    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    district_repo: DistrictRepository = Depends(get_district_repository),
 ) -> list[PublicDistrictInfo]:
     """List all districts — public endpoint for the self-registration form."""
     districts = await district_repo.list_all()
@@ -113,8 +116,8 @@ async def list_districts_public(
 async def list_congregations_public(
     district_id: uuid.UUID,
     db: DbSession,
-    district_repo: SqlDistrictRepository = Depends(get_district_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    district_repo: DistrictRepository = Depends(get_district_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
 ) -> list[PublicCongregationInfo]:
     """List congregations for a district — public endpoint for the self-registration form."""
     if not await district_repo.get(district_id):
@@ -166,8 +169,8 @@ async def submit_registration(
     db: DbSession,
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_optional_bearer),
-    district_repo: SqlDistrictRepository = Depends(get_district_repository),
-    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    district_repo: DistrictRepository = Depends(get_district_repository),
+    reg_repo: LeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> RegistrationResponse:
     """Submit a self-registration request for a new Amtstragender."""
     if not await district_repo.get(district_id):
@@ -248,8 +251,8 @@ async def list_registrations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     status_filter: RegistrationStatus | None = Query(default=None, alias="status"),
-    district_repo: SqlDistrictRepository = Depends(get_district_repository),
-    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    district_repo: DistrictRepository = Depends(get_district_repository),
+    reg_repo: LeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> list[RegistrationResponse]:
     """List registration requests for a district (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
@@ -263,8 +266,8 @@ async def list_registrations(
 async def get_pending_overview(
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    district_repo: SqlDistrictRepository = Depends(get_district_repository),
-    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    district_repo: DistrictRepository = Depends(get_district_repository),
+    reg_repo: LeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> RegistrationPendingOverviewResponse:
     """Return pending registration counts for visible districts."""
     if auth.user.is_superadmin:
@@ -292,9 +295,9 @@ async def approve_registration(
     body: RegistrationApprove,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
-    leader_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    reg_repo: LeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
+    leader_repo: LeaderRepository = Depends(get_leader_repository),
     mem_repo: SqlMembershipRepository = Depends(get_membership_repository),
 ) -> RegistrationResponse:
     """Approve a registration request (DISTRICT_ADMIN only)."""
@@ -343,7 +346,7 @@ async def _validate_registration_pending(
 
 
 async def _validate_scope_assignment(
-    cong_repo: SqlCongregationRepository,
+    cong_repo: CongregationRepository,
     body: RegistrationApprove,
     district_id: uuid.UUID,
 ) -> None:
@@ -363,7 +366,7 @@ async def _validate_scope_assignment(
 
 
 async def _create_leader_and_approve(
-    leader_repo: SqlLeaderRepository,
+    leader_repo: LeaderRepository,
     reg: LeaderRegistration,
     body: RegistrationApprove,
     auth: CurrentUserWithMemberships,
@@ -457,7 +460,7 @@ async def reject_registration(
     body: RegistrationReject,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    reg_repo: LeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> RegistrationResponse:
     """Reject a registration request (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
@@ -486,7 +489,7 @@ async def delete_registration(
     registration_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    reg_repo: LeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> None:
     """Delete a registration request (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)

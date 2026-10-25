@@ -22,10 +22,12 @@ from app.adapters.api.schemas.leader_unavailability import (
     LeaderUnavailabilityUpdate,
 )
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.adapters.db.repositories.leader_unavailability import SqlLeaderUnavailabilityRepository
 from app.domain.models.leader_unavailability import LeaderUnavailability
 from app.domain.models.role import Role
+from app.domain.ports.repositories import (
+    LeaderRepository,
+    LeaderUnavailabilityRepository,
+)
 
 router = APIRouter(
     prefix="/api/v1/districts/{district_id}/leader-unavailabilities",
@@ -47,7 +49,7 @@ def _response(item: LeaderUnavailability) -> LeaderUnavailabilityResponse:
 
 
 async def _leader_for_district(
-    leaders: SqlLeaderRepository, district_id: uuid.UUID, leader_id: uuid.UUID
+    leaders: LeaderRepository, district_id: uuid.UUID, leader_id: uuid.UUID
 ):
     leader = await leaders.get(leader_id)
     if leader is None or leader.district_id != district_id:
@@ -63,8 +65,8 @@ async def list_unavailabilities(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     leader_id: uuid.UUID | None = None,
-    leaders: SqlLeaderRepository = Depends(get_leader_repository),
-    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
+    leaders: LeaderRepository = Depends(get_leader_repository),
+    repo: LeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> list[LeaderUnavailabilityResponse]:
     require_role_in_district(auth, Role.VIEWER, district_id)
     if leader_id is not None:
@@ -83,8 +85,8 @@ async def create_unavailability(
     body: LeaderUnavailabilityCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders: SqlLeaderRepository = Depends(get_leader_repository),
-    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
+    leaders: LeaderRepository = Depends(get_leader_repository),
+    repo: LeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> LeaderUnavailabilityResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
     await _leader_for_district(leaders, district_id, body.leader_id)
@@ -106,8 +108,8 @@ async def update_unavailability(
     body: LeaderUnavailabilityUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders: SqlLeaderRepository = Depends(get_leader_repository),
-    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
+    leaders: LeaderRepository = Depends(get_leader_repository),
+    repo: LeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> LeaderUnavailabilityResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
     item = await repo.get(unavailability_id)
@@ -138,8 +140,8 @@ async def delete_unavailability(
     unavailability_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    leaders: SqlLeaderRepository = Depends(get_leader_repository),
-    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
+    leaders: LeaderRepository = Depends(get_leader_repository),
+    repo: LeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> None:
     require_role_in_district(auth, Role.PLANNER, district_id)
     item = await repo.get(unavailability_id)
