@@ -13,6 +13,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.adapters.api.routers import events
+from app.adapters.api.schemas import events as event_schemas
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
@@ -95,7 +96,7 @@ async def test_dependent_change_without_if_match_is_precondition_required() -> N
     repos = _repos(slot)
     with _patches():
         with pytest.raises(HTTPException) as error:
-            await _update(slot, repos, events.EventUpdate(start_at=NEW_START))
+            await _update(slot, repos, event_schemas.EventUpdate(start_at=NEW_START))
     assert error.value.status_code == 428
     repos[0].save.assert_not_awaited()
     repos[0].get.assert_not_awaited()
@@ -109,7 +110,7 @@ async def test_dependent_change_with_stale_revision_is_rejected() -> None:
     repos = _repos(slot)
     with _patches():
         with pytest.raises(HTTPException) as error:
-            await _update(slot, repos, events.EventUpdate(start_at=NEW_START), if_match='"stale"')
+            await _update(slot, repos, event_schemas.EventUpdate(start_at=NEW_START), if_match='"stale"')
     assert error.value.status_code == 412
     repos[0].save.assert_not_awaited()
 
@@ -120,7 +121,7 @@ async def test_non_dependent_change_still_requires_if_match() -> None:
     repos = _repos(slot)
     with _patches():
         with pytest.raises(HTTPException) as exc:
-            await _update(slot, repos, events.EventUpdate(title="Neu"))
+            await _update(slot, repos, event_schemas.EventUpdate(title="Neu"))
     assert exc.value.status_code == 428
     repos[0].save.assert_not_awaited()
 
@@ -134,7 +135,7 @@ async def test_blocking_conflict_rejects_change_before_save() -> None:
             await _update(
                 slot,
                 repos,
-                events.EventUpdate(start_at=NEW_START),
+                event_schemas.EventUpdate(start_at=NEW_START),
                 if_match=events.slot_revision(slot),
             )
     assert error.value.status_code == 409
@@ -151,7 +152,7 @@ async def test_warning_conflict_requires_explicit_confirmation() -> None:
             await _update(
                 slot,
                 repos,
-                events.EventUpdate(start_at=NEW_START),
+                event_schemas.EventUpdate(start_at=NEW_START),
                 if_match=events.slot_revision(slot),
             )
         assert error.value.status_code == 409
@@ -160,7 +161,7 @@ async def test_warning_conflict_requires_explicit_confirmation() -> None:
         result = await _update(
             slot,
             repos,
-            events.EventUpdate(start_at=NEW_START, confirm_warnings=True),
+            event_schemas.EventUpdate(start_at=NEW_START, confirm_warnings=True),
             if_match=events.slot_revision(slot),
         )
     assert result.start_at == NEW_START
@@ -179,7 +180,7 @@ async def test_responsible_leader_outside_district_is_rejected() -> None:
             await _update(
                 slot,
                 repos,
-                events.EventUpdate(start_at=NEW_START),
+                event_schemas.EventUpdate(start_at=NEW_START),
                 if_match=events.slot_revision(slot),
             )
     assert error.value.status_code == 422
@@ -195,7 +196,7 @@ async def test_revalidation_locks_leaders_in_id_order() -> None:
         await _update(
             slot,
             repos,
-            events.EventUpdate(start_at=NEW_START),
+            event_schemas.EventUpdate(start_at=NEW_START),
             if_match=events.slot_revision(slot),
         )
     locked = [call.args[1] for call in mocks["acquire_advisory_xact_lock"].await_args_list]
@@ -216,7 +217,7 @@ async def test_revalidation_locks_linked_accounts_after_all_leaders() -> None:
         await _update(
             slot,
             repos,
-            events.EventUpdate(start_at=NEW_START),
+            event_schemas.EventUpdate(start_at=NEW_START),
             if_match=events.slot_revision(slot),
         )
     kinds = [name for name, _, _ in order.mock_calls]
@@ -234,7 +235,7 @@ async def test_preview_reports_warning_impact_without_writing() -> None:
     with _patches([_conflict(Severity.WARN)]):
         result = await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(start_at=NEW_START),
+            event_schemas.EventChangeImpactRequest(start_at=NEW_START),
             object(),
             AsyncMock(),
             if_match=events.slot_revision(slot),
@@ -255,7 +256,7 @@ async def test_preview_reports_blocking_impact() -> None:
     with _patches([_conflict(Severity.BLOCK)]):
         result = await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(start_at=NEW_START),
+            event_schemas.EventChangeImpactRequest(start_at=NEW_START),
             object(),
             AsyncMock(),
             if_match=events.slot_revision(slot),
@@ -292,7 +293,7 @@ async def test_preview_reports_duties_flagged_by_category_change() -> None:
     with _patches():
         result = await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(category="Feiertag"),
+            event_schemas.EventChangeImpactRequest(category="Feiertag"),
             object(),
             AsyncMock(),
             if_match=events.slot_revision(slot),
@@ -315,7 +316,7 @@ async def test_preview_skips_duty_lookup_for_pure_schedule_changes() -> None:
     with _patches():
         result = await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(start_at=NEW_START),
+            event_schemas.EventChangeImpactRequest(start_at=NEW_START),
             object(),
             AsyncMock(),
             if_match=events.slot_revision(slot),
@@ -335,7 +336,7 @@ async def test_preview_without_assignments_has_no_impact() -> None:
     with _patches():
         result = await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(congregation_id=None),
+            event_schemas.EventChangeImpactRequest(congregation_id=None),
             object(),
             AsyncMock(),
             if_match=events.slot_revision(slot),
@@ -358,7 +359,7 @@ async def test_preview_requires_planner_role() -> None:
         with pytest.raises(HTTPException) as error:
             await events.preview_event_change(
                 slot.id,
-                events.EventChangeImpactRequest(start_at=NEW_START),
+                event_schemas.EventChangeImpactRequest(start_at=NEW_START),
                 object(),
                 AsyncMock(),
             if_match=events.slot_revision(slot),
@@ -376,7 +377,7 @@ async def test_preview_rejects_end_before_start() -> None:
     with _patches(), pytest.raises(HTTPException) as error:
         await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(
+            event_schemas.EventChangeImpactRequest(
                 start_at=NEW_START, end_at=datetime(2026, 10, 20, 8, tzinfo=UTC)
             ),
             object(),
@@ -398,7 +399,7 @@ async def test_impact_preview_rejects_missing_and_stale_snapshot() -> None:
             with pytest.raises(HTTPException) as exc:
                 await events.preview_event_change(
                     slot.id,
-                    events.EventChangeImpactRequest(start_at=NEW_START),
+                    event_schemas.EventChangeImpactRequest(start_at=NEW_START),
                     object(), AsyncMock(), if_match=revision,
                     slot_repo=slot_repo, inst_repo=inst_repo,
                     assignments_repo=assignments_repo,
@@ -423,7 +424,7 @@ async def test_blocking_impact_is_checked_before_any_instance_write() -> None:
     repos[1].get_by_planning_slot.return_value = instance
     with _patches([_conflict(Severity.BLOCK)]), pytest.raises(HTTPException) as exc:
         await _update(
-            slot, repos, events.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
+            slot, repos, event_schemas.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
             if_match=events.slot_revision(slot, instance),
         )
     assert exc.value.status_code == 409
@@ -434,13 +435,13 @@ async def test_blocking_impact_is_checked_before_any_instance_write() -> None:
 @pytest.mark.parametrize(
     ("body", "expected"),
     [
-        (events.EventUpdate(title="Neu"), False),
-        (events.EventUpdate(category="Vortrag"), False),
-        (events.EventUpdate(congregation_id=None), False),
-        (events.EventUpdate(start_at=datetime(2026, 10, 14, 10, tzinfo=UTC)), False),
-        (events.EventUpdate(start_at=NEW_START), True),
-        (events.EventUpdate(congregation_id=uuid.uuid4()), True),
-        (events.EventUpdate(end_at=NEW_START), False),
+        (event_schemas.EventUpdate(title="Neu"), False),
+        (event_schemas.EventUpdate(category="Vortrag"), False),
+        (event_schemas.EventUpdate(congregation_id=None), False),
+        (event_schemas.EventUpdate(start_at=datetime(2026, 10, 14, 10, tzinfo=UTC)), False),
+        (event_schemas.EventUpdate(start_at=NEW_START), True),
+        (event_schemas.EventUpdate(congregation_id=uuid.uuid4()), True),
+        (event_schemas.EventUpdate(end_at=NEW_START), False),
     ],
 )
 def test_dependency_trigger_uses_explicit_effective_fields_without_instance(body, expected):
@@ -456,13 +457,13 @@ def test_dependency_trigger_compares_instance_schedule_and_explicit_congregation
         source=EventSource.INTERNAL, visibility=EventVisibility.PUBLIC,
     )
     assert not events._changes_service_dependencies(
-        slot, instance, events.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
+        slot, instance, event_schemas.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
     )
     assert events._changes_service_dependencies(
-        slot, instance, events.EventUpdate(end_at=NEW_START.replace(hour=11)),
+        slot, instance, event_schemas.EventUpdate(end_at=NEW_START.replace(hour=11)),
     )
     assert events._changes_service_dependencies(
-        slot, instance, events.EventUpdate(congregation_id=None),
+        slot, instance, event_schemas.EventUpdate(congregation_id=None),
     )
 
 
@@ -475,13 +476,13 @@ async def test_end_only_slot_change_rejects_end_before_effective_planned_start(p
     with _patches(), pytest.raises(HTTPException) as exc:
         if preview:
             await events.preview_event_change(
-                slot.id, events.EventChangeImpactRequest(end_at=end),
+                slot.id, event_schemas.EventChangeImpactRequest(end_at=end),
                 object(), AsyncMock(), if_match=events.slot_revision(slot),
                 slot_repo=repos[0], inst_repo=repos[1], assignments_repo=repos[2],
             )
         else:
             await _update(
-                slot, repos, events.EventUpdate(end_at=end),
+                slot, repos, event_schemas.EventUpdate(end_at=end),
                 if_match=events.slot_revision(slot),
             )
     assert exc.value.status_code == 400
@@ -499,7 +500,7 @@ async def test_scalar_update_does_not_revalidate_existing_leader_ownership():
             status_code=422, detail="Invalid historic leader reference",
         )
         result = await _update(
-            slot, repos, events.EventUpdate(title="Neuer Titel"),
+            slot, repos, event_schemas.EventUpdate(title="Neuer Titel"),
             if_match=events.slot_revision(slot),
         )
     assert result.title == "Neuer Titel"
@@ -531,7 +532,7 @@ async def test_direct_patch_without_preview_cannot_flag_duties_silently() -> Non
     with _patches():
         with pytest.raises(HTTPException) as error:
             await _update(
-                slot, repos, events.EventUpdate(category="Feiertag"),
+                slot, repos, event_schemas.EventUpdate(category="Feiertag"),
                 if_match=events.slot_revision(slot), duties_repo=duties,
             )
     assert error.value.status_code == 409
@@ -545,9 +546,9 @@ async def test_direct_patch_without_preview_cannot_flag_duties_silently() -> Non
 async def test_patch_with_matching_acknowledgement_is_applied() -> None:
     slot, duties = _slot_with_organist()
     repos = _repos(slot)
-    body = events.EventUpdate(
+    body = event_schemas.EventUpdate(
         category="Feiertag",
-        acknowledged_duty_impact=events.DutyImpactAcknowledgement(newly_flagged=1, newly_quarantined=0),
+        acknowledged_duty_impact=event_schemas.DutyImpactAcknowledgement(newly_flagged=1, newly_quarantined=0),
     )
     with _patches():
         await _update(slot, repos, body, if_match=events.slot_revision(slot), duties_repo=duties)
@@ -566,12 +567,12 @@ async def test_duty_added_after_preview_invalidates_the_acknowledgement() -> Non
         EventDutyAssignment.create(slot.id, conductor, slot.congregation_id, name="Berta")
     )
     repos = _repos(slot)
-    previewed = events.DutyImpactAcknowledgement(newly_flagged=1, newly_quarantined=0)
+    previewed = event_schemas.DutyImpactAcknowledgement(newly_flagged=1, newly_quarantined=0)
     with _patches():
         with pytest.raises(HTTPException) as error:
             await _update(
                 slot, repos,
-                events.EventUpdate(category="Feiertag", acknowledged_duty_impact=previewed),
+                event_schemas.EventUpdate(category="Feiertag", acknowledged_duty_impact=previewed),
                 if_match=events.slot_revision(slot), duties_repo=duties,
             )
     assert error.value.status_code == 409
@@ -586,7 +587,7 @@ async def test_congregation_move_quarantine_requires_acknowledgement() -> None:
     with _patches():
         with pytest.raises(HTTPException) as error:
             await _update(
-                slot, repos, events.EventUpdate(congregation_id=uuid.uuid4()),
+                slot, repos, event_schemas.EventUpdate(congregation_id=uuid.uuid4()),
                 if_match=events.slot_revision(slot), duties_repo=duties,
             )
     assert error.value.status_code == 409
@@ -599,7 +600,7 @@ async def test_changes_without_scope_impact_never_touch_duties() -> None:
     repos = _repos(slot)
     with _patches():
         await _update(
-            slot, repos, events.EventUpdate(title="Neu", category="Gottesdienst"),
+            slot, repos, event_schemas.EventUpdate(title="Neu", category="Gottesdienst"),
             if_match=events.slot_revision(slot), duties_repo=duties,
         )
     duties.list_assignments.assert_not_awaited()
@@ -612,7 +613,7 @@ async def test_category_only_preview_ignores_historic_leader_blocks() -> None:
     with _patches([_conflict(Severity.BLOCK)]) as mocks:
         result = await events.preview_event_change(
             slot.id,
-            events.EventChangeImpactRequest(category="Jugendstunde"),
+            event_schemas.EventChangeImpactRequest(category="Jugendstunde"),
             object(),
             AsyncMock(),
             if_match=events.slot_revision(slot),
