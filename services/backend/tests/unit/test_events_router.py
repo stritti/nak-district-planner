@@ -153,8 +153,6 @@ async def test_resolve_deviation_reports_provider_failure_and_remains_retryable(
     instance_repo.get_by_planning_slot.return_value = instance
     push = AsyncMock(side_effect=CalendarConnectorError("provider down"))
     with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
         patch.object(events, "require_role_in_district"),
         patch.object(events, "push_deviation_resolution", push),
         pytest.raises(HTTPException) as exc,
@@ -1025,8 +1023,6 @@ async def test_resolve_deviation_with_unsupported_provider_returns_409():
     instance_repo.get_by_planning_slot.return_value = instance
     push = AsyncMock(side_effect=UnsupportedCalendarTypeError("GOOGLE"))
     with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
         patch.object(events, "require_role_in_district"),
         patch.object(events, "push_deviation_resolution", push),
         pytest.raises(HTTPException) as exc,
