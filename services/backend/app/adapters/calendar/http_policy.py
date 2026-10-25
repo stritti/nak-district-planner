@@ -46,7 +46,7 @@ async def resilient_request(
             async for attempt in AsyncRetrying(
                 retry=retry_if_exception(_is_retryable),
                 stop=stop_after_attempt(3),
-                wait=wait_exponential_jitter(initial=0.25, max=2.0),
+                wait=wait_exponential_jitter(multiplier=0.25, max=2.0),
                 reraise=True,
             ):
                 with attempt:
