@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, any_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.recurring_event import (
@@ -150,9 +150,9 @@ class SqlRecurringEventRepository:
                 return [], 0
             congregation_ids = sorted(visible_congregation_ids)
             distributed_to = or_(
-                RecurringEventTemplateORM.applicability.any("all"),
+                "all" == any_(RecurringEventTemplateORM.applicability),
                 *(
-                    RecurringEventTemplateORM.applicability.any(str(congregation_id))
+                    str(congregation_id) == any_(RecurringEventTemplateORM.applicability)
                     for congregation_id in congregation_ids
                 ),
             )

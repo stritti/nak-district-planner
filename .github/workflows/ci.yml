@@ -138,9 +138,11 @@ jobs:
           RLS_TEST_DATABASE_URL: postgresql://nak:changeme@localhost:5432/nak_planner_test
         # Runs the whole suites on the database migrated above. A skipped test
         # means a missing database setting, so skips fail the step.
+        # Coverage starts the combined (unit + integration) report.
         run: |
           set -o pipefail
           RLS_TEST_APP_PASSWORD="$APP_DB_PASSWORD" uv run pytest tests/integration tests/performance -v -rs \
+            --cov=app \
             2>&1 | tee integration-output.txt
           if grep -qE "[0-9]+ skipped" integration-output.txt; then
             echo "::error::Integration tests were skipped; check the database environment."
@@ -155,26 +157,27 @@ jobs:
           path: services/backend/event-list-query-plans.json
           if-no-files-found: warn
 
-      - name: Run unit tests with coverage
+      - name: Run unit tests with coverage (appends to integration data)
         id: unit-tests
         run: |
           set -o pipefail
           uv run pytest tests/unit/ \
             --cov=app \
+            --cov-append \
             --cov-report=term \
             --cov-report=xml \
             --junitxml=junit.xml \
             -q 2>&1 | tee coverage-output.txt
 
-      - name: Parse coverage summary
+      - name: Parse combined coverage summary (unit + integration)
         id: coverage
         run: |
-          TOTAL=$(grep -oP 'TOTAL\s+\d+\s+\d+\s+(\d+)%' coverage-output.txt | grep -oP '\d+%' | tr -d '%')
+          TOTAL=$(uv run coverage report | grep -oP 'TOTAL\s+\d+\s+\d+\s+(\d+)%' | grep -oP '\d+%' | tr -d '%')
           echo "TOTAL_COVERAGE=$TOTAL" >> $GITHUB_ENV
           echo "## Backend Test Results" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Coverage** | ${TOTAL}% |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Combined coverage (unit + integration)** | ${TOTAL}% |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat coverage-output.txt >> $GITHUB_STEP_SUMMARY

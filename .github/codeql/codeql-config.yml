@@ -24,7 +24,6 @@ paths-ignore:
   # Test code (not production)
   - "services/backend/tests/**"
   - "services/frontend/tests/**"
-  - "test_ics/**"
 
   # Alembic migrations — auto-generated boilerplate templates.
   # Variables like revision / down_revision / branch_labels / depends_on
