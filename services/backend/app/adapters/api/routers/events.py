@@ -48,12 +48,6 @@ from app.adapters.api.schemas.events import (
 from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.locks import acquire_account_xact_lock, acquire_advisory_xact_lock
-from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.event_duties import DutyScopeImpact, EventDutiesService
@@ -79,6 +73,14 @@ from app.domain.models.planning_slot import (
 from app.domain.models.role import Role
 from app.domain.planning.conflict_result import ConflictResult
 from app.domain.ports.calendar import CalendarConnectorError, OccurrenceWriteBackError
+from app.domain.ports.event_duties import EventDutiesRepository
+from app.domain.ports.repositories import (
+    CongregationRepository,
+    EventInstanceRepository,
+    LeaderRepository,
+    PlanningSlotRepository,
+    ServiceAssignmentRepository,
+)
 from app.domain.services.sync_policy import internal_state, resolve_conflict
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
@@ -127,15 +129,15 @@ def _slot_to_event(
 
 
 async def _load_instances(
-    inst_repo: SqlEventInstanceRepository, slot_ids: list[uuid.UUID]
+    inst_repo: EventInstanceRepository, slot_ids: list[uuid.UUID]
 ) -> dict[uuid.UUID, EventInstance]:
     instances = await inst_repo.list_by_planning_slots(slot_ids)
     return {inst.planning_slot_id: inst for inst in instances}
 
 
 async def _load_responsible(
-    assignments_repo: SqlServiceAssignmentRepository,
-    leaders_repo: SqlLeaderRepository,
+    assignments_repo: ServiceAssignmentRepository,
+    leaders_repo: LeaderRepository,
     slots: list[PlanningSlot],
 ) -> dict[uuid.UUID, EventResponsible]:
     """Responsible person per slot id (first assignment wins, as in the matrix)."""
@@ -182,11 +184,11 @@ async def list_events(
     to_dt: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0, le=MAX_LIST_OFFSET),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
-    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
+    inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> EventListResponse:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
@@ -244,9 +246,9 @@ async def create_event(
     body: EventCreate,
     auth: CurrentUserWithMemberships,
     session: DbSession,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
-    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
+    inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventResponse:
     require_role_in_district(auth, Role.PLANNER, body.district_id)
     start_at = aware_timestamp(body.start_at).astimezone(UTC)
@@ -309,7 +311,7 @@ async def create_event(
 async def delete_event(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> None:
     slot = await slot_repo.get(event_id)
     if slot is None:
@@ -369,7 +371,8 @@ def _proposed_service(
 async def _revalidate_dependent_change(
     session: DbSession,
     *,
-    assignments_repo: SqlServiceAssignmentRepository,
+    assignments_repo: ServiceAssignmentRepository,
+    leaders_repo: LeaderRepository,
     slot: PlanningSlot,
     proposed: ProposedService,
     confirm_warnings: bool,
@@ -391,10 +394,9 @@ async def _revalidate_dependent_change(
         await acquire_advisory_xact_lock(session, leader_id)
     # Then the linked accounts (leaders first, as everywhere), which duties booked by
     # such an account take as well.
-    leaders = SqlLeaderRepository(session)
     accounts = {
         leader.user_sub
-        for leader in [await leaders.get(leader_id) for leader_id in leader_ids]
+        for leader in [await leaders_repo.get(leader_id) for leader_id in leader_ids]
         if leader is not None and leader.user_sub
     }
     for user_sub in sorted(accounts):
@@ -415,10 +417,10 @@ async def _revalidate_dependent_change(
 async def get_event(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> EventResponse:
     """Fetch an authoritative event snapshot for conditional writes in detail dialogs."""
     slot = await slot_repo.get(event_id)
@@ -431,7 +433,7 @@ async def get_event(
 
 
 async def _duty_scope_impact(
-    duties_repo: SqlEventDutiesRepository,
+    duties_repo: EventDutiesRepository,
     slot: PlanningSlot,
     body: EventUpdate | EventChangeImpactRequest,
 ) -> DutyScopeImpact | None:
@@ -478,12 +480,12 @@ async def update_event(
     body: EventUpdate,
     auth: CurrentUserWithMemberships,
     session: DbSession,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
-    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
-    duties_repo: SqlEventDutiesRepository = Depends(get_event_duties_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
+    inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
+    duties_repo: EventDutiesRepository = Depends(get_event_duties_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> EventResponse:
     if if_match is None:
@@ -526,6 +528,7 @@ async def update_event(
         await _revalidate_dependent_change(
             session,
             assignments_repo=assignments_repo,
+            leaders_repo=leaders_repo,
             slot=slot,
             proposed=proposed,
             confirm_warnings=body.confirm_warnings,
@@ -610,10 +613,10 @@ async def preview_event_change(
     auth: CurrentUserWithMemberships,
     session: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    duties_repo: SqlEventDutiesRepository = Depends(get_event_duties_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    duties_repo: EventDutiesRepository = Depends(get_event_duties_repository),
 ) -> EventChangeImpact:
     """Read-only impact using row locks for a consistent multi-entity snapshot.
 
@@ -675,11 +678,11 @@ async def inline_update_event(
     auth: CurrentUserWithMemberships,
     session: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
-    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
-    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
+    inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> EventResponse:
     """Safe scalar-only editing. Workflow and duty changes need their own adapters."""
     if if_match is None:
@@ -717,8 +720,8 @@ async def resolve_event_deviation(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     session: DbSession,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventResponse:
     slot = await slot_repo.get(event_id)
     if slot is None:
@@ -763,8 +766,8 @@ async def resolve_event_conflict(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     session: DbSession,
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: EventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventResponse:
     """Resolve a sync CONFLICT in favour of the internal planning data.
 
@@ -812,8 +815,8 @@ async def bulk_update_approval_status(
     auth: CurrentUserWithMemberships,
     session: DbSession,
     district_id: uuid.UUID | None = Query(None),
-    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
 ) -> BulkApprovalStatusResponse:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
