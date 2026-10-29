@@ -60,11 +60,11 @@ def _repos(slot: PlanningSlot, assignments: list[ServiceAssignment] | None = Non
 def _patches(conflicts: list[ConflictResult] | None = None, accounts: dict | None = None):
     """``accounts`` maps leader IDs to their linked account (none linked by default)."""
     leaders = MagicMock()
-    leaders.return_value.get = AsyncMock(
+    leaders.get = AsyncMock(
         side_effect=lambda leader_id: SimpleNamespace(user_sub=(accounts or {}).get(leader_id))
     )
     mocks = {
-        "SqlLeaderRepository": leaders,
+        "get_leader_repository": AsyncMock(return_value=leaders),
         "acquire_account_xact_lock": AsyncMock(),
         "require_role_in_district": MagicMock(),
         "ensure_leader_in_district": AsyncMock(),
@@ -72,10 +72,16 @@ def _patches(conflicts: list[ConflictResult] | None = None, accounts: dict | Non
         "check_service_assignment_conflicts": AsyncMock(return_value=list(conflicts or [])),
     }
     with patch.multiple(events, **mocks):
-        yield mocks
+        yield {**mocks, "leaders_repo": leaders}
 
 
-async def _update(slot, repos, body, if_match=None, duties_repo=None):
+def _default_leaders_repo():
+    repo = MagicMock()
+    repo.get = AsyncMock(return_value=None)
+    return repo
+
+
+async def _update(slot, repos, body, if_match=None, duties_repo=None, leaders_repo=None):
     slot_repo, inst_repo, assignments_repo = repos
     return await events.update_event(
         slot.id,
@@ -85,6 +91,7 @@ async def _update(slot, repos, body, if_match=None, duties_repo=None):
         slot_repo=slot_repo,
         inst_repo=inst_repo,
         assignments_repo=assignments_repo,
+        leaders_repo=leaders_repo if leaders_repo is not None else _default_leaders_repo(),
         duties_repo=duties_repo if duties_repo is not None else _duties_repo(slot),
         if_match=if_match,
     )
@@ -219,6 +226,7 @@ async def test_revalidation_locks_linked_accounts_after_all_leaders() -> None:
             repos,
             event_schemas.EventUpdate(start_at=NEW_START),
             if_match=events.slot_revision(slot),
+            leaders_repo=mocks["leaders_repo"],
         )
     kinds = [name for name, _, _ in order.mock_calls]
     assert kinds == ["leader"] * 3 + ["account"] * 2

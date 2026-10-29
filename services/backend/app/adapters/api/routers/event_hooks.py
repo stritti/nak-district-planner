@@ -24,9 +24,9 @@ from app.adapters.api.schemas.event_hooks import (
     EventHookUpdate,
     EventTypeInfo,
 )
-from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
 from app.domain.events import EventType
 from app.domain.models.event_mail_hook import EVENT_PLACEHOLDERS, EventMailHook
+from app.domain.ports.event_mail_hooks import EventMailHookRepository
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/event-hooks", tags=["event-hooks"])
 
@@ -40,7 +40,7 @@ def _response(hook: EventMailHook) -> EventHookResponse:
 
 
 async def _existing_hook(
-    repository: SqlEventMailHookRepository, district_id: uuid.UUID, hook_id: uuid.UUID
+    repository: EventMailHookRepository, district_id: uuid.UUID, hook_id: uuid.UUID
 ) -> EventMailHook:
     hook = await repository.get_for_update(district_id, hook_id)
     if hook is None:
@@ -65,7 +65,7 @@ async def list_event_hooks(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
+    repository: EventMailHookRepository = Depends(get_event_mail_hook_repository),
 ) -> list[EventHookResponse]:
     await require_district_admin(district_id, auth, db)
     return [_response(hook) for hook in await repository.list_by_district(district_id)]
@@ -77,7 +77,7 @@ async def create_event_hook(
     body: EventHookCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
+    repository: EventMailHookRepository = Depends(get_event_mail_hook_repository),
 ) -> EventHookResponse:
     await require_district_admin(district_id, auth, db)
     try:
@@ -95,7 +95,7 @@ async def update_event_hook(
     body: EventHookUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
+    repository: EventMailHookRepository = Depends(get_event_mail_hook_repository),
     if_match: IfMatch = None,
 ) -> EventHookResponse:
     await require_district_admin(district_id, auth, db)
@@ -117,7 +117,7 @@ async def deactivate_event_hook(
     hook_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
+    repository: EventMailHookRepository = Depends(get_event_mail_hook_repository),
     if_match: IfMatch = None,
 ) -> EventHookResponse:
     """Soft delete a hook while retaining it for audit visibility."""
