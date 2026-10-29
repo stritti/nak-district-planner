@@ -484,7 +484,7 @@
             :preset-leader-id="unavailabilityFilterLeaderId"
             @update:filter-leader-id="unavailabilityFilterLeaderId = $event"
             :saving="unavailabilitySavingDistrictId === selectedDistrictId"
-            @submit="saveUnavailability"
+            @submit="(body: LeaderUnavailabilityCreate) => saveUnavailability(body, () => unavailabilityFormRef?.reset())"
           />
         </div>
       </div>

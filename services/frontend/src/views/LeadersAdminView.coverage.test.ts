@@ -535,6 +535,27 @@ describe('LeadersAdminView coverage gaps', () => {
     expect(unavailabilitiesStore.addUnavailability).not.toHaveBeenCalled()
   })
 
+  it('resets the unavailability form after a submit from the form', async () => {
+    const { wrapper, vm, unavailabilitiesStore } = setup()
+    await loadView(vm)
+    await vm.switchToUnavailabilities('l1')
+    await flushPromises()
+
+    const form = wrapper.findComponent(LeaderUnavailabilityFormStub)
+    const body: LeaderUnavailabilityCreate = {
+      leader_id: 'l1',
+      start_at: unavailability.start_at,
+      end_at: unavailability.end_at,
+      reason: 'URLAUB',
+      note: null,
+    }
+    form.vm.$emit('submit', body)
+    await flushPromises()
+
+    expect(unavailabilitiesStore.addUnavailability).toHaveBeenCalledWith(body)
+    expect((form.vm as unknown as { reset: () => void }).reset).toHaveBeenCalledTimes(1)
+  })
+
   it('covers empty-district guards and provider failures', async () => {
     const { vm, unavailabilitiesStore, toastStore, authStore } = setup()
     const errorToast = vi.spyOn(toastStore, 'error')
