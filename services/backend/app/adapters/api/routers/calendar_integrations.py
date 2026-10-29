@@ -30,8 +30,6 @@ from app.adapters.auth.permissions import (
     require_role_in_district,
 )
 from app.adapters.calendar.url_guard import UnsafeCalendarUrlError, validate_calendar_url
-from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.worker.tasks import record_sync_attempt
 from app.application import crypto
 from app.application.crypto import CryptoError
@@ -53,6 +51,11 @@ from app.domain.ports.calendar import CalendarConnectorError
 # Preserve the documented monkeypatch target for existing calendar integration tests.
 # Bind it as a module attribute instead of an unused imported symbol (CodeQL).
 encrypt_credentials = crypto.encrypt_credentials
+
+from app.domain.ports.repositories import (
+    CalendarIntegrationRepository,
+    CongregationRepository,
+)
 
 router = APIRouter(prefix="/api/v1/calendar-integrations", tags=["calendar-integrations"])
 
@@ -95,7 +98,7 @@ async def create_calendar_integration(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     service: CalendarIntegrationService = Depends(get_calendar_integration_service),
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
 ) -> CalendarIntegrationResponse:
     # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     if body.congregation_id is not None:
@@ -138,10 +141,10 @@ async def create_calendar_integration(
 async def list_calendar_integrations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
+    repo: CalendarIntegrationRepository = Depends(get_calendar_integration_repository),
     district_id: uuid.UUID | None = None,
     congregation_id: uuid.UUID | None = None,
-    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    cong_repo: CongregationRepository = Depends(get_congregation_repository),
 ) -> CalendarIntegrationListResponse:
     if congregation_id is not None:
         # Congregation-scoped listing: require CONGREGATION_ADMIN for that congregation
@@ -179,7 +182,7 @@ async def trigger_sync(
     integration_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
+    repo: CalendarIntegrationRepository = Depends(get_calendar_integration_repository),
 ) -> SyncResult:
     """Trigger an immediate synchronisation for one integration (UC-02).
 
@@ -227,7 +230,7 @@ async def update_calendar_integration(
     body: CalendarIntegrationUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
+    repo: CalendarIntegrationRepository = Depends(get_calendar_integration_repository),
     service: CalendarIntegrationService = Depends(get_calendar_integration_service),
 ) -> CalendarIntegrationResponse:
     integration = await repo.get(integration_id)
@@ -266,7 +269,7 @@ async def delete_calendar_integration(
     integration_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
+    repo: CalendarIntegrationRepository = Depends(get_calendar_integration_repository),
 ) -> None:
     integration = await repo.get(integration_id)
     if not integration:
