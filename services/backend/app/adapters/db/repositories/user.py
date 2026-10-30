@@ -12,6 +12,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.user import UserORM
@@ -47,6 +48,9 @@ def _domain_to_orm(user: User) -> UserORM:
     orm.created_at = user.created_at or datetime.now(UTC)
     orm.updated_at = datetime.now(UTC)
     return orm
+
+
+_DEADLOCK_DETECTED = "40P01"
 
 
 class SqlUserRepository(UserRepository):
@@ -111,11 +115,24 @@ class SqlUserRepository(UserRepository):
         return [_orm_to_domain(row) for row in result.scalars().all()]
 
     async def set_superadmin(self, target_sub: str, value: bool) -> str:
-        """Change the flag through the locked SECURITY DEFINER path (the only writer)."""
-        result = await self._session.execute(
-            text("SELECT set_user_superadmin(:target_sub, :value)"),
-            {"target_sub": target_sub, "value": value},
-        )
+        """Change the flag through the locked SECURITY DEFINER path (the only writer).
+
+        Returns ``concurrent_change`` when PostgreSQL aborts the transaction as a
+        deadlock: the request already holds the caller's own row from the
+        profile refresh, so two superadmins changing flags at once can lock
+        each other out. The transaction is unusable afterwards; the caller
+        must end the request and let the client retry.
+        """
+        try:
+            result = await self._session.execute(
+                text("SELECT set_user_superadmin(:target_sub, :value)"),
+                {"target_sub": target_sub, "value": value},
+            )
+        except DBAPIError as exc:
+            sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+            if sqlstate == _DEADLOCK_DETECTED:
+                return "concurrent_change"
+            raise
         return str(result.scalar_one())
 
     async def has_any_user(self) -> bool:

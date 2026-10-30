@@ -492,7 +492,7 @@ class UserRepository(ABC):
         """Grant or revoke the superadmin flag as the current subject.
 
         Returns ``granted``, ``revoked``, ``unchanged``, ``forbidden``,
-        ``not_found`` or ``last_superadmin``.
+        ``not_found``, ``last_superadmin`` or ``concurrent_change``.
         """
 
 

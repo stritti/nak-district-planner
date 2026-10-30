@@ -62,6 +62,10 @@ _SUPERADMIN_ERRORS = {
         status.HTTP_409_CONFLICT,
         "Der letzte Superadmin kann nicht entzogen werden.",
     ),
+    "concurrent_change": (
+        status.HTTP_409_CONFLICT,
+        "Gleichzeitige Änderung des Superadmin-Status, bitte erneut versuchen.",
+    ),
 }
 
 

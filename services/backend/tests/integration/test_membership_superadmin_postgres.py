@@ -880,3 +880,45 @@ async def test_downgrade_keeps_archived_rows_that_conflict_with_a_changed_role(
             await tx.rollback()
     assert restored == ["PLANNER", "VIEWER"]
     assert left == ["VIEWER"]
+
+
+async def test_concurrent_flag_changes_after_profile_refresh_end_in_a_conflict(
+    app_engine, world
+) -> None:
+    """Both requests hold their own row from the profile refresh; one must lose cleanly."""
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.adapters.db.repositories.user import SqlUserRepository
+
+    root, other = world["subs"]["root"], world["subs"]["other"]
+    async with app_engine.connect() as setup:
+        await setup.execute(
+            text("SELECT set_config('app.current_user_sub', :s, false)"), {"s": root}
+        )
+        await setup.execute(text("SELECT set_user_superadmin(:t, true)"), {"t": other})
+        await setup.commit()
+
+    refreshed = asyncio.Event()
+    ready = 0
+
+    async def request(actor: str, target: str) -> str:
+        nonlocal ready
+        async with AsyncSession(app_engine) as session:
+            await session.execute(
+                text("SELECT set_config('app.current_user_sub', :s, true)"), {"s": actor}
+            )
+            await session.execute(
+                text("UPDATE users SET updated_at = now() WHERE sub = :s"), {"s": actor}
+            )
+            ready += 1
+            if ready == 2:
+                refreshed.set()
+            await refreshed.wait()
+            outcome = await SqlUserRepository(session).set_superadmin(target, False)
+            await session.rollback()
+            return outcome
+
+    outcomes = await asyncio.gather(request(root, other), request(other, root))
+    assert "concurrent_change" in outcomes
