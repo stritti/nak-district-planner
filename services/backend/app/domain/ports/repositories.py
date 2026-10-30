@@ -418,6 +418,17 @@ class LeaderUnavailabilityRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_overlapping_for_leaders(
+        self,
+        *,
+        leader_ids: Collection[uuid.UUID],
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[LeaderUnavailability]:
+        """Unavailability periods of any of the given leaders overlapping the window."""
+        pass
+
+    @abstractmethod
     async def save(self, unavailability: LeaderUnavailability) -> None:
         pass
 

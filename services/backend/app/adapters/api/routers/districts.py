@@ -20,9 +20,11 @@ from app.adapters.api.deps import (
     get_congregation_group_repository,
     get_congregation_repository,
     get_district_repository,
+    get_event_duties_repository,
     get_event_instance_repository,
     get_invitation_repository,
     get_leader_repository,
+    get_leader_unavailability_repository,
     get_planning_series_repository,
     get_planning_slot_repository,
     get_service_assignment_repository,
@@ -62,9 +64,13 @@ from app.adapters.auth.permissions import (
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.congregation_group import SqlCongregationGroupRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
+from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.leader_unavailability import (
+    SqlLeaderUnavailabilityRepository,
+)
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
@@ -471,6 +477,10 @@ async def get_matrix(
     instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     sa_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
     inv_repo: SqlInvitationRepository = Depends(get_invitation_repository),
+    duty_repo: SqlEventDutiesRepository = Depends(get_event_duties_repository),
+    unavailability_repo: SqlLeaderUnavailabilityRepository = Depends(
+        get_leader_unavailability_repository
+    ),
 ) -> MatrixResponse:
     """Return matrix view for a district.
 
@@ -496,6 +506,8 @@ async def get_matrix(
             instance_repo=instance_repo,
             sa_repo=sa_repo,
             inv_repo=inv_repo,
+            duty_repo=duty_repo,
+            unavailability_repo=unavailability_repo,
         )
     except ValueError as exc:
         raise HTTPException(
