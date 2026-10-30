@@ -629,7 +629,7 @@
           :can-edit="canManageEventDuties(editTarget)"
           @mutated="refreshEditTargetAfterDutyMutation"
         />
-        <p v-if="editError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ editError }}</p>
+        <ErrorAlert v-if="editError" :message="editError" class="mt-3" />
         <div class="flex justify-end gap-3 mt-6">
           <button
             class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -712,6 +712,7 @@ import AutocompleteInput, {
 } from '../components/AutocompleteInput.vue'
 import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
 import { ConflictError, parseConflictError } from '../api/errors'
+import ErrorAlert from '../components/ErrorAlert.vue'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()

@@ -257,11 +257,21 @@
       aria-hidden="true"
     />
     <EmptyState
-      v-if="displayedRows.length === 0"
+      v-if="displayedRows.length === 0 && matrixStore.congregationQuery.trim()"
       compact
       :message="`Keine Gemeinde passt zu „${matrixStore.congregationQuery.trim()}“.`"
       action-label="Filter zurücksetzen"
       @action="matrixStore.congregationQuery = ''"
+    />
+    <EmptyState
+      v-else-if="displayedRows.length === 0"
+      compact
+      message="Dieser Bezirk hat noch keine Gemeinden."
+      :hint="canCreateCongregation
+        ? 'Legen Sie die erste Gemeinde an, damit die Matrix Gottesdienste zeigen kann.'
+        : 'Die Bezirksverwaltung legt die Gemeinden an.'"
+      :action-label="canCreateCongregation ? 'Gemeinde anlegen' : undefined"
+      @action="createCongregation"
     />
   </div>
 
@@ -275,7 +285,8 @@
 
 <script setup lang="ts">
 import type { Directive } from 'vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, inject, nextTick, ref, watch } from 'vue'
+import { routerKey } from 'vue-router'
 import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
@@ -322,6 +333,16 @@ const inlineCoordinator = useInlineCellCoordinator()
 const saveAssignment = useInlineAssignmentSave()
 
 const leaderChoices = computed(() => leadersStore.choices)
+
+// Optional so the table also renders without a router (component tests).
+const router = inject(routerKey, null)
+const canCreateCongregation = computed(() =>
+  router !== null && auth.canAdminDistrict(matrixStore.districtId),
+)
+
+function createCongregation(): void {
+  void router?.push({ name: 'admin-districts' })
+}
 
 function canInlineAssign(cell: MatrixCell): boolean {
   return !!cell.event_id &&

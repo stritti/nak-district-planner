@@ -15,7 +15,7 @@
     </div>
 
     <div v-if="loadingDistricts" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
-    <div v-else-if="globalError" class="text-sm text-red-600 dark:text-red-400 mb-4">{{ globalError }}</div>
+    <ErrorAlert v-else-if="globalError" :message="globalError" class="mb-4" />
 
     <!-- District list -->
     <div class="space-y-4">
@@ -149,14 +149,24 @@
             </li>
           </template>
         </ul>
-        <div v-else class="px-4 py-2 text-xs text-gray-400 dark:text-gray-500">
-          Noch keine Gemeinden.
-        </div>
+        <EmptyState
+          v-else
+          compact
+          message="Noch keine Gemeinden."
+          hint="Gemeinden erscheinen danach in der Matrix und in der Terminplanung."
+          action-label="Gemeinde anlegen"
+          @action="openNewCongregation(district.id)"
+        />
       </div>
 
-      <div v-if="!loadingDistricts && districts.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
-        Noch keine Bezirke angelegt.
-      </div>
+      <EmptyState
+        v-if="!loadingDistricts && !globalError && districts.length === 0"
+        :icon="BuildingLibraryIcon"
+        message="Noch keine Bezirke angelegt."
+        hint="Ein Bezirk ist der Rahmen für Gemeinden, Amtsträger und die Planung."
+        action-label="Bezirk anlegen"
+        @action="openNewDistrict"
+      />
     </div>
 
     <!-- New district modal -->
@@ -194,7 +204,7 @@
           </option>
         </select>
 
-        <p v-if="modalError" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modalError }}</p>
+        <ErrorAlert v-if="modalError" :message="modalError" class="mt-2" />
         <div class="flex justify-end gap-3 mt-5">
           <button
             class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -279,7 +289,7 @@
           </p>
         </div>
 
-        <p v-if="newCongModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ newCongModal.error }}</p>
+        <ErrorAlert v-if="newCongModal.error" :message="newCongModal.error" class="mb-3" />
 
         <div class="flex justify-end gap-3">
           <button class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800" @click="closeNewCong">
@@ -377,7 +387,7 @@
           </p>
         </div>
 
-        <p v-if="editCongModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ editCongModal.error }}</p>
+        <ErrorAlert v-if="editCongModal.error" :message="editCongModal.error" class="mb-3" />
 
         <div class="flex justify-end gap-3">
           <button
@@ -415,8 +425,17 @@
 <script setup lang="ts">
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import { CheckIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import {
+  BuildingLibraryIcon,
+  CheckIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  TrashIcon,
+  XMarkIcon,
+} from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import EmptyState from '../components/EmptyState.vue'
+import ErrorAlert from '../components/ErrorAlert.vue'
 import InlineEditableCell from '../components/InlineEditableCell.vue'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import {
@@ -606,7 +625,7 @@ onMounted(loadAll)
         }),
       )
     } catch (e) {
-      globalError.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+      globalError.value = userMessage(e, 'Fehler beim Laden')
     } finally {
       loadingDistricts.value = false
     }
@@ -814,7 +833,7 @@ async function executeDeleteGroup() {
     pendingDeleteGroup.value = null
     toastStore.success('Gruppe gelöscht', group.name)
   } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+    toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
   } finally {
     saving.value = false
   }

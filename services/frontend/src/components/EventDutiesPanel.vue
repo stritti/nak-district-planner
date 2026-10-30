@@ -3,7 +3,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ApiError, parseConflictError, type ConflictError } from '../api/errors'
+import { ApiError, parseConflictError, type ConflictError, userMessage } from '../api/errors'
 import {
   deleteDutyAssignment,
   getSlotDuties,
@@ -160,7 +160,7 @@ async function runAction<Result>(
       await load()
       error.value = STALE
     } else {
-      error.value = cause instanceof Error ? cause.message : options.failure
+      error.value = userMessage(cause, options.failure)
     }
   } finally {
     loading.value = false

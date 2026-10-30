@@ -28,7 +28,7 @@
     </div>
 
     <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
-    <div v-else-if="loadError" class="text-sm text-red-600 dark:text-red-400">{{ loadError }}</div>
+    <ErrorAlert v-else-if="loadError" :message="loadError" />
 
     <div v-else-if="integrations.length > 0" class="space-y-3">
       <div
@@ -200,7 +200,7 @@
           {{ feiertageResult.updated }} aktualisiert &nbsp;·&nbsp;
           {{ feiertageResult.skipped }} unverändert
         </div>
-        <div v-if="feiertageError" class="text-sm text-red-600 dark:text-red-400">{{ feiertageError }}</div>
+        <ErrorAlert v-if="feiertageError" :message="feiertageError" />
       </div>
     </div>
 
@@ -307,7 +307,7 @@
           </div>
         </div>
 
-        <p v-if="editError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ editError }}</p>
+        <ErrorAlert v-if="editError" :message="editError" class="mt-3" />
 
         <div class="flex justify-end gap-3 mt-6">
           <button class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800" @click="editTarget = null">
@@ -477,7 +477,7 @@
           </div>
         </div>
 
-        <p v-if="formError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ formError }}</p>
+        <ErrorAlert v-if="formError" :message="formError" class="mt-3" />
 
         <div class="flex justify-end gap-3 mt-6">
           <button
@@ -531,6 +531,8 @@ import type {
   CalendarIntegrationUpdate,
   CalendarType,
 } from '../api/calendarIntegrations'
+import { userMessage } from '../api/errors'
+import ErrorAlert from '../components/ErrorAlert.vue'
 
 const DE_STATES: Record<string, string> = {
   BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',
@@ -639,7 +641,7 @@ async function executeDelete() {
     deleteTarget.value = null
     toastStore.success('Integration gelöscht', name)
   } catch (error) {
-    toastStore.error('Löschen fehlgeschlagen', error instanceof Error ? error.message : undefined)
+    toastStore.error('Löschen fehlgeschlagen', userMessage(error, 'Unbekannter Fehler'))
   } finally {
     deleting.value = false
   }
@@ -702,7 +704,7 @@ async function saveEdit() {
     await integrationsStore.update(editTarget.value.id, payload)
     editTarget.value = null
   } catch (error) {
-    editError.value = error instanceof Error ? error.message : 'Fehler beim Speichern'
+    editError.value = userMessage(error, 'Fehler beim Speichern')
   } finally {
     editSaving.value = false
   }
@@ -792,7 +794,7 @@ async function submit() {
     await integrationsStore.create(payload)
     closeForm()
   } catch (error) {
-    formError.value = error instanceof Error ? error.message : 'Fehler beim Anlegen'
+    formError.value = userMessage(error, 'Fehler beim Anlegen')
   } finally {
     saving.value = false
   }
@@ -820,7 +822,7 @@ async function runFeiertageImport() {
       feiertageForm.stateCode || null,
     )
   } catch (error) {
-    feiertageError.value = error instanceof Error ? error.message : 'Import fehlgeschlagen'
+    feiertageError.value = userMessage(error, 'Import fehlgeschlagen')
   } finally {
     feiertageImporting.value = false
   }

@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import MatrixTable from '@/components/MatrixTable.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useMatrixStore } from '@/stores/matrix'
 import type { MatrixResponse, MatrixRow } from '@/api/matrix'
 
@@ -265,5 +267,49 @@ describe('MatrixTable sticky date header', () => {
     expect(wrapper.find('[data-testid="matrix-scroll"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Keine Ereignisse im gewählten Zeitraum.')
     wrapper.unmount()
+  })
+})
+
+describe('MatrixTable without congregations', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  function mountEmpty(options: { admin: boolean; withRouter: boolean }) {
+    const store = useMatrixStore()
+    store.districtId = 'd1'
+    store.matrix = { dates: ['2026-10-04'], rows: [], holidays: {} }
+    const auth = useAuthStore()
+    auth.isSuperadmin = options.admin
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/admin/districts', name: 'admin-districts', component: { template: '<div />' } },
+      ],
+    })
+    const wrapper = mount(MatrixTable, {
+      props: { compactMode: false, matrixSortMode: 'default' },
+      global: options.withRouter ? { plugins: [router] } : {},
+    })
+    return { wrapper, router }
+  }
+
+  it('invites a district admin to create the first congregation', async () => {
+    const { wrapper, router } = mountEmpty({ admin: true, withRouter: true })
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Dieser Bezirk hat noch keine Gemeinden.')
+    expect(empty.text()).not.toContain('Keine Gemeinde passt')
+    await empty.get('button').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('admin-districts')
+  })
+
+  it('only explains the next step to everyone else', () => {
+    for (const options of [{ admin: false, withRouter: true }, { admin: true, withRouter: false }]) {
+      const empty = mountEmpty(options).wrapper.get('[data-testid="empty-state"]')
+      expect(empty.text()).toContain('Die Bezirksverwaltung legt die Gemeinden an.')
+      expect(empty.find('button').exists()).toBe(false)
+    }
   })
 })

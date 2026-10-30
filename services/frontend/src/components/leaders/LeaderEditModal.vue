@@ -147,7 +147,7 @@
       <input v-model="modal.service_end_date" type="date" class="form-input" />
     </label>
 
-    <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ modal.error }}</p>
+    <ErrorAlert v-if="modal.error" :message="modal.error" class="mb-3" />
 
     <div class="flex justify-end gap-3">
       <button
@@ -176,6 +176,7 @@ import { computed, watch } from 'vue'
 import { LEADER_RANKS, type LeaderAssignment } from '../../api/leaders'
 import { roleChoicesFor, roleFitsLevel } from '../../api/leaderRoles'
 import type { CongregationResponse } from '../../api/districts'
+import ErrorAlert from '../ErrorAlert.vue'
 
 // The parent owns the form state (reactive object) and the save logic; this
 // component only renders it. Aliasing the prop avoids prop-mutation lint noise

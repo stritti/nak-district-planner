@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { userMessage } from '../api/errors'
 import { useToastStore } from '../stores/toast'
 
-/** Human-readable message of an unknown thrown value. */
+/** Human-readable message of an unknown thrown value (API errors as in `userMessage`). */
 export function errorMessage(error: unknown, fallback = 'Unbekannter Fehler'): string {
-  if (error instanceof Error && error.message) return error.message
   if (typeof error === 'string' && error) return error
-  return fallback
+  return userMessage(error, fallback)
 }
 
 /**

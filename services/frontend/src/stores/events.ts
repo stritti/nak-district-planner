@@ -4,6 +4,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { listEvents, type EventListParams, type EventResponse } from '../api/events'
+import { userMessage } from '../api/errors'
 
 const PAGE_SIZE = 50
 
@@ -29,7 +30,7 @@ export const useEventsStore = defineStore('events', () => {
       items.value = res.items
       total.value = res.total
     } catch (e) {
-      if (!options.preserveRows) error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+      if (!options.preserveRows) error.value = userMessage(e, 'Fehler beim Laden')
     } finally {
       if (!options.preserveRows) loading.value = false
     }

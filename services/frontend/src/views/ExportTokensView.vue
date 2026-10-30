@@ -20,7 +20,7 @@
     </p>
 
     <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
-    <div v-else-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</div>
+    <ErrorAlert v-else-if="error" :message="error" />
 
     <!-- Token list -->
     <div v-else class="space-y-3">
@@ -173,7 +173,7 @@
           </div>
         </div>
 
-        <p v-if="form.error" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ form.error }}</p>
+        <ErrorAlert v-if="form.error" :message="form.error" class="mt-3" />
 
         <div class="flex justify-end gap-3 mt-5">
           <button
@@ -229,6 +229,8 @@ import {
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
+import { userMessage } from '../api/errors'
+import ErrorAlert from '../components/ErrorAlert.vue'
 
 const districtsStore = useDistrictsStore()
 const toastStore = useToastStore()
@@ -255,7 +257,7 @@ onMounted(async () => {
     if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
     tokens.value = await listExportTokens()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+    error.value = userMessage(e, 'Fehler beim Laden')
   } finally {
     loading.value = false
   }
@@ -338,7 +340,7 @@ async function saveToken() {
     }
     void loadCongregationNames()
   } catch (e) {
-    form.error = e instanceof Error ? e.message : 'Fehler'
+    form.error = userMessage(e, 'Fehler')
   } finally {
     form.saving = false
   }
@@ -360,7 +362,7 @@ async function doDelete() {
     deleteTarget.value = null
     toastStore.success('Export-Token gelöscht', label)
   } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+    toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
   } finally {
     deleting.value = false
   }

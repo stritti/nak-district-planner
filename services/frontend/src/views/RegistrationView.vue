@@ -193,6 +193,7 @@ import {
   type PublicDistrictInfo,
   type PublicCongregationInfo,
 } from '../api/registrations'
+import { userMessage } from '../api/errors'
 
 const oidc = useOIDC(useRouter())
 const authStore = useAuthStore()
@@ -302,7 +303,7 @@ async function handleSubmit() {
     accountLinked.value = !!accessToken
     submitted.value = true
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Fehler beim Einreichen der Registrierung.'
+    error.value = userMessage(err, 'Fehler beim Einreichen der Registrierung.')
   } finally {
     submitting.value = false
   }
@@ -315,7 +316,7 @@ async function createAccount() {
   try {
     window.location.href = await oidc.getAuthorizationUrl({ prompt: 'create' })
   } catch (err) {
-    accountError.value = err instanceof Error ? err.message : 'Weiterleitung fehlgeschlagen'
+    accountError.value = userMessage(err, 'Weiterleitung fehlgeschlagen')
     creatingAccount.value = false
   }
 }

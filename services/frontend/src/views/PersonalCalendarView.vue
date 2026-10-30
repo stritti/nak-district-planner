@@ -14,6 +14,7 @@ import {
 import CopyButton from '../components/CopyButton.vue'
 import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
+import { userMessage } from '../api/errors'
 
 const auth = useAuthStore()
 const districts = useDistrictsStore()
@@ -122,7 +123,7 @@ async function revoke(id: string) {
     }
   } catch (cause) {
     if (current === tokenVersion) {
-      actionError.value = cause instanceof Error ? cause.message : 'Widerruf fehlgeschlagen'
+      actionError.value = userMessage(cause, 'Widerruf fehlgeschlagen')
     }
   } finally {
     if (current === tokenVersion) savingFeed.value = false

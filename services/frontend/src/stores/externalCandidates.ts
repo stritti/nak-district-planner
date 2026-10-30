@@ -9,6 +9,7 @@ import {
   listExternalCandidates,
   type ExternalEventCandidate,
 } from '../api/externalCandidates'
+import { userMessage } from '../api/errors'
 
 export const useExternalCandidatesStore = defineStore('externalCandidates', () => {
   const items = ref<ExternalEventCandidate[]>([])
@@ -29,7 +30,7 @@ export const useExternalCandidatesStore = defineStore('externalCandidates', () =
       }
     } catch (cause) {
       if (requestSequence === fetchSequence) {
-        loadError.value = cause instanceof Error ? cause.message : 'Kandidaten konnten nicht geladen werden'
+        loadError.value = userMessage(cause, 'Kandidaten konnten nicht geladen werden')
       }
     } finally {
       if (requestSequence === fetchSequence) {
@@ -54,7 +55,7 @@ export const useExternalCandidatesStore = defineStore('externalCandidates', () =
       items.value = items.value.filter((item) => item.id !== updated.id)
       return updated
     } catch (cause) {
-      reviewError.value = cause instanceof Error ? cause.message : 'Prüfung konnte nicht gespeichert werden'
+      reviewError.value = userMessage(cause, 'Prüfung konnte nicht gespeichert werden')
       return null
     } finally {
       reviewingId.value = null
