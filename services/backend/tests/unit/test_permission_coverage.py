@@ -122,7 +122,7 @@ def test_route_keys_are_unique_per_method_and_path(routes) -> None:
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-COVERAGE_DOC = BACKEND_ROOT.parents[1] / "docs" / "rbac-coverage.md"
+COVERAGE_DOC = BACKEND_ROOT.parents[1] / "docs" / "security" / "rbac-coverage.md"
 
 
 @pytest.mark.skipif(not COVERAGE_DOC.exists(), reason="docs/ not available (container build)")
@@ -138,9 +138,9 @@ def test_generated_inventory_in_docs_is_up_to_date(routes) -> None:
         COVERAGE_DOC.read_text(encoding="utf-8"),
         re.DOTALL,
     )
-    assert match, "Generated section markers missing in docs/rbac-coverage.md"
+    assert match, "Generated section markers missing in docs/security/rbac-coverage.md"
     assert match.group(1) == report.render(routes), (
-        "docs/rbac-coverage.md is outdated; run `uv run python scripts/rbac_coverage_report.py`"
+        "docs/security/rbac-coverage.md is outdated; run `uv run python scripts/rbac_coverage_report.py`"
     )
 
 

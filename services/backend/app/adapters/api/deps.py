@@ -146,16 +146,22 @@ async def get_current_user(
                 text("SELECT set_config('app.current_user_sub', :user_sub, true)"),
                 {"user_sub": user_info["sub"]},
             )
-            result = await session.execute(
+            await session.execute(
                 text("SELECT grant_bootstrap_superadmin(:user_sub)"),
                 {"user_sub": user_info["sub"]},
             )
-            granted = bool(result.scalar_one_or_none())
+            # Authorize from the persisted flag, never from the helper's
+            # return value: appointments and revocations happen elsewhere.
+            result = await session.execute(
+                text("SELECT is_superadmin FROM users WHERE sub = :user_sub"),
+                {"user_sub": user_info["sub"]},
+            )
+            is_superadmin = result.scalar_one_or_none() is True
         except Exception:
-            logger.exception("Bootstrap superadmin reconciliation failed")
+            logger.exception("Bootstrap superadmin initialization failed")
             raise
 
-        existing_user.is_superadmin = granted
+        existing_user.is_superadmin = is_superadmin
         existing_user.email_verified = user_info.get("email_verified") is True
         request.state.user = existing_user
         return existing_user
@@ -303,6 +309,7 @@ get_membership_repository = make_repository_dependency(SqlMembershipRepository)
 get_planning_series_repository = make_repository_dependency(SqlPlanningSeriesRepository)
 get_planning_slot_repository = make_repository_dependency(SqlPlanningSlotRepository)
 get_service_assignment_repository = make_repository_dependency(SqlServiceAssignmentRepository)
+get_user_repository = make_repository_dependency(SqlUserRepository)
 get_external_event_candidate_repository = make_repository_dependency(
     SqlExternalEventCandidateRepository
 )

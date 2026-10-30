@@ -142,7 +142,7 @@ async def test_caldav_expands_recurring_resource_with_occurrence_identity():
 async def test_caldav_query_has_bounded_time_range():
     connector, client = _caldav(_multistatus(""))
     await connector.fetch_events(CALDAV_CREDS, **WINDOW)
-    body = client.request.await_args.kwargs["data"].decode()
+    body = client.request.await_args.kwargs["content"].decode()
     assert 'start="20260301T000000Z"' in body
     assert 'end="20260430T000000Z"' in body
 
@@ -158,7 +158,7 @@ async def test_caldav_query_has_bounded_time_range():
 async def test_caldav_query_omits_unset_time_range_attributes(window, present, absent):
     connector, client = _caldav(_multistatus(""))
     await connector.fetch_events(CALDAV_CREDS, **window)
-    body = client.request.await_args.kwargs["data"].decode()
+    body = client.request.await_args.kwargs["content"].decode()
     assert present in body
     assert absent not in body
     assert '=""' not in body

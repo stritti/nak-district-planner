@@ -142,7 +142,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | Methode | Pfad | Handler | Authentifizierung | Guards |
 |---|---|---|---|---|
 | GET, HEAD, OPTIONS | `/api/health` | `health.health` | 🔓 Public | – |
-| GET | `/api/v1/auth/access` | `auth.get_access_context` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
+| GET | `/api/v1/auth/access` | `auth.get_access_context` | 🔐 Auth | `is_superadmin` |
 | GET | `/api/v1/auth/me` | `auth.get_current_user_info` | 🔐 Auth | `is_superadmin` |
 | GET | `/api/v1/auth/oidc/discovery` | `auth.get_oidc_discovery` | 🔓 Public | – |
 | POST | `/api/v1/auth/oidc/revoke` | `auth.revoke_oidc_refresh_token` | 🔓 Public | – |
@@ -158,6 +158,21 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/districts/{district_id}/congregations` | `districts.list_congregations` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/congregations` | `districts.create_congregation` | 🔐 Auth | `require_role_in_district` |
 | PATCH | `/api/v1/districts/{district_id}/congregations/{congregation_id}` | `districts.update_congregation` | 🔐 Auth | `assert_has_role_in_congregation`, `assert_has_role_in_district` |
+| DELETE | `/api/v1/districts/{district_id}/duties/assignments/{assignment_id}` | `event_duties.remove_assignment` | 🔐 Auth | `require_role_in_district` |
+| PATCH | `/api/v1/districts/{district_id}/duties/assignments/{assignment_id}` | `event_duties.replace_assignment` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/duties/assignments/{assignment_id}/revalidate` | `event_duties.revalidate_assignment` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/duties/categories` | `event_duties.categories` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/duties/categories` | `event_duties.create_category` | 🔐 Auth | `require_role_in_district` |
+| PATCH | `/api/v1/districts/{district_id}/duties/categories/{category_id}` | `event_duties.edit_category` | 🔐 Auth | `require_role_in_district` |
+| PUT | `/api/v1/districts/{district_id}/duties/configuration` | `event_duties.configure` | 🔐 Auth | `require_role_in_district` |
+| DELETE | `/api/v1/districts/{district_id}/duties/configuration/{category_id}` | `event_duties.clear_configuration` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/duties/eligible-users` | `event_duties.eligible_users` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/duties/slots/{planning_slot_id}` | `event_duties.assignments` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/duties/slots/{planning_slot_id}` | `event_duties.assign` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/duties/slots/{planning_slot_id}/leaders` | `event_duties.leader_choices` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/duties/suggestions` | `event_duties.suggestions` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/duties/suggestions` | `event_duties.remember` | 🔐 Auth | `require_role_in_district` |
+| PATCH | `/api/v1/districts/{district_id}/duties/suggestions/{suggestion_id}` | `event_duties.suppress` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/districts/{district_id}/event-hooks` | `event_hooks.list_event_hooks` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/event-hooks` | `event_hooks.create_event_hook` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/districts/{district_id}/event-hooks/event-types` | `event_hooks.list_event_types` | 🔐 Auth | `require_role_in_district` |
@@ -181,8 +196,21 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | POST | `/api/v1/districts/{district_id}/leaders/link-self` | `leaders.link_self_to_leader` | 🔐 Auth | `require_role_in_district` |
 | DELETE | `/api/v1/districts/{district_id}/leaders/{leader_id}` | `leaders.delete_leader` | 🔐 Auth | `require_role_in_district` |
 | PATCH | `/api/v1/districts/{district_id}/leaders/{leader_id}` | `leaders.update_leader` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/leaders/{leader_id}/assignments` | `leaders.add_leader_assignment` | 🔐 Auth | `require_role_in_district` |
+| DELETE | `/api/v1/districts/{district_id}/leaders/{leader_id}/assignments/{assignment_id}` | `leaders.remove_leader_assignment` | 🔐 Auth | `require_role_in_district` |
+| PATCH | `/api/v1/districts/{district_id}/leaders/{leader_id}/assignments/{assignment_id}` | `leaders.update_leader_assignment` | 🔐 Auth | `require_role_in_district` |
+| PATCH | `/api/v1/districts/{district_id}/leaders/{leader_id}/inline` | `leaders.inline_update_leader` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/districts/{district_id}/matrix` | `districts.get_matrix` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/matrix/generate-drafts` | `districts.generate_matrix_drafts` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/recurring-event-checklist` | `recurring_events.list_recurring_checklist` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/recurring-event-checklist/accept` | `recurring_events.accept_recurring_occurrence` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/recurring-event-checklist/bulk-accept` | `recurring_events.bulk_accept_recurring_occurrences` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/recurring-event-checklist/reopen` | `recurring_events.reopen_recurring_occurrence` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/recurring-event-checklist/resolve` | `recurring_events.resolve_recurring_occurrence` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/recurring-event-checklist/skip` | `recurring_events.skip_recurring_occurrence` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/recurring-event-templates` | `recurring_events.list_recurring_templates` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/recurring-event-templates` | `recurring_events.create_recurring_template` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
+| PATCH | `/api/v1/districts/{district_id}/recurring-event-templates/{template_id}` | `recurring_events.update_recurring_template` | 🔐 Auth | `has_role_in_district`, `require_role_in_district` |
 | GET | `/api/v1/districts/{district_id}/registrations` | `registrations.list_registrations` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/registrations` | `registrations.submit_registration` | 🔓 Public | – |
 | DELETE | `/api/v1/districts/{district_id}/registrations/{registration_id}` | `registrations.delete_registration` | 🔐 Auth | `require_role_in_district` |
@@ -194,21 +222,25 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | PUT | `/api/v1/districts/{district_id}/reminder-configs/{config_id}` | `reminder_configs.update_reminder_config` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events` | `events.list_events` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
 | POST | `/api/v1/events` | `events.create_event` | 🔐 Auth | `require_role_in_district` |
-| POST | `/api/v1/events/bulk-approval-status` | `events.bulk_update_approval_status` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
+| POST | `/api/v1/events/bulk-approval-status` | `events.bulk_update_approval_status` | 🔐 Auth | `has_role_in_district`, `is_superadmin`, `require_role_in_district` |
 | DELETE | `/api/v1/events/{event_id}` | `events.delete_event` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/events/{event_id}` | `events.get_event` | 🔐 Auth | `require_role_in_district` |
 | PATCH | `/api/v1/events/{event_id}` | `events.update_event` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events/{event_id}/assignments` | `service_assignments.list_assignments` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/assignments` | `service_assignments.create_assignment` | 🔐 Auth | `require_role_in_district` |
+| PUT | `/api/v1/events/{event_id}/assignments/inline` | `service_assignments.inline_change_assignment` | 🔐 Auth | `require_role_in_district` |
 | DELETE | `/api/v1/events/{event_id}/assignments/{assignment_id}` | `service_assignments.delete_assignment` | 🔐 Auth | `require_role_in_district` |
 | PUT | `/api/v1/events/{event_id}/assignments/{assignment_id}` | `service_assignments.update_assignment` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/events/{event_id}/change-impact` | `events.preview_event_change` | 🔐 Auth | `require_role_in_district` |
+| PATCH | `/api/v1/events/{event_id}/inline` | `events.inline_update_event` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events/{event_id}/invitations` | `invitations.list_event_invitations` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/invitations` | `invitations.create_invitations` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/resolve-conflict` | `events.resolve_event_conflict` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/resolve-deviation` | `events.resolve_event_deviation` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/export-tokens` | `export.list_export_tokens` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
-| POST | `/api/v1/export-tokens` | `export.create_export_token` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/export-tokens` | `export.create_export_token` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
 | DELETE | `/api/v1/export-tokens/{token_id}` | `export.delete_export_token` | 🔐 Auth | `require_role_in_district` |
-| GET | `/api/v1/export/{token_str}/calendar.ics` | `export.export_calendar_ics` | 🔓 Public | – |
+| GET | `/api/v1/export/{token_str}/calendar.ics` | `export.export_calendar_ics` | 🔓 Public | `is_superadmin` |
 | GET | `/api/v1/external-candidates` | `external_candidates.list_candidates` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/external-candidates/{candidate_id}/accept` | `external_candidates.accept_candidate` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/external-candidates/{candidate_id}/dismiss` | `external_candidates.dismiss_candidate` | 🔐 Auth | `require_role_in_district` |
@@ -220,6 +252,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/notifications/{district_id}/unread-count` | `notifications.unread_count` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/notifications/{notification_id}/dismiss` | `notifications.dismiss_notification` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/notifications/{notification_id}/read` | `notifications.mark_read` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/personal-calendar/events` | `personal_calendar.personal_events` | 🔐 Auth | `is_superadmin` |
 | POST | `/api/v1/planning-series` | `planning_series.create_planning_series` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/planning-series/districts/{district_id}/generate-slots` | `planning_series.generate_slots_for_district` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/planning-series/generate-all-slots` | `planning_series.generate_all_slots` | 🔐 Auth | `require_superadmin` |
@@ -229,6 +262,10 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/public/districts` | `registrations.list_districts_public` | 🔓 Public | – |
 | GET | `/api/v1/public/districts/{district_id}/congregations` | `registrations.list_congregations_public` | 🔓 Public | – |
 | GET | `/api/v1/registrations/pending-overview` | `registrations.get_pending_overview` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
-| GET | `/api/v1/system/version` | `system.get_version` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
+| GET | `/api/v1/system/version` | `system.get_version` | 🔐 Auth | `get_congregations_where_user_has_role`, `get_districts_where_user_has_role`, `is_superadmin` |
+| GET | `/api/v1/users` | `users.list_users` | 🔐 Auth | `is_superadmin` |
+| PUT | `/api/v1/users/{sub}/memberships` | `users.assign_membership` | 🔐 Auth | `is_superadmin` |
+| DELETE | `/api/v1/users/{sub}/memberships/{membership_id}` | `users.remove_membership` | 🔐 Auth | `is_superadmin` |
+| PUT | `/api/v1/users/{sub}/superadmin` | `users.set_superadmin` | 🔐 Auth | `is_superadmin`, `require_superadmin` |
 | GET, HEAD, OPTIONS | `/health` | `health.health` | 🔓 Public | – |
 <!-- rbac-inventory:end -->

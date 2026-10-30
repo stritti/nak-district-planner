@@ -638,7 +638,7 @@ def test_leader_routes_return_403(auth_client, method, path_template, body, memb
 
 @pytest.fixture
 def auth_client_non_viewer(mock_oidc_adapter):
-    """Yield client + auth-header factory. User has CONGREGATION_ADMIN only."""
+    """Yield client + auth-header factory. User has a congregation-scoped CONGREGATION_ADMIN only."""
     district1 = uuid.uuid4()
     congregation_id = uuid.uuid4()
     claims = {
@@ -695,10 +695,13 @@ def auth_client_non_viewer(mock_oidc_adapter):
         yield client, _auth_headers, district1
 
 
-def test_auth_access_returns_403_for_non_viewer_membership(auth_client_non_viewer):
+def test_auth_access_is_active_for_congregation_only_membership(auth_client_non_viewer):
     client, auth_headers, _ = auth_client_non_viewer
     response = client.get("/api/v1/auth/access", headers=auth_headers())
-    assert response.status_code == 403
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ACTIVE"
+    assert [m["scope_type"] for m in payload["memberships"]] == ["CONGREGATION"]
 
 
 # ── Notifications (VIEWER-required) ─────────────────────────────────────

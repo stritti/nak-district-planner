@@ -345,3 +345,43 @@ def bulk_delete_audit_row(
 
 def _jsonable_dict(values: dict[str, Any]) -> dict[str, Any]:
     return {key: _jsonable(value) for key, value in values.items()}
+
+
+def statement_audit_row(
+    action: AuditAction,
+    resource_type: str,
+    *,
+    resource_id: uuid.UUID | None,
+    district_id: uuid.UUID | None = None,
+    congregation_id: uuid.UUID | None = None,
+    old_values: dict[str, Any] | None = None,
+    new_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Values for one ``audit_logs`` row of a change made by a SQL statement.
+
+    Upserts and SECURITY DEFINER calls bypass the ORM unit of work; callers
+    insert this row in the same transaction (see ``insert_statement_audit``).
+    """
+    now = datetime.now(UTC)
+    return {
+        "id": uuid.uuid4(),
+        "timestamp": now,
+        "created_at": now,
+        "user_sub": TenantContext.get_user_sub(),
+        "user_roles": TenantContext.get_user_roles(),
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "district_id": district_id,
+        "congregation_id": congregation_id,
+        "old_values": _jsonable_dict(old_values) if old_values else None,
+        "new_values": _jsonable_dict(new_values) if new_values else None,
+        "status": AuditStatus.SUCCESS,
+        "extra_metadata": {"source": AUDIT_SOURCE},
+    }
+
+
+async def insert_statement_audit(session: Any, row: dict[str, Any]) -> None:
+    """Insert ``row`` on the request's async session and count it as the domain audit."""
+    await session.execute(insert(AuditLogORM.__table__), [row])
+    mark_domain_audit()

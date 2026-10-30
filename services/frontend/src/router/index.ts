@@ -147,6 +147,12 @@ export const router = createRouter({
       beforeEnter: requireAuth,
     },
     {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: () => import('../views/UsersAdminView.vue'),
+      beforeEnter: requireAuth,
+    },
+    {
       path: '/admin/export',
       name: 'admin-export',
       component: ExportTokensView,

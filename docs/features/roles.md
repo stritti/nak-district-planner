@@ -1,15 +1,22 @@
 # Rollenkonzept
 
 Dieses Dokument beschreibt die verbindlichen fachlichen Rollengrenzen des NAK Bezirksplaners.
-Der OpenSpec-Change `openspec/changes/multi-unit-memberships-and-superadmin-management/`
+Der OpenSpec-Change `openspec/changes/archive/2026-10-30-multi-unit-memberships-and-superadmin-management/`
 erweitert das Modell um mehrere unabhängige Mitgliedschaften und die Ernennung weiterer
-Superadmins. Er definiert ein **Zielmodell**; die Umsetzung ist noch nicht abgeschlossen.
+Superadmins. Backend, Benutzerverwaltung und Zugriffskontext sind umgesetzt.
 
 ::: info Implementierungsstand
-Der Bestand nutzt `users.is_superadmin` und `memberships` mit
-`(user_sub, role, scope_type, scope_id)` als Eindeutigkeits-Constraint.
-Die Umstellung auf genau eine Rolle je Scope, sichere Delegation des Superadmin-Status und
-die neuen Verwaltungsfunktionen sind offene OpenSpec-Aufgaben.
+`memberships` ist eindeutig über `(user_sub, scope_type, scope_id)`: genau eine Rolle je
+Benutzer und Einheit, beliebig viele Einheiten je Benutzer. Superadmins ernennen und entziehen
+weitere Superadmins; der letzte Superadmin bleibt immer erhalten. Die Ansicht **Benutzer**
+(`/admin/users`) zeigt die eigenen Zugänge und vergibt oder entfernt Rollen in den Einheiten,
+die der Aufrufende verwaltet. Die API (`/api/v1/users`) setzt dieselben Grenzen durch.
+
+Der Zugriffskontext (`/api/v1/auth/access`) liefert alle Mitgliedschaften. Wer nur
+Gemeinde-Mitgliedschaften hat, ist aktiv, nicht ausstehend. Superadmins sind ohne
+Mitgliedschaft aktiv. Nach einem Entzug gilt ab dem nächsten Request nur noch die eigene
+Zuordnung; ohne Zuordnung antworten geschützte Endpunkte mit 403 und die Oberfläche zeigt
+wieder „Freigabe ausstehend".
 :::
 
 ## 1. Übersicht
@@ -353,7 +360,7 @@ Die folgenden Entscheidungen wurden im Rahmen der Konzeptentwicklung getroffen u
 | # | Frage | Entscheidung |
 |---|-------|-------------|
 | 1 | Rollenvererbung | Die maßgebliche RBAC-Hierarchie lautet `DISTRICT_ADMIN > CONGREGATION_ADMIN > PLANNER > VIEWER`. Höhere Rollen schließen niedrigere Berechtigungen nur innerhalb des nach den Scope-Regeln wirksamen Bereichs ein; Rechte übertragen sich nicht auf fremde Einheiten. |
-| 2 | Bezirkszuordnung | Ein Benutzer kann mehrere Bezirks- und Gemeindemitgliedschaften besitzen, auch über Bezirksgrenzen hinweg. Jede Mitgliedschaft speichert Scope und Rolle in `memberships`. `users.is_superadmin` ist davon unabhängig. Die neue Ein-Rolle-pro-Scope-Constraint wird im zugehörigen OpenSpec-Change eingeführt. |
+| 2 | Bezirkszuordnung | Ein Benutzer kann mehrere Bezirks- und Gemeindemitgliedschaften besitzen, auch über Bezirksgrenzen hinweg. Jede Mitgliedschaft speichert Scope und Rolle in `memberships`. `users.is_superadmin` ist davon unabhängig. Je Benutzer und Einheit gibt es genau eine Rolle (Unique-Constraint `(user_sub, scope_type, scope_id)`). |
 | 3 | Gemeindegruppen | Keine eigene Berechtigungsstufe für Gruppen. Gruppen dienen der Kooperation (gemeinsame Gottesdienste, gegenseitige Unterstützung) und werden vollständig durch `district_admin` verwaltet. |
 | 4 | Einladungsworkflow | Selbstregistrierung mit Freigabe: Die Person legt ihr Keycloak-Konto selbst an (verifizierte E-Mail), ein `district_admin` gibt die Registrierung in der App frei. Das Backend sendet keine Einladungen und legt keine Keycloak-Benutzer an; eine manuelle Anlage durch einen Keycloak-Admin bleibt möglich. |
 | 5 | Sichtbarkeit ServiceAssignments | **Ja.** `congregation_admin` kann die Dienstleiter-Namen aller Gemeinden im gleichen Bezirk in der Matrixansicht sehen. |

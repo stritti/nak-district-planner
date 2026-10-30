@@ -32,9 +32,7 @@ from app.adapters.api.deps import (
 )
 from app.adapters.api.schemas.user import AccessContextOut, MembershipOut, UserOut
 from app.adapters.auth.oidc import OIDCDiscoveryError
-from app.adapters.auth.permissions import get_districts_where_user_has_role
 from app.config import settings
-from app.domain.models.role import Role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -276,7 +274,12 @@ async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
 
 @router.get("/access", response_model=AccessContextOut)
 async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessContextOut:
-    """Return effective memberships for access-aware frontend UX."""
+    """Return effective memberships for access-aware frontend UX.
+
+    Every membership counts, district- or congregation-scoped: a user who only
+    belongs to congregations is active, not pending. Superadmins are active
+    without memberships; once revoked they fall back to their memberships.
+    """
     memberships = [
         MembershipOut(
             role=m.role.value,
@@ -285,14 +288,7 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
         )
         for m in auth.memberships
     ]
-
-    if memberships:
-        districts_with_viewer = get_districts_where_user_has_role(auth, Role.VIEWER)
-        if not districts_with_viewer and not auth.user.is_superadmin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Nur Benutzer mit VIEWER-Rolle in mindestens einem Bezirk können auf diese Ressource zugreifen.",
-            )
-
     access_status = "ACTIVE" if auth.user.is_superadmin or memberships else "PENDING_APPROVAL"
-    return AccessContextOut(status=access_status, memberships=memberships)
+    return AccessContextOut(
+        status=access_status, memberships=memberships, is_superadmin=auth.user.is_superadmin
+    )

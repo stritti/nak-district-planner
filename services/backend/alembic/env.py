@@ -32,6 +32,7 @@ _SQL_ONLY_TABLES = frozenset(
         "celery_taskmeta",
         "celery_tasksetmeta",
         "service_assignment_duplicates_468",
+        "membership_scope_duplicates",
     }
 )
 

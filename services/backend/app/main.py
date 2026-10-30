@@ -37,6 +37,7 @@ from app.adapters.api.routers import (
     reminder_configs,
     service_assignments,
     system,
+    users,
 )
 from app.adapters.api.routers import (
     health as health_router,
@@ -230,5 +231,6 @@ app.include_router(registrations.overview_router)
 app.include_router(registrations.router)
 app.include_router(export.router)
 app.include_router(system.router)
+app.include_router(users.router)
 app.include_router(notifications.router)
 app.include_router(external_candidates.router)

@@ -54,6 +54,7 @@ Der Bootstrap ist owner-controlled: ✅
 - Auf einer frischen leeren Installation wird ohne owner-provisionierten Subject **kein** erster Login automatisch Superadmin.
 - `SUPERADMIN_SUB` sollte vor der Bootstrap-Migration auf den exakten OIDC-`sub` gesetzt werden; alternativ provisioniert der DB-Owner die Konfiguration.
 - Auf bestehenden Installationen pinnt die Migration bei fehlendem `SUPERADMIN_SUB` deterministisch einen vorhandenen Superadmin bzw. den fruehesten Benutzer.
+- Die Bootstrap-Vergabe erfolgt einmalig (`bootstrap_completed_at`) und entzieht niemandem Rechte. Weitere Superadmins vergibt und entzieht nur ein bestehender Superadmin über `set_user_superadmin(TEXT, BOOLEAN)` (SECURITY DEFINER, sperrt alle Superadmin-Zeilen, der letzte Superadmin bleibt). Die Runtime-Rolle hat weiterhin kein UPDATE-Recht auf `users.is_superadmin`; die API autorisiert stets aus dem persistierten Flag.
 
 Details: `docs/operations/production-runbook.md`.
 

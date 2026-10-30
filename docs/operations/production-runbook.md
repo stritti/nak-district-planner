@@ -145,7 +145,7 @@ Wenn die Migration auf einer leeren Installation ohne konfigurierten Subject lae
 
 ### 2.2 Upgrade einer bestehenden Installation
 
-Wenn `SUPERADMIN_SUB` gesetzt ist, wird genau dieser Subject als Superadmin erzwungen. Bei Rotation werden veraltete persistierte Superadmin-Flags fuer andere Subjects entfernt.
+Der Bootstrap vergibt die Berechtigung **einmal**: Beim ersten Login des konfigurierten Subjects wird er Superadmin, und `app_superadmin_config.bootstrap_completed_at` wird gesetzt. Danach vergibt und entzieht `grant_bootstrap_superadmin(TEXT)` nichts mehr. Weitere Superadmins ernennt ein bestehender Superadmin in der Anwendung (`set_user_superadmin`); sie bleiben auch nach späteren Logins des Bootstrap-Subjects erhalten, und ein entzogener Bootstrap-Subject bleibt entzogen. Den letzten Superadmin kann niemand entziehen. Installationen, deren konfigurierter Subject bei der Migration `20261030_superadmin_appointment` schon Superadmin ist, gelten als abgeschlossen.
 
 Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration deterministisch einen bereits vorhandenen Superadmin oder ersatzweise den fruehesten bestehenden Benutzer. Dadurch entscheidet nicht die Login-Reihenfolge nach dem Deployment ueber die Berechtigung.
 
@@ -162,12 +162,14 @@ Nach dem ersten Login mit dem neuen Konto:
 docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -c "SELECT sub, email, is_superadmin, created_at FROM users ORDER BY created_at;"
 
-# 2. Als Superadmin eintragen
+# 2. Als Superadmin eintragen und die einmalige Vergabe neu freischalten
 docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -c "UPDATE app_superadmin_config SET superadmin_sub='<SUB>' WHERE id = 1;"
+  -c "UPDATE app_superadmin_config SET superadmin_sub='<SUB>', bootstrap_completed_at = NULL WHERE id = 1;"
 ```
 
-Danach abmelden und neu anmelden; beim nächsten Login setzt das Backend `is_superadmin` und entzieht es allen anderen Subjects. Es gibt genau einen Superadmin. Mitgliedschaften und Zuordnungen des alten Kontos hängen an der alten `sub` und gehen nicht automatisch über, der Superadmin kann sie neu vergeben.
+Gibt es noch einen anderen Superadmin, ist das nicht nötig: Er ernennt das neue Konto in der Benutzerverwaltung.
+
+Danach abmelden und neu anmelden; beim nächsten Login setzt das Backend `is_superadmin` für diesen Subject einmalig. Andere Superadmins behalten ihre Berechtigung; entziehen kann sie ein Superadmin in der Benutzerverwaltung. Mitgliedschaften und Zuordnungen des alten Kontos hängen an der alten `sub` und gehen nicht automatisch über, der Superadmin kann sie neu vergeben.
 
 ## 3. Standard-Deployment
 

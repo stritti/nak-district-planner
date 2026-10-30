@@ -22,7 +22,7 @@ nicht ohne explizite Migration und Team-Review entfernt werden:
 | Constraint | Tabelle | Spalten | Zweck |
 |------------|---------|---------|-------|
 | `uq_users_sub` | `users` | `sub` | OIDC-Subject muss pro Nutzer eindeutig sein — Grundlage für Login/Identität. |
-| `uq_memberships_user_role_scope` | `memberships` | `user_sub, role, scope_type, scope_id` | Verhindert doppelte Rollenzuweisungen für denselben Nutzer/Scope. |
+| `uq_memberships_user_scope` | `memberships` | `user_sub, scope_type, scope_id` | Eine Rolle je Nutzer und Einheit; Mehrfachzuordnungen über verschiedene Einheiten. |
 | `event_instances_planning_slot_id_key` | `event_instances` | `planning_slot_id` | 1:1-Beziehung zwischen PlanningSlot und EventInstance (M1 Matrix-Rendering). |
 
 ## Überlappungsschutz: `no_overlapping_planning_slots`
@@ -90,7 +90,7 @@ bereinigt worden:
   `congregation_invitations`, `external_event_links` (eindeutig),
   `invitation_overwrite_requests`, `leader_registrations`, `planning_slots`
   (inklusive des partiellen Unique-Index `no_overlapping_planning_slots`).
-- `memberships`: Das Modell bildet `uq_memberships_user_role_scope` und den
+- `memberships`: Das Modell bildet `uq_memberships_user_scope` und den
   kombinierten Index `ix_memberships_scope` ab, statt getrennter Indizes auf
   `scope_type` und `scope_id`.
 - `service_assignments.event_id`: Die Spalte ist in der Datenbank `NOT NULL`,
