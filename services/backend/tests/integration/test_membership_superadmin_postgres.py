@@ -201,6 +201,7 @@ async def test_duplicates_collapse_to_the_highest_role_and_are_archived(owner, w
                     ),
                     {"i": uuid.uuid4(), "s": member, "r": role, "t": scope_type, "c": scope_id},
                 )
+            await conn.execute(text(migration.CREATE_ARCHIVE_SQL))
             await conn.execute(text(migration.ARCHIVE_DUPLICATES_SQL))
             await conn.execute(text(migration.DELETE_DUPLICATES_SQL))
             kept = (
@@ -922,3 +923,57 @@ async def test_concurrent_flag_changes_after_profile_refresh_end_in_a_conflict(
 
     outcomes = await asyncio.gather(request(root, other), request(other, root))
     assert "concurrent_change" in outcomes
+
+
+async def test_upgrade_appends_to_an_archive_left_by_a_downgrade(owner, world) -> None:
+    migration = _migration_module()
+    member = world["subs"]["member"]
+    async with owner.connect() as conn:
+        tx = await conn.begin()
+        try:
+            await conn.execute(
+                text(f"ALTER TABLE memberships DROP CONSTRAINT {migration.NEW_CONSTRAINT}")
+            )
+            await conn.execute(
+                text(
+                    f"ALTER TABLE memberships ADD CONSTRAINT {migration.OLD_CONSTRAINT} "
+                    "UNIQUE (user_sub, role, scope_type, scope_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    f"CREATE TABLE {migration.ARCHIVE_TABLE} AS "
+                    "SELECT m.*, now() AS archived_at FROM memberships m WITH NO DATA"
+                )
+            )
+            leftover = uuid.uuid4()
+            await conn.execute(
+                text(
+                    f"INSERT INTO {migration.ARCHIVE_TABLE} (id, user_sub, role, scope_type, scope_id, "
+                    "created_at, updated_at, archived_at) "
+                    "VALUES (:i, :s, 'VIEWER', 'DISTRICT', :d, now(), now(), now())"
+                ),
+                {"i": leftover, "s": member, "d": world["d2"]},
+            )
+            for role in ("PLANNER", "VIEWER"):
+                await conn.execute(
+                    text(
+                        "INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                        "VALUES (:i, :s, :r, 'CONGREGATION', :c, now(), now())"
+                    ),
+                    {"i": uuid.uuid4(), "s": member, "r": role, "c": world["c1"]},
+                )
+            await conn.execute(text(migration.CREATE_ARCHIVE_SQL))
+            await conn.execute(text(migration.ARCHIVE_DUPLICATES_SQL))
+            await conn.execute(text(migration.DELETE_DUPLICATES_SQL))
+            archived = (
+                await conn.execute(
+                    text(
+                        f"SELECT scope_type, role FROM {migration.ARCHIVE_TABLE} WHERE user_sub = :s ORDER BY scope_type"
+                    ),
+                    {"s": member},
+                )
+            ).all()
+        finally:
+            await tx.rollback()
+    assert [tuple(row) for row in archived] == [("CONGREGATION", "VIEWER"), ("DISTRICT", "VIEWER")]

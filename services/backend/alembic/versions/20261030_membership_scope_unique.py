@@ -103,8 +103,16 @@ RANKED_DUPLICATES_SQL = f"""
     FROM memberships
 """
 
-ARCHIVE_DUPLICATES_SQL = f"""
+# A downgrade may leave rows behind that it could not restore; a later
+# upgrade appends to that archive instead of skipping it.
+CREATE_ARCHIVE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {ARCHIVE_TABLE} AS
+SELECT m.*, now() AS archived_at FROM memberships m
+WITH NO DATA;
+"""
+
+ARCHIVE_DUPLICATES_SQL = f"""
+INSERT INTO {ARCHIVE_TABLE}
 SELECT m.*, now() AS archived_at
 FROM memberships m
 JOIN ({RANKED_DUPLICATES_SQL}) ranked ON ranked.id = m.id
@@ -198,6 +206,7 @@ def _recreate_insert_policy(self_insert: str) -> None:
 
 def upgrade() -> None:
     op.execute("LOCK TABLE memberships IN SHARE ROW EXCLUSIVE MODE")
+    op.execute(CREATE_ARCHIVE_SQL)
     op.execute(ARCHIVE_DUPLICATES_SQL)
     op.execute(LOCK_DOWN_ARCHIVE_SQL.replace(":app_role", _quote_literal(_app_role())))
     op.execute(DELETE_DUPLICATES_SQL)
