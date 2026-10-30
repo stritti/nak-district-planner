@@ -185,6 +185,17 @@ def test_the_removed_keycloak_provisioner_refuses_startup_in_every_environment(a
     assert "release-notes" in message
 
 
+@pytest.mark.parametrize("provider", ["Keycloak", " KEYCLOAK ", "keycloak\n"])
+def test_the_keycloak_guard_ignores_case_and_whitespace(provider: str) -> None:
+    with pytest.raises(ValueError, match="IDP_PROVISIONING_PROVIDER=keycloak"):
+        Settings(_env_file=None, idp_provisioning_enabled=True, idp_provisioning_provider=provider)
+
+
+def test_the_webhook_provider_name_is_normalized() -> None:
+    settings = Settings(_env_file=None, idp_provisioning_provider=" Webhook ")
+    assert settings.idp_provisioning_provider == "webhook"
+
+
 def test_keycloak_provider_is_harmless_while_provisioning_is_disabled() -> None:
     settings = Settings(
         _env_file=None, idp_provisioning_enabled=False, idp_provisioning_provider="keycloak"

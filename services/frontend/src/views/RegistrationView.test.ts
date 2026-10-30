@@ -294,5 +294,27 @@ describe('RegistrationView', () => {
       expect(wrapper.find('[data-testid="account-linked"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="create-account"]').exists()).toBe(false)
     })
+
+    it('prefills and locks the email of a logged-in account', async () => {
+      const wrapper = mountView()
+      useAuthStore().setToken(
+        { accessToken: 'access-token-1', expiresAt: Date.now() / 1000 + 300 } as never,
+        { sub: 'user-1', email: ' konto@example.org ' },
+      )
+      await flushPromises()
+
+      const email = wrapper.get('input[type="email"]')
+      expect((email.element as HTMLInputElement).value).toBe('konto@example.org')
+      expect(email.attributes('readonly')).toBeDefined()
+      expect(wrapper.find('[data-testid="account-email-hint"]').exists()).toBe(true)
+    })
+
+    it('keeps the email editable without a logged-in account', async () => {
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.get('input[type="email"]').attributes('readonly')).toBeUndefined()
+      expect(wrapper.find('[data-testid="account-email-hint"]').exists()).toBe(false)
+    })
   })
 })

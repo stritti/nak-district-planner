@@ -87,7 +87,12 @@
               class="form-input w-full"
               placeholder="name@beispiel.de"
               required
+              :readonly="!!accountEmail"
+              :class="{ 'bg-gray-100 text-gray-600': accountEmail }"
             />
+            <p v-if="accountEmail" data-testid="account-email-hint" class="mt-1 text-xs text-gray-500">
+              Die Registrierung wird mit Ihrem angemeldeten Konto verknüpft und verwendet dessen E-Mail-Adresse.
+            </p>
           </div>
 
           <!-- Rank -->
@@ -172,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { CheckCircleIcon } from '@heroicons/vue/24/outline'
 import ContextualHelp from '../components/ContextualHelp.vue'
@@ -202,6 +207,12 @@ const accountLinked = ref(false)
 const creatingAccount = ref(false)
 const accountError = ref<string | null>(null)
 
+// A logged-in user's registration is bound to the account's verified email; the server
+// rejects any other address, so the field mirrors the account and is not editable.
+const accountEmail = computed(() =>
+  authStore.isAuthenticated ? authStore.user?.email?.trim() || null : null,
+)
+
 const districts = ref<PublicDistrictInfo[]>([])
 const congregations = ref<PublicCongregationInfo[]>([])
 
@@ -224,6 +235,14 @@ const form = ref<{
   phone: '',
   notes: '',
 })
+
+watch(
+  accountEmail,
+  (email) => {
+    if (email) form.value.email = email
+  },
+  { immediate: true },
+)
 
 listDistrictsPublic()
   .then((d) => (districts.value = d))

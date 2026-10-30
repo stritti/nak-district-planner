@@ -204,7 +204,10 @@ async def submit_registration(
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Registration requires a matching verified email in the token",
+                    detail=(
+                        "Die E-Mail-Adresse muss der bestätigten E-Mail-Adresse "
+                        "des angemeldeten Kontos entsprechen."
+                    ),
                 )
         except TokenValidationError as exc:
             raise HTTPException(
