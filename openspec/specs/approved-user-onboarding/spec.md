@@ -45,58 +45,82 @@ When enabled by configuration, the system SHALL notify a provisioning endpoint a
 - **AND** registration stores provisioning error details for operators
 
 ### Requirement: Registration user linkage SHALL be secure
-If a bearer token is provided in the self-registration request, the system MUST validate it before using its `sub` claim for user linkage.
+If a bearer token is provided in a self-registration request, the system MUST validate it before using its `sub` for linkage. The identity provider MUST attest to ownership of the registration email: `email_verified` SHALL be the Boolean `true` and the token `email` SHALL match the submitted registration email case-insensitively. The system MUST reject any authenticated request without these claims instead of binding it to the token subject.
 
 #### Scenario: Valid token links registration to subject
-- **WHEN** registration request includes a valid bearer token
-- **THEN** system validates token via configured OIDC validation flow
-- **AND** stores token `sub` as registration `user_sub`
+- **WHEN** registration includes a valid bearer token with a nonempty `sub`, a matching `email` and Boolean `email_verified=true`
+- **THEN** system stores the token's `sub` as registration `user_sub`
 
 #### Scenario: Invalid token is rejected
-- **WHEN** registration request includes an invalid or expired bearer token
+- **WHEN** registration request includes an invalid or expired bearer token or one missing a subject
 - **THEN** system rejects the request with `401 Unauthorized`
 
 #### Scenario: Registration without token remains possible
-- **WHEN** registration request is sent without bearer token
+- **WHEN** registration request is sent without a bearer token
 - **THEN** system accepts registration as pending
 - **AND** `user_sub` remains unset until later secure linkage
 
-### Requirement: Keycloak provisioning SHALL use a least-privilege service account
-When the Keycloak provider is selected, the system SHALL authenticate against the Keycloak Admin API only with the OAuth 2.0 client credentials grant of a dedicated confidential client in the application realm. The system MUST NOT use a password grant or any account of the `master` realm. The client's service account SHALL need no permissions beyond managing and viewing users of the application realm. The client secret MUST NOT appear in logs, API responses or stored provisioning errors.
+#### Scenario: Subject cannot be linked to a different email
+- **WHEN** a valid token carries an email different from the submitted registration email
+- **THEN** system returns `403 Forbidden` without persisting the registration or identity link
 
-#### Scenario: Approval provisions via service account
-- **WHEN** a registration is approved and Keycloak provisioning is enabled with client id and client secret
-- **THEN** the system obtains a token from the application realm's token endpoint with `grant_type=client_credentials`
-- **AND** no request is sent to the `master` realm
+#### Scenario: Only explicitly verified email may be linked
+- **WHEN** a valid token has no `email`, no `email_verified`, `email_verified=false` or a non-Boolean `email_verified`
+- **THEN** system returns `403 Forbidden` without persisting the registration or identity link
 
-#### Scenario: Production start without client credentials
-- **WHEN** the application starts in production with the Keycloak provider enabled and client id or client secret missing
-- **THEN** startup is refused with a configuration error naming the missing setting
+### Requirement: The backend SHALL hold no IdP administration credential
+The backend MUST NOT create, modify or invite users in Keycloak and MUST NOT be configured with a Keycloak Admin API credential. When the former Keycloak provisioning provider is still configured, the application SHALL refuse to start.
 
-#### Scenario: Legacy admin credentials still configured
-- **WHEN** the application starts in production with the Keycloak provider and the former admin username or admin password settings are present
-- **THEN** startup is refused with a configuration error asking to remove them
+#### Scenario: Keycloak provider still configured
+- **WHEN** the application starts with `IDP_PROVISIONING_PROVIDER=keycloak` and provisioning enabled
+- **THEN** startup is refused with a configuration error that names the setting and points to the upgrade note
 
-#### Scenario: Token request rejected
-- **WHEN** Keycloak rejects the client credentials
-- **THEN** the approval still succeeds for internal authorization state
-- **AND** the registration stores a provisioning error that contains the HTTP status but not the secret
+#### Scenario: Approval without provisioning
+- **WHEN** a district admin approves a registration and no provisioning provider is configured
+- **THEN** the registration is approved and no request is sent to the IdP
 
-### Requirement: Invitation links SHALL be time-limited and return to the application
-When an invitation is sent on approval, the system SHALL request the required actions `VERIFY_EMAIL` and `UPDATE_PASSWORD` with an explicit link lifetime. The lifetime SHALL default to 72 hours and MUST be configurable only between 1 hour and 7 days. When a return URI is configured, the system SHALL pass the application's OIDC client id and that URI so the user returns to the application after completing the actions.
+#### Scenario: Provisioning client removed by setup
+- **WHEN** the realm setup script runs against a realm that contains the client `nak-planner-provisioning`
+- **THEN** the script deletes that client and creates no client with a service account
 
-#### Scenario: Default lifetime
-- **WHEN** an invitation is sent and no lifetime is configured
-- **THEN** the invitation request carries a lifetime of 259200 seconds
+#### Scenario: Provisioning client inspection returns an invalid response
+- **WHEN** the realm setup receives an unexpected shape from the Keycloak client-list API
+- **THEN** setup fails rather than treating the former provisioning client as absent
 
-#### Scenario: Lifetime outside allowed range
-- **WHEN** the configured lifetime is below 3600 or above 604800 seconds
-- **THEN** settings validation fails at startup
+### Requirement: User accounts SHALL be created by self-registration with a verified email
+The documented realm setup SHALL allow users to register themselves in the application realm only with email verification and the email address as username. Access to protected business endpoints SHALL still require an approved registration linked by `sub` or by a verified email claim.
 
-#### Scenario: Return URI configured
-- **WHEN** an invitation is sent and a return URI is configured
-- **THEN** the invitation request carries the application's OIDC client id and the configured return URI
+#### Scenario: Realm allows verified self-registration
+- **WHEN** the realm setup script runs
+- **THEN** the realm has `registrationAllowed`, `verifyEmail` and `registrationEmailAsUsername` enabled
 
-#### Scenario: No return URI configured
-- **WHEN** an invitation is sent without a configured return URI
-- **THEN** the invitation request carries neither `client_id` nor `redirect_uri`
+#### Scenario: Self-registered account without approval
+- **WHEN** a user registers in Keycloak, verifies the email and logs in without an approved registration
+- **THEN** protected business endpoints return `403 Forbidden` indicating that approval is pending
+
+#### Scenario: Approved registration linked on first login
+- **WHEN** a registration for an email is approved and the user later logs in with a token whose `email` matches and `email_verified` is `true`
+- **THEN** the user receives the approved membership
+
+#### Scenario: Registration page offers account creation
+- **WHEN** an unauthenticated user submits the registration form
+- **THEN** the page offers to create an account, which starts the OIDC login with `prompt=create`, and states that the account email must match the registration email
+
+#### Scenario: Authenticated user registers
+- **WHEN** an authenticated user submits the registration form
+- **THEN** the request carries the user's access token and the registration stores the token's `sub`
+
+### Requirement: Registration approval state transition SHALL be centralized in the domain
+A registration SHALL only transition from `PENDING` to `APPROVED` using the domain model's approval operation, which MUST set role, scope, approving subject, approval timestamp and update timestamp together. The operation SHALL reset prior provisioning status and error fields and MUST reject non-pending registrations without modifying them.
+
+#### Scenario: Approving a pending registration
+- **WHEN** a district admin approves a pending registration with role, scope and actor
+- **THEN** the domain changes status to APPROVED and stores all authorization metadata and timestamps together
+
+#### Scenario: Attempting to approve an already resolved registration
+- **WHEN** an approval operation is attempted for an approved or rejected registration
+- **THEN** the domain rejects the operation without mutating its current state
+
+#### Scenario: Existing transactional effects preserved
+- **WHEN** leader persistence or membership linking fails during approval
+- **THEN** the request transaction rolls back as before and no after-commit event is published
