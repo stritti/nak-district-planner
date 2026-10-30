@@ -4,7 +4,7 @@
 <template>
   <!-- Matrix Table -->
   <div
-    v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
+    v-if="matrixLoaded && hasCongregations && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
     class="relative"
   >
     <div
@@ -257,33 +257,34 @@
       aria-hidden="true"
     />
     <EmptyState
-      v-if="displayedRows.length === 0 && matrixStore.congregationQuery.trim()"
+      v-if="displayedRows.length === 0"
       compact
       :message="`Keine Gemeinde passt zu „${matrixStore.congregationQuery.trim()}“.`"
       action-label="Filter zurücksetzen"
       @action="matrixStore.congregationQuery = ''"
     />
-    <EmptyState
-      v-else-if="displayedRows.length === 0 && matrixStore.groupId"
-      compact
-      message="Diese Gruppe hat keine Gemeinden."
-      action-label="Alle Gruppen zeigen"
-      @action="showAllGroups"
-    />
-    <EmptyState
-      v-else-if="displayedRows.length === 0"
-      compact
-      message="Dieser Bezirk hat noch keine Gemeinden."
-      :hint="canCreateCongregation
-        ? 'Legen Sie die erste Gemeinde an, damit die Matrix Gottesdienste zeigen kann.'
-        : 'Die Bezirksverwaltung legt die Gemeinden an.'"
-      :action-label="canCreateCongregation ? 'Gemeinde anlegen' : undefined"
-      @action="createCongregation"
-    />
   </div>
 
+  <!-- No rows at all: an empty group, or a district without congregations (with or without dates). -->
+  <EmptyState
+    v-if="matrixLoaded && !hasCongregations && matrixStore.groupId"
+    compact
+    message="Diese Gruppe hat keine Gemeinden."
+    action-label="Alle Gruppen zeigen"
+    @action="showAllGroups"
+  />
+  <EmptyState
+    v-else-if="matrixLoaded && !hasCongregations"
+    compact
+    message="Dieser Bezirk hat noch keine Gemeinden."
+    :hint="canCreateCongregation
+      ? 'Legen Sie die erste Gemeinde an, damit die Matrix Gottesdienste zeigen kann.'
+      : 'Die Bezirksverwaltung legt die Gemeinden an.'"
+    :action-label="canCreateCongregation ? 'Gemeinde anlegen' : undefined"
+    @action="createCongregation"
+  />
   <div
-    v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length === 0"
+    v-else-if="matrixLoaded && matrixStore.matrix?.dates.length === 0"
     class="text-sm text-gray-500 dark:text-gray-400"
   >
     Keine Ereignisse im gewählten Zeitraum.
@@ -442,6 +443,9 @@ const leaderNameClass = computed(() => {
     props.compactMode ? 'text-[10px] max-w-[13ch] xl:max-w-[15ch]' : 'text-[11px] max-w-[18ch] xl:max-w-[24ch]',
   ]
 })
+
+const matrixLoaded = computed(() => !matrixStore.loading && !matrixStore.error && !!matrixStore.matrix)
+const hasCongregations = computed(() => (matrixStore.matrix?.rows.length ?? 0) > 0)
 
 const displayedRows = computed((): MatrixRow[] => {
   const rows = filterMatrixRows(matrixStore.matrix?.rows ?? [], matrixStore.congregationQuery)

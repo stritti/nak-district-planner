@@ -262,7 +262,7 @@ describe('MatrixTable sticky date header', () => {
 
   it('does not create a scrollable header when there are no dates', () => {
     const store = useMatrixStore()
-    store.matrix = { dates: [], rows: [], holidays: {} }
+    store.matrix = { dates: [], rows: [{ congregation_id: 'c1', congregation_name: 'Nord', group_name: null, cells: {} }], holidays: {} }
     const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
     expect(wrapper.find('[data-testid="matrix-scroll"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Keine Ereignisse im gewählten Zeitraum.')
@@ -275,10 +275,10 @@ describe('MatrixTable without congregations', () => {
     setActivePinia(createPinia())
   })
 
-  function mountEmpty(options: { admin: boolean; withRouter: boolean }) {
+  function mountEmpty(options: { admin: boolean; withRouter: boolean; dates?: string[] }) {
     const store = useMatrixStore()
     store.districtId = 'd1'
-    store.matrix = { dates: ['2026-10-04'], rows: [], holidays: {} }
+    store.matrix = { dates: options.dates ?? ['2026-10-04'], rows: [], holidays: {} }
     const auth = useAuthStore()
     auth.isSuperadmin = options.admin
     const router = createRouter({
@@ -303,6 +303,15 @@ describe('MatrixTable without congregations', () => {
     await empty.get('button').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('admin-districts')
+  })
+
+  it('shows the onboarding for a new district without any date columns', () => {
+    const { wrapper } = mountEmpty({ admin: true, withRouter: true, dates: [] })
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Dieser Bezirk hat noch keine Gemeinden.')
+    expect(empty.find('button').text()).toBe('Gemeinde anlegen')
+    expect(wrapper.text()).not.toContain('Keine Ereignisse im gewählten Zeitraum.')
+    expect(wrapper.find('table').exists()).toBe(false)
   })
 
   it('offers to clear an empty group filter instead of the district onboarding', async () => {
