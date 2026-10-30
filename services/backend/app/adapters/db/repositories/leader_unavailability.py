@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import datetime
 
 from sqlalchemy import select
@@ -58,6 +59,26 @@ class SqlLeaderUnavailabilityRepository(LeaderUnavailabilityRepository):
             select(LeaderUnavailabilityORM)
             .where(
                 LeaderUnavailabilityORM.leader_id == leader_id,
+                LeaderUnavailabilityORM.start_at < end_at,
+                LeaderUnavailabilityORM.end_at > start_at,
+            )
+            .order_by(LeaderUnavailabilityORM.start_at)
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def list_overlapping_for_leaders(
+        self,
+        *,
+        leader_ids: Collection[uuid.UUID],
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[LeaderUnavailability]:
+        if not leader_ids:
+            return []
+        result = await self._session.execute(
+            select(LeaderUnavailabilityORM)
+            .where(
+                LeaderUnavailabilityORM.leader_id.in_(list(leader_ids)),
                 LeaderUnavailabilityORM.start_at < end_at,
                 LeaderUnavailabilityORM.end_at > start_at,
             )

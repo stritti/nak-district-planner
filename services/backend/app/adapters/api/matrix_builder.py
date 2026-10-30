@@ -23,11 +23,17 @@ from app.adapters.api.schemas.matrix import (
 from app.config import settings
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
-from app.domain.models.leader import assignment_needs_review
+from app.domain.models.leader import Leader, assignment_needs_review
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.planning.conflict_result import ConflictResult, ScheduledService
+from app.domain.planning.duty_conflicts import ScheduledDuty
 from app.domain.planning.matrix_conflicts import PlannedService, matrix_conflicts
+from app.domain.ports.event_duties import EventDutiesRepository
+from app.domain.ports.repositories import LeaderUnavailabilityRepository
+
+# Placeholder for the duty lookup's excluded slot: no planning slot has the nil UUID.
+_NO_SLOT = uuid.UUID(int=0)
 
 
 def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -> list[str]:
@@ -47,18 +53,16 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
     return dates
 
 
-def _assignment_conflicts(
+def _planned_services(
     assignments: list[ServiceAssignment],
     slots: list[PlanningSlot],
     instance_by_slot_id: dict[uuid.UUID, EventInstance],
-) -> dict[uuid.UUID, list[ConflictResult]]:
-    """Double booking and short travel time among the leader assignments of this matrix.
+) -> list[PlannedService]:
+    """Leader assignments of this matrix with the window of their event.
 
     Free-text guests carry no identity and are skipped; so are assignments whose slot
     lies outside the loaded range.
     """
-    if not settings.conflict_check_enabled:
-        return {}
     slot_by_id = {slot.id: slot for slot in slots}
     default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
     planned: list[PlannedService] = []
@@ -75,10 +79,66 @@ def _assignment_conflicts(
             instance.actual_end_at if instance else None,
         ).window(default_duration)
         planned.append(
-            PlannedService(assignment.id, assignment.leader_id, slot.congregation_id, start, end)
+            PlannedService(
+                assignment.id, assignment.leader_id, slot.congregation_id, start, end, slot.id
+            )
         )
-    return matrix_conflicts(planned, min_travel_minutes=settings.min_travel_minutes)
+    return planned
 
+
+async def _assignment_conflicts(
+    district_id: uuid.UUID,
+    planned: list[PlannedService],
+    leaders_by_id: dict[uuid.UUID, Leader],
+    *,
+    duty_repo: EventDutiesRepository | None,
+    unavailability_repo: LeaderUnavailabilityRepository | None,
+) -> dict[uuid.UUID, list[ConflictResult]]:
+    """Planning conflicts of the matrix assignments, as the assignment dialog checks them.
+
+    Besides double booking and travel time among the loaded assignments, a leader's
+    organisational duties, services outside the loaded matrix (another group, say)
+    and recorded absences count. The duty lookup returns nothing for callers below
+    PLANNER, and absences follow row-level security, so viewers see no more than
+    they may read.
+    """
+    if not settings.conflict_check_enabled or not planned:
+        return {}
+    default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
+    margin = default_duration + timedelta(minutes=settings.min_travel_minutes)
+    window_start = min(service.start_time for service in planned) - margin
+    window_end = max(service.end_time for service in planned) + margin
+    leader_ids = sorted({service.leader_id for service in planned})
+
+    other_bookings: dict[uuid.UUID, list[ScheduledDuty]] = {}
+    if duty_repo is not None:
+        for leader_id in leader_ids:
+            leader = leaders_by_id.get(leader_id)
+            other_bookings[leader_id] = await duty_repo.list_identity_schedule(
+                district_id,
+                linked_user_sub=leader.user_sub if leader else None,
+                normalized_name=None,
+                leader_id=leader_id,
+                window_start=window_start,
+                window_end=window_end,
+                # The lookup compares slot ids with ``<>``, so it needs a value; the
+                # matrix drops each assignment's own slot itself (matrix_conflicts).
+                exclude_slot_id=_NO_SLOT,
+            )
+
+    absences: dict[uuid.UUID, list[tuple[datetime, datetime]]] = {}
+    if unavailability_repo is not None:
+        for item in await unavailability_repo.list_overlapping_for_leaders(
+            leader_ids=leader_ids, start_at=window_start, end_at=window_end
+        ):
+            absences.setdefault(item.leader_id, []).append((item.start_at, item.end_at))
+
+    return matrix_conflicts(
+        planned,
+        min_travel_minutes=settings.min_travel_minutes,
+        other_bookings=other_bookings,
+        unavailability=absences,
+    )
 
 
 async def build_matrix(
@@ -94,6 +154,8 @@ async def build_matrix(
     instance_repo,
     sa_repo,
     inv_repo,
+    duty_repo: EventDutiesRepository | None = None,
+    unavailability_repo: LeaderUnavailabilityRepository | None = None,
 ) -> MatrixResponse:
     """Assemble the matrix response from repository data.
 
@@ -229,8 +291,12 @@ async def build_matrix(
         if assignment_key not in assignment_by_slot_id:
             assignment_by_slot_id[assignment_key] = a
 
-    conflicts_by_assignment = _assignment_conflicts(
-        assignments, gottesdienst_slots, instance_by_slot_id
+    conflicts_by_assignment = await _assignment_conflicts(
+        district_id,
+        _planned_services(assignments, gottesdienst_slots, instance_by_slot_id),
+        leaders_by_id,
+        duty_repo=duty_repo,
+        unavailability_repo=unavailability_repo,
     )
 
     # Build matrix rows

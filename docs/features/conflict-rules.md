@@ -36,6 +36,16 @@ Das Frontend behandelt nur `WARN` und `PASS` als nicht-blockierend. Fügt das Ba
 4. **WARN**: Confirm-Dialog „Trotz Konflikt zuweisen?" — Bestätigen sendet die Zuweisung erneut mit `confirm_warnings: true`
 5. Nach erfolgreichem Speichern wird die Matrix neu geladen
 
+## Konflikte in der Matrix
+
+Die Matrix (`GET /api/v1/districts/{id}/matrix`) zeigt je Zelle dieselben Konflikte, die der Assignment-Dialog bei einer erneuten Zuweisung melden würde: `no_double_booking`, `travel_time_check` und `leader_available`. Verglichen wird mit
+
+- den übrigen Zuweisungen der geladenen Matrix,
+- organisatorischen Diensten derselben Person (Organist, Dirigent, …) und ihren Zuweisungen außerhalb der geladenen Matrix, etwa in einer anderen Gruppe; ein Dienst im selben Gottesdienst zählt nicht,
+- erfassten Abwesenheiten des Amtsträgers.
+
+Dienste fließen nur für Personen ab der Rolle `PLANNER` ein, weil die Dienst-Abfrage nur Planenden antwortet. Abwesenheiten folgen der Row-Level Security.
+
 ## E2E-Tests
 
 Die Playwright-Suiten (`services/frontend/tests/e2e/`) sind in `tests/e2e/`-Setup unter dem Frontend-Verzeichnis organisiert; Konflikt-Szenarien werden in `conflict-assignment.spec.ts` abgedeckt.

@@ -109,7 +109,7 @@ When the event overview allows editing its responsible-person column in place, t
 - **THEN** the existing 409 conflict policy applies and the current persisted assignment remains displayed until successfully changed
 
 ### Requirement: Matrix cells show planning conflicts
-The matrix response SHALL list per cell the planning conflicts of its leader assignment among the loaded assignments: overlapping events (blocking) and too little travel time between congregations (warning). The matrix SHALL mark such cells with a text label that does not rely on colour alone.
+The matrix response SHALL list per cell the planning conflicts of its leader assignment: overlapping events (blocking) and too little travel time between congregations (warning) among the loaded assignments and the leader's other bookings in the district (organisational duties and service assignments outside the loaded matrix), and a recorded absence of the leader (blocking). The matrix SHALL mark such cells with a text label that does not rely on colour alone.
 
 #### Scenario: Same rules as assigning
 - **WHEN** conflicts are computed
@@ -124,6 +124,20 @@ The matrix response SHALL list per cell the planning conflicts of its leader ass
 #### Scenario: Short travel time
 - **WHEN** one leader has events in two congregations with less than the configured travel time between them
 - **THEN** both cells carry a `travel_time_check` conflict with severity `WARN` and the matrix marks them with "Warnung"
+
+#### Scenario: Duty of the same person elsewhere
+- **WHEN** a leader assigned in the matrix holds an organisational duty that overlaps the service in another or the same congregation
+- **THEN** the cell carries a `no_double_booking` conflict with severity `BLOCK`
+- **AND** a duty on the assigned service itself is not a conflict
+
+#### Scenario: Leader absent
+- **WHEN** a recorded unavailability period of the assigned leader overlaps the service
+- **THEN** the cell carries a `leader_available` conflict with severity `BLOCK`
+
+#### Scenario: Visibility of other bookings
+- **WHEN** a caller below `PLANNER` requests the matrix
+- **THEN** duty bookings are not considered, because the duty lookup only answers planners
+- **AND** absences are considered only as far as row-level security lets the caller read them
 
 #### Scenario: Different leaders
 - **WHEN** two different leaders are assigned to overlapping events

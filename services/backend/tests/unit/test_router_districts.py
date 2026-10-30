@@ -25,10 +25,12 @@ from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
 from app.domain.models.leader import Leader, LeaderRank
+from app.domain.models.leader_unavailability import LeaderUnavailability, UnavailabilityReason
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+from app.domain.planning.duty_conflicts import ScheduledDuty
 
 
 def _superadmin_user() -> object:
@@ -56,6 +58,8 @@ def _matrix_repos(
     assignments: list | None = None,
     leaders: list | None = None,
     invitations: list | None = None,
+    duties: list | None = None,
+    unavailabilities: list | None = None,
 ) -> dict:
     district_repo = AsyncMock()
     district_repo.get.return_value = district
@@ -82,6 +86,12 @@ def _matrix_repos(
     inv_repo = AsyncMock()
     inv_repo.list_by_source_planning_slots.return_value = invitations or []
 
+    duty_repo = AsyncMock()
+    duty_repo.list_identity_schedule.return_value = duties or []
+
+    unavailability_repo = AsyncMock()
+    unavailability_repo.list_overlapping_for_leaders.return_value = unavailabilities or []
+
     return {
         "district_repo": district_repo,
         "cong_repo": cong_repo,
@@ -91,6 +101,8 @@ def _matrix_repos(
         "instance_repo": instance_repo,
         "sa_repo": sa_repo,
         "inv_repo": inv_repo,
+        "duty_repo": duty_repo,
+        "unavailability_repo": unavailability_repo,
     }
 
 
@@ -598,12 +610,18 @@ def _slot_with_leader(district_id, congregation, leader, start, *, minutes=60, s
     return slot, instance, assignment
 
 
-async def _matrix_for(district_id, congregations, parts, leaders, day):
+async def _matrix_for(
+    district_id, congregations, parts, leaders, day, *, duties=None, unavailabilities=None,
+    repos_out=None,
+):
     slots, instances, assignments = zip(*parts, strict=True)
     repos = _matrix_repos(
         district=District.create(name="D"), congregations=congregations, slots=list(slots),
         instances=list(instances), assignments=list(assignments), leaders=leaders,
+        duties=duties, unavailabilities=unavailabilities,
     )
+    if repos_out is not None:
+        repos_out.update(repos)
     return await r.get_matrix(
         district_id, _superadmin_auth(), AsyncMock(), from_dt=day - timedelta(days=1),
         to_dt=day + timedelta(days=1), group_id=None, **repos,
@@ -692,6 +710,97 @@ async def test_matrix_shows_later_same_day_service_conflict_when_primary_is_clea
     assert len(cell.conflicts) == 1
     assert cell.conflicts[0].rule_id == "no_double_booking"
     assert cell.conflicts[0].message.startswith("10:30 Uhr:")
+
+
+@pytest.mark.asyncio
+async def test_matrix_marks_a_service_overlapping_a_duty_of_the_same_person() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    sued = Congregation.create(name="Sued", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    service = _slot_with_leader(district_id, nord, leader, start)
+    organ_elsewhere = ScheduledDuty(
+        uuid.uuid4(), sued.id, start + timedelta(minutes=15), start + timedelta(minutes=75),
+        strong=True,
+    )
+    repos: dict = {}
+
+    result = await _matrix_for(
+        district_id, [nord, sued], [service], [leader], start, duties=[organ_elsewhere],
+        repos_out=repos,
+    )
+
+    [conflict] = result.rows[0].cells[start.date().isoformat()].conflicts
+    assert (conflict.rule_id, conflict.severity) == ("no_double_booking", "BLOCK")
+    call = repos["duty_repo"].list_identity_schedule.await_args
+    assert call.args == (district_id,)
+    assert call.kwargs["leader_id"] == leader.id
+    assert call.kwargs["exclude_slot_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_matrix_ignores_a_duty_on_the_assignments_own_service() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    service = _slot_with_leader(district_id, nord, leader, start)
+    own_slot_duty = ScheduledDuty(
+        service[0].id, nord.id, start, start + timedelta(minutes=60), strong=True,
+    )
+
+    result = await _matrix_for(
+        district_id, [nord], [service], [leader], start, duties=[own_slot_duty],
+    )
+
+    assert result.rows[0].cells[start.date().isoformat()].conflicts == []
+
+
+@pytest.mark.asyncio
+async def test_matrix_marks_a_service_during_a_recorded_absence() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    service = _slot_with_leader(district_id, nord, leader, start)
+    holiday = LeaderUnavailability.create(
+        leader_id=leader.id, start_at=start - timedelta(days=1), end_at=start + timedelta(days=1),
+        reason=UnavailabilityReason.VACATION,
+    )
+    repos: dict = {}
+
+    result = await _matrix_for(
+        district_id, [nord], [service], [leader], start, unavailabilities=[holiday],
+        repos_out=repos,
+    )
+
+    [conflict] = result.rows[0].cells[start.date().isoformat()].conflicts
+    assert (conflict.rule_id, conflict.severity) == ("leader_available", "BLOCK")
+    call = repos["unavailability_repo"].list_overlapping_for_leaders.await_args
+    assert call.kwargs["leader_ids"] == [leader.id]
+
+
+@pytest.mark.asyncio
+async def test_matrix_skips_duty_and_absence_lookups_without_leader_assignments() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    slot = PlanningSlot.create(
+        district_id=district_id, congregation_id=nord.id, planning_date=start.date(),
+        planning_time=start.time(), category="Gottesdienst", title="GD",
+        status=PlanningSlotStatus.ACTIVE,
+    )
+    repos = _matrix_repos(district=District.create(name="D"), congregations=[nord], slots=[slot])
+
+    result = await r.get_matrix(
+        district_id, _superadmin_auth(), AsyncMock(), from_dt=start - timedelta(days=1),
+        to_dt=start + timedelta(days=1), group_id=None, **repos,
+    )
+
+    assert result.rows[0].cells[start.date().isoformat()].is_gap is True
+    repos["duty_repo"].list_identity_schedule.assert_not_awaited()
+    repos["unavailability_repo"].list_overlapping_for_leaders.assert_not_awaited()
 
 
 @pytest.mark.asyncio
