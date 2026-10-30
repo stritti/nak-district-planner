@@ -162,6 +162,12 @@ class Settings(BaseSettings):
             )
         return self
 
+    @field_validator("idp_provisioning_provider")
+    @classmethod
+    def normalize_idp_provisioning_provider(cls, value: str) -> str:
+        """Compare provider names case-insensitively (``Keycloak`` must not slip past the guard)."""
+        return value.strip().lower()
+
     @field_validator("trusted_proxies")
     @classmethod
     def validate_trusted_proxies(cls, value: str) -> str:
