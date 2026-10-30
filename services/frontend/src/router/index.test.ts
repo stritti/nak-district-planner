@@ -118,7 +118,7 @@ describe('router', () => {
     await expect(loader!()).resolves.toBeTruthy()
   })
 
-  it.each(['personal-calendar', 'admin-duties'])('loads the %s view lazily', async (name) => {
+  it.each(['personal-calendar', 'admin-duties', 'admin-users'])('loads the %s view lazily', async (name) => {
     const route = router.getRoutes().find((candidate) => candidate.name === name)
     const loader = route?.components?.default as (() => Promise<unknown>) | undefined
 

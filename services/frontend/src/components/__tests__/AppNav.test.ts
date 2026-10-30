@@ -30,6 +30,7 @@ function makeRouter() {
       { path: '/admin/leaders', component: { template: '<div />' } },
       { path: '/admin/calendars', component: { template: '<div />' } },
       { path: '/admin/export', component: { template: '<div />' } },
+      { path: '/admin/users', component: { template: '<div />' } },
       { path: '/login', component: { template: '<div />' } },
     ],
   })
@@ -77,5 +78,24 @@ describe('AppNav mobile menu', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('button[aria-label="Navigation schließen"]').exists()).toBe(false)
+  })
+
+  it.each([
+    ['a planner', [{ role: 'PLANNER', scope_type: 'DISTRICT' as const, scope_id: 'd1' }], false, false],
+    ['a congregation admin', [{ role: 'CONGREGATION_ADMIN', scope_type: 'CONGREGATION' as const, scope_id: 'c1' }], false, true],
+    ['a superadmin without memberships', [], true, true],
+  ])('shows the user administration link to %s only when it manages a unit', async (_who, memberships, superadmin, visible) => {
+    const router = makeRouter()
+    await router.push('/events')
+    await router.isReady()
+
+    const authStore = useAuthStore()
+    authStore.setToken({ accessToken: 'x', idToken: 'x', expiresAt: Date.now() / 1000 + 3600 })
+    authStore.memberships = memberships
+    authStore.isSuperadmin = superadmin
+
+    const wrapper = mount(AppNav, { global: { plugins: [router] } })
+
+    expect(wrapper.find('a[href="/admin/users"]').exists()).toBe(visible)
   })
 })
