@@ -103,9 +103,9 @@ class TestGetCurrentUserAutoCreation:
     async def test_first_login_persists_bootstrap_superadmin(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
-        """The database grant result (owner-provisioned subject) is kept in
-        memory for the in-session user object; the app passes only the
-        authenticated subject and no authorization facts.
+        """The persisted flag after the bootstrap grant (owner-provisioned
+        subject) is kept in memory for the in-session user object; the app
+        passes only the authenticated subject and no authorization facts.
         """
         token_claims = {
             "sub": "first-user",
@@ -138,7 +138,7 @@ class TestGetCurrentUserAutoCreation:
             )
 
         assert user.is_superadmin is True
-        grant_call = mock_session.execute.await_args_list[-1]
+        grant_call = mock_session.execute.await_args_list[-2]
         assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
         # Authorization facts are derived from owner-controlled database
         # state; the app must not pass configured subjects or login hints.
@@ -148,9 +148,9 @@ class TestGetCurrentUserAutoCreation:
     async def test_existing_user_with_grant_keeps_flag(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
-        """An existing user the database grants the flag keeps it, and the
-        reconciliation function is invoked on every login so rotations of
-        the configured subject also revoke stale persisted grants.
+        """An existing user whose persisted flag is set keeps it; the one-time
+        bootstrap helper is still called on every login (it is a no-op once
+        the bootstrap is completed).
         """
         token_claims = {
             "sub": "configured-admin",
@@ -189,7 +189,7 @@ class TestGetCurrentUserAutoCreation:
             )
 
         assert user.is_superadmin is True
-        grant_call = mock_session.execute.await_args_list[-1]
+        grant_call = mock_session.execute.await_args_list[-2]
         assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
         assert grant_call.args[1] == {"user_sub": "configured-admin"}
 
@@ -273,7 +273,7 @@ class TestGetCurrentUserAutoCreation:
             )
 
         assert user.is_superadmin is True
-        grant_call = mock_session.execute.await_args_list[-1]
+        grant_call = mock_session.execute.await_args_list[-2]
         assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
         assert grant_call.args[1] == {"user_sub": "user-456"}
 
@@ -351,7 +351,7 @@ class TestEmailVerifiedPropagation:
 
 
 class TestBootstrapReconciliation:
-    """Negative-path tests for the superadmin reconciliation dependency flow."""
+    """Negative-path tests for the superadmin bootstrap dependency flow."""
 
     @staticmethod
     def _oidc_mock(mock_oidc_adapter, sub="newbie", email="newbie@example.com"):
@@ -369,7 +369,7 @@ class TestBootstrapReconciliation:
     async def test_grant_failure_propagates_as_500(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
-        """A failing reconciliation call must not silently default to false:
+        """A failing bootstrap call must not silently default to false:
         the exception propagates so the request is rejected, never a
         half-authenticated session with an unset superadmin flag.
         """
@@ -418,7 +418,7 @@ class TestBootstrapReconciliation:
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
         """The verified token subject must be installed as session GUC right
-        before the reconciliation call, independent of middleware state.
+        before the bootstrap call, independent of middleware state.
         """
         self._oidc_mock(mock_oidc_adapter, sub="verified-sub")
         grant_result = MagicMock()
@@ -434,21 +434,53 @@ class TestBootstrapReconciliation:
             await get_current_user(mock_request, mock_credentials, mock_session)
 
         execute_calls = mock_session.execute.await_args_list
-        guc_call = execute_calls[-2]
+        guc_call = execute_calls[-3]
         assert "set_config" in str(guc_call.args[0])
         assert "app.current_user_sub" in str(guc_call.args[0])
         assert guc_call.args[1] == {"user_sub": "verified-sub"}
-        grant_call = execute_calls[-1]
+        grant_call = execute_calls[-2]
         assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
         assert grant_call.args[1] == {"user_sub": "verified-sub"}
+        flag_call = execute_calls[-1]
+        assert "SELECT is_superadmin FROM users" in str(flag_call.args[0])
+        assert flag_call.args[1] == {"user_sub": "verified-sub"}
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("helper_result", "persisted", "expected"), [
+        (False, True, True),  # appointed superadmin, not the bootstrap subject
+        (True, False, False),  # helper result is never an authorization decision
+        (None, None, False),  # no user row visible: fail closed
+    ])
+    async def test_flag_comes_from_persisted_row_not_helper(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request,
+        helper_result, persisted, expected,
+    ):
+        """Authorization uses the persisted users.is_superadmin value."""
+        self._oidc_mock(mock_oidc_adapter, sub="appointed-admin")
+        results = []
+        for value in (None, helper_result, persisted):
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = value
+            results.append(result)
+        mock_session.execute = AsyncMock(side_effect=results)
+
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.save = AsyncMock()
+            MockRepo.return_value = mock_repo_instance
+
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
+
+        assert user.is_superadmin is expected
 
     @pytest.mark.asyncio
     async def test_revoked_superadmin_flag_synced_in_memory(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
-        """After an owner rotation the former superadmin must lose the flag in
-        memory too: the reconciliation result overwrites the stale domain
-        object state instead of keeping the outdated in-memory value.
+        """After a revocation the former superadmin must lose the flag in
+        memory too: the persisted value overwrites the stale domain object
+        state instead of keeping the outdated in-memory value.
         """
         self._oidc_mock(mock_oidc_adapter, sub="former-admin")
         existing_user = User(
