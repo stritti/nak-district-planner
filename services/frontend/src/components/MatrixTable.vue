@@ -264,6 +264,13 @@
       @action="matrixStore.congregationQuery = ''"
     />
     <EmptyState
+      v-else-if="displayedRows.length === 0 && matrixStore.groupId"
+      compact
+      message="Diese Gruppe hat keine Gemeinden."
+      action-label="Alle Gruppen zeigen"
+      @action="showAllGroups"
+    />
+    <EmptyState
       v-else-if="displayedRows.length === 0"
       compact
       message="Dieser Bezirk hat noch keine Gemeinden."
@@ -339,6 +346,11 @@ const router = inject(routerKey, null)
 const canCreateCongregation = computed(() =>
   router !== null && auth.canAdminDistrict(matrixStore.districtId),
 )
+
+function showAllGroups(): void {
+  matrixStore.groupId = ''
+  void matrixStore.fetch()
+}
 
 function createCongregation(): void {
   void router?.push({ name: 'admin-districts' })

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
@@ -303,6 +303,22 @@ describe('MatrixTable without congregations', () => {
     await empty.get('button').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('admin-districts')
+  })
+
+  it('offers to clear an empty group filter instead of the district onboarding', async () => {
+    const { wrapper } = mountEmpty({ admin: true, withRouter: true })
+    const store = useMatrixStore()
+    const fetch = vi.spyOn(store, 'fetch').mockResolvedValue()
+    store.groupId = 'g1'
+    await wrapper.vm.$nextTick()
+
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Diese Gruppe hat keine Gemeinden.')
+    expect(empty.text()).not.toContain('noch keine Gemeinden')
+    await empty.get('button').trigger('click')
+
+    expect(store.groupId).toBe('')
+    expect(fetch).toHaveBeenCalledOnce()
   })
 
   it('only explains the next step to everyone else', () => {

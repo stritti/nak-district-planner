@@ -189,9 +189,13 @@ The SPA SHALL show the same German text per failure kind in views, dialogs and e
 - **THEN** the SPA shows a request to try again later and none of the response body
 
 ### Requirement: Onboarding empty states
-Empty lists that a new installation starts with SHALL explain the next step and, for users allowed to take it, offer it as an action: the first district, the first congregation of a district, and the matrix of a district without congregations. The matrix SHALL distinguish a district without congregations from a congregation filter without matches.
+Empty lists that a new installation starts with SHALL explain the next step and, for users allowed to take it, offer it as an action: the first district, the first congregation of a district, and the matrix of a district without congregations. The matrix SHALL distinguish a district without congregations from a congregation or group filter without matches.
 
 #### Scenario: District without congregations in the matrix
 - **WHEN** the matrix of a district without congregations is shown and no congregation filter is set
 - **THEN** it states that the district has no congregations yet instead of a filter hint
 - **AND** offers "Gemeinde anlegen" only to district admins
+
+#### Scenario: Group without congregations
+- **WHEN** the selected group of the matrix has no congregations
+- **THEN** it states that the group has no congregations and offers to show all groups
