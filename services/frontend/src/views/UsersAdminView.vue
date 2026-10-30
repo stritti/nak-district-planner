@@ -113,7 +113,12 @@
           >
             <label class="text-xs text-gray-600 dark:text-gray-400">
               Einheit
-              <select v-model="draft(user.sub).unitKey" class="form-input mt-1 block" :aria-label="`Einheit für ${user.email}`">
+              <select
+                v-model="draft(user.sub).unitKey"
+                class="form-input mt-1 block"
+                :aria-label="`Einheit für ${user.email}`"
+                @change="dropUnfitRole(user.sub)"
+              >
                 <option value="" disabled>Einheit wählen</option>
                 <option v-for="unit in units" :key="unit.key" :value="unit.key">{{ unit.label }}</option>
               </select>
@@ -133,7 +138,7 @@
             <button
               type="submit"
               class="btn-primary text-sm"
-              :disabled="busy === user.sub || !draftUnit(user.sub) || !draft(user.sub).role"
+              :disabled="busy === user.sub || !draftUnit(user.sub) || !draftRole(user.sub)"
             >
               Zuordnen
             </button>
@@ -228,6 +233,16 @@ function draftRoles(sub: string): MembershipRole[] {
   return unit ? assignableRoles(unit.level, unit.scopeType) : []
 }
 
+/** The drafted role, provided it still fits the drafted unit. */
+function draftRole(sub: string): MembershipRole | '' {
+  const role = draft(sub).role
+  return role && draftRoles(sub).includes(role) ? role : ''
+}
+
+function dropUnfitRole(sub: string) {
+  draft(sub).role = draftRole(sub)
+}
+
 function levelFor(m: AdminMembership): MembershipRole | null {
   return managementLevel(auth.memberships, auth.isSuperadmin, {
     scopeType: m.scope_type,
@@ -244,48 +259,56 @@ function replaceUser(updated: AdminUser) {
   users.value = users.value.map((user) => (user.sub === updated.sub ? updated : user))
 }
 
-async function loadUnits() {
+function unitOption(unit: Unit, name: string): UnitOption | null {
+  const level = managementLevel(auth.memberships, auth.isSuperadmin, unit)
+  if (!level) return null
+  const kind = unit.scopeType === 'DISTRICT' ? 'Bezirk' : 'Gemeinde'
+  return { ...unit, key: unitKey(unit.scopeType, unit.scopeId), name, label: `${kind} ${name}`, level }
+}
+
+/**
+ * Units the caller manages. The district listing only covers district-scoped
+ * access, so congregations managed directly are taken from the memberships
+ * the user list shows (only managed units carry a name and district there).
+ */
+async function loadUnits(loadedUsers: AdminUser[]) {
   const districts = await listDistricts()
   const congregations = (
     await Promise.all(districts.map((district) => listCongregations(district.id)))
   ).flat()
-  const options: UnitOption[] = []
-  const known = new Map<string, string>()
+  const found = new Map<string, { unit: Unit; name: string }>()
   for (const district of districts) {
-    known.set(unitKey('DISTRICT', district.id), district.name)
-    const unit: Unit = { scopeType: 'DISTRICT', scopeId: district.id, districtId: district.id }
-    const level = managementLevel(auth.memberships, auth.isSuperadmin, unit)
-    if (level) {
-      options.push({ ...unit, key: unitKey('DISTRICT', district.id), name: district.name, label: `Bezirk ${district.name}`, level })
-    }
+    found.set(unitKey('DISTRICT', district.id), {
+      unit: { scopeType: 'DISTRICT', scopeId: district.id, districtId: district.id },
+      name: district.name,
+    })
   }
   for (const congregation of congregations) {
-    known.set(unitKey('CONGREGATION', congregation.id), congregation.name)
-    const unit: Unit = {
-      scopeType: 'CONGREGATION',
-      scopeId: congregation.id,
-      districtId: congregation.district_id,
-    }
-    const level = managementLevel(auth.memberships, auth.isSuperadmin, unit)
-    if (level) {
-      options.push({
-        ...unit,
-        key: unitKey('CONGREGATION', congregation.id),
-        name: congregation.name,
-        label: `Gemeinde ${congregation.name}`,
-        level,
-      })
-    }
+    found.set(unitKey('CONGREGATION', congregation.id), {
+      unit: { scopeType: 'CONGREGATION', scopeId: congregation.id, districtId: congregation.district_id },
+      name: congregation.name,
+    })
   }
-  names.value = known
-  units.value = options
+  for (const m of loadedUsers.flatMap((user) => user.memberships)) {
+    const key = unitKey(m.scope_type, m.scope_id)
+    if (found.has(key) || !m.scope_name) continue
+    found.set(key, {
+      unit: { scopeType: m.scope_type, scopeId: m.scope_id, districtId: m.district_id },
+      name: m.scope_name,
+    })
+  }
+  names.value = new Map([...found].map(([key, { name }]) => [key, name]))
+  units.value = [...found.values()]
+    .map(({ unit, name }) => unitOption(unit, name))
+    .filter((option): option is UnitOption => option !== null)
 }
 
 async function load() {
   loading.value = true
   loadError.value = null
   try {
-    const [loadedUsers] = await Promise.all([listUsers(), loadUnits()])
+    const loadedUsers = await listUsers()
+    await loadUnits(loadedUsers)
     users.value = loadedUsers
   } catch (cause) {
     loadError.value =
@@ -297,16 +320,22 @@ async function load() {
   }
 }
 
+/** After changing the own access the screen must reflect what is left of it. */
+async function refreshOwnAccess() {
+  await auth.refreshCurrentUserFlags()
+  await load()
+}
+
 async function assign(user: AdminUser) {
   const unit = draftUnit(user.sub)
-  const role = draft(user.sub).role
+  const role = draftRole(user.sub)
   if (!unit || !role) return
   busy.value = user.sub
   try {
     replaceUser(await assignMembership(user.sub, { scope_type: unit.scopeType, scope_id: unit.scopeId, role }))
     drafts[user.sub] = { unitKey: '', role: '' }
     toast.success(`${roleLabel(role)} in ${unit.label} zugeordnet`)
-    if (user.sub === auth.user?.sub) await auth.refreshCurrentUserFlags()
+    if (user.sub === auth.user?.sub) await refreshOwnAccess()
   } catch (cause) {
     toast.error(userMessage(cause, 'Zuordnung fehlgeschlagen'))
   } finally {
@@ -328,7 +357,7 @@ async function remove(user: AdminUser, m: AdminMembership) {
     await removeMembership(user.sub, m.id)
     replaceUser({ ...user, memberships: user.memberships.filter((other) => other.id !== m.id) })
     toast.success('Zuordnung entfernt')
-    if (user.sub === auth.user?.sub) await auth.refreshCurrentUserFlags()
+    if (user.sub === auth.user?.sub) await refreshOwnAccess()
   } catch (cause) {
     toast.error(userMessage(cause, 'Zuordnung konnte nicht entfernt werden'))
   } finally {
@@ -361,10 +390,7 @@ async function toggleSuperadmin(user: AdminUser) {
   try {
     replaceUser(await setSuperadmin(user.sub, grant))
     toast.success(grant ? 'Superadmin ernannt' : 'Superadmin-Status entzogen')
-    if (self) {
-      await auth.refreshCurrentUserFlags()
-      await load()
-    }
+    if (self) await refreshOwnAccess()
   } catch (cause) {
     toast.error(userMessage(cause, 'Superadmin-Status konnte nicht geändert werden'))
   } finally {

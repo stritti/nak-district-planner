@@ -106,6 +106,81 @@ describe('UsersAdminView', () => {
     expect(optionTexts(wrapper, 'Rolle für anna@example.org')).not.toContain('Bezirksadmin')
   })
 
+  it('finds congregations a congregation admin manages without district access', async () => {
+    vi.mocked(districtApi.listDistricts).mockResolvedValue([])
+    vi.mocked(usersApi.listUsers).mockResolvedValue([
+      adminUser(),
+      adminUser({
+        sub: 'sub-me',
+        email: 'me@example.org',
+        memberships: [
+          { id: 'm5', role: 'CONGREGATION_ADMIN', scope_type: 'CONGREGATION', scope_id: 'c1', scope_name: 'Stockach', district_id: 'd1' },
+        ],
+      }),
+    ])
+    const { wrapper } = mountView({
+      memberships: [{ role: 'CONGREGATION_ADMIN', scope_type: 'CONGREGATION', scope_id: 'c1' }],
+    })
+    await flushPromises()
+
+    expect(optionTexts(wrapper, 'Einheit für anna@example.org')).toEqual(['Gemeinde Stockach'])
+    expect(wrapper.text()).toContain('Gemeindeadmin · Stockach')
+  })
+
+  it('drops a role that no longer fits when the unit changes', async () => {
+    const { wrapper } = mountView()
+    await flushPromises()
+
+    const unit = wrapper.get('select[aria-label="Einheit für anna@example.org"]')
+    await unit.setValue('DISTRICT:d1')
+    await wrapper.get('select[aria-label="Rolle für anna@example.org"]').setValue('DISTRICT_ADMIN')
+    await unit.setValue('CONGREGATION:c1')
+
+    expect((wrapper.get('select[aria-label="Rolle für anna@example.org"]').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('form').trigger('submit')
+    expect(usersApi.assignMembership).not.toHaveBeenCalled()
+  })
+
+  it('keeps a role that still fits when the unit changes', async () => {
+    const { wrapper } = mountView()
+    await flushPromises()
+
+    const unit = wrapper.get('select[aria-label="Einheit für anna@example.org"]')
+    await unit.setValue('DISTRICT:d1')
+    await wrapper.get('select[aria-label="Rolle für anna@example.org"]').setValue('PLANNER')
+    await unit.setValue('CONGREGATION:c1')
+
+    expect((wrapper.get('select[aria-label="Rolle für anna@example.org"]').element as HTMLSelectElement).value).toBe('PLANNER')
+  })
+
+  it('reloads the screen after removing an own membership', async () => {
+    vi.mocked(usersApi.listUsers).mockResolvedValue([adminUser({ sub: 'sub-me' })])
+    const { wrapper, auth } = mountView({ sub: 'sub-me' })
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Lesezugriff in Stockach entfernen"]').trigger('click')
+    await flushPromises()
+
+    expect(auth.refreshCurrentUserFlags).toHaveBeenCalledOnce()
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(2)
+  })
+
+  it('reloads the screen after changing an own membership', async () => {
+    vi.mocked(usersApi.listUsers).mockResolvedValue([adminUser({ sub: 'sub-me', email: 'me@example.org' })])
+    vi.mocked(usersApi.assignMembership).mockResolvedValue(adminUser({ sub: 'sub-me' }))
+    const { wrapper, auth } = mountView({ sub: 'sub-me' })
+    await flushPromises()
+
+    await wrapper.get('select[aria-label="Einheit für me@example.org"]').setValue('DISTRICT:d1')
+    await wrapper.get('select[aria-label="Rolle für me@example.org"]').setValue('VIEWER')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(auth.refreshCurrentUserFlags).toHaveBeenCalledOnce()
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(2)
+  })
+
   it('assigns a role in another unit and keeps the existing membership', async () => {
     const updated = adminUser({
       memberships: [
