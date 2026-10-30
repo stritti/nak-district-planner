@@ -484,7 +484,7 @@
             :preset-leader-id="unavailabilityFilterLeaderId"
             @update:filter-leader-id="unavailabilityFilterLeaderId = $event"
             :saving="unavailabilitySavingDistrictId === selectedDistrictId"
-            @submit="saveUnavailability"
+            @submit="(body: LeaderUnavailabilityCreate) => saveUnavailability(body, () => unavailabilityFormRef?.reset())"
           />
         </div>
       </div>
@@ -612,6 +612,7 @@ import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
+import { useLeaderUnavailabilityActions } from '../composables/useLeaderUnavailabilityActions'
 import {
   BuildingOffice2Icon,
   CalendarDaysIcon,
@@ -676,6 +677,17 @@ const loading = ref(false)
 const saving = ref(false)
 const inlineCoordinator = useInlineCellCoordinator()
 const confirm = useConfirm()
+
+const {
+  unavailabilitySavingDistrictId,
+  unavailabilityDeleting,
+  pendingDeleteUnavailability,
+  canManageUnavailabilities,
+  saveUnavailability,
+  confirmDeleteUnavailability,
+  executeDeleteUnavailability,
+} = useLeaderUnavailabilityActions(selectedDistrictId, leaders, leaderNameFromId)
+
 onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
@@ -853,21 +865,8 @@ const unavailabilityFilterLeaderId = ref('')
 useSessionViewSettings('leaders', () => authStore.user?.sub ?? null, () => selectedDistrictId.value, {
   leader: sessionField(unavailabilityFilterLeaderId, () => '', sessionText),
 })
-const unavailabilitySavingDistrictId = ref('')
 let districtLoadGeneration = 0
-const unavailabilityDeleting = ref(false)
 const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
-const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
-
-const canManageUnavailabilities = computed(() => {
-  if (authStore.isSuperadmin) return true
-  return authStore.memberships.some(
-    (membership) =>
-      membership.scope_type === 'DISTRICT' &&
-      membership.scope_id === selectedDistrictId.value &&
-      ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role),
-  )
-})
 
 function canIncludeInactiveLeaders(districtId: string): boolean {
   return authStore.isSuperadmin || authStore.memberships.some(
@@ -891,49 +890,6 @@ async function switchToUnavailabilities(leaderId?: string) {
 
 function openUnavailabilitiesFor(leader: LeaderResponse) {
   switchToUnavailabilities(leader.id)
-}
-
-async function saveUnavailability(body: LeaderUnavailabilityCreate) {
-  const districtId = selectedDistrictId.value
-  if (!districtId || !canManageUnavailabilities.value) return
-  const leaderSnapshot = [...leaders.value]
-  unavailabilitySavingDistrictId.value = districtId
-  try {
-    const created = await unavailabilitiesStore.addUnavailability(body)
-    if (selectedDistrictId.value === districtId) {
-      unavailabilityFormRef.value?.reset()
-      toastStore.success(
-        'Abwesenheit erfasst',
-        `${leaderNameFromId(created.leader_id, leaderSnapshot)}: ${formatUnavailabilityPeriod(created)}`,
-      )
-    }
-  } catch (e) {
-    toastStore.error(
-      'Abwesenheit konnte nicht erfasst werden',
-      e instanceof Error ? e.message : undefined,
-    )
-  } finally {
-    if (unavailabilitySavingDistrictId.value === districtId) unavailabilitySavingDistrictId.value = ''
-  }
-}
-
-function confirmDeleteUnavailability(item: LeaderUnavailabilityResponse) {
-  pendingDeleteUnavailability.value = item
-}
-
-async function executeDeleteUnavailability() {
-  if (!pendingDeleteUnavailability.value || !selectedDistrictId.value || !canManageUnavailabilities.value) return
-  const item = pendingDeleteUnavailability.value
-  unavailabilityDeleting.value = true
-  try {
-    await unavailabilitiesStore.removeUnavailability(item.id)
-    pendingDeleteUnavailability.value = null
-    toastStore.success('Abwesenheit gelöscht', formatUnavailabilityPeriod(item))
-  } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
-  } finally {
-    unavailabilityDeleting.value = false
-  }
 }
 
 // Approve modal
