@@ -239,7 +239,7 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDownTrayIcon,
@@ -250,6 +250,7 @@ import {
   MoonIcon,
   SunIcon,
   TableCellsIcon,
+  UserGroupIcon,
   UserIcon,
   UsersIcon,
   XMarkIcon,
@@ -259,6 +260,7 @@ import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useNotificationStore } from '../stores/notifications'
 import { useOIDC } from '../composables/useOIDC'
+import { managesAnyUnit } from '../utils/membershipPolicy'
 import { notificationDestination } from '../utils/notificationLinks'
 import type { NotificationItem } from '../api/notifications'
 import NotificationBell from './NotificationBell.vue'
@@ -303,7 +305,7 @@ function handleNotificationClick(notification: NotificationItem) {
   }
 }
 
-const links = [
+const baseLinks = [
   { to: '/events',          label: 'Ereignisse',        icon: CalendarDaysIcon },
   { to: '/my-calendar', label: 'Mein Kalender', icon: CalendarDaysIcon },
   { to: '/admin/duties', label: 'Dienste', icon: UsersIcon },
@@ -315,6 +317,12 @@ const links = [
   { to: '/admin/external-candidates', label: 'Prüfung', icon: CalendarDaysIcon },
   { to: '/admin/export',    label: 'Export',            icon: LinkIcon },
 ]
+const usersLink = { to: '/admin/users', label: 'Benutzer', icon: UserGroupIcon }
+
+// The server answers 403 to everyone else; the link only appears for administrators.
+const links = computed(() =>
+  managesAnyUnit(authStore.memberships, authStore.isSuperadmin) ? [...baseLinks, usersLink] : baseLinks,
+)
 
 async function handleLogout() {
   menuOpen.value = false

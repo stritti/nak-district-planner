@@ -3,13 +3,14 @@
 Dieses Dokument beschreibt die verbindlichen fachlichen Rollengrenzen des NAK Bezirksplaners.
 Der OpenSpec-Change `openspec/changes/multi-unit-memberships-and-superadmin-management/`
 erweitert das Modell um mehrere unabhängige Mitgliedschaften und die Ernennung weiterer
-Superadmins. Er definiert ein **Zielmodell**; die Umsetzung ist noch nicht abgeschlossen.
+Superadmins. Backend und Benutzerverwaltung sind umgesetzt; offene Restpunkte stehen in den Aufgaben des Changes.
 
 ::: info Implementierungsstand
-Der Bestand nutzt `users.is_superadmin` und `memberships` mit
-`(user_sub, role, scope_type, scope_id)` als Eindeutigkeits-Constraint.
-Die Umstellung auf genau eine Rolle je Scope, sichere Delegation des Superadmin-Status und
-die neuen Verwaltungsfunktionen sind offene OpenSpec-Aufgaben.
+`memberships` ist eindeutig über `(user_sub, scope_type, scope_id)`: genau eine Rolle je
+Benutzer und Einheit, beliebig viele Einheiten je Benutzer. Superadmins ernennen und entziehen
+weitere Superadmins; der letzte Superadmin bleibt immer erhalten. Die Ansicht **Benutzer**
+(`/admin/users`) zeigt die eigenen Zugänge und vergibt oder entfernt Rollen in den Einheiten,
+die der Aufrufende verwaltet. Die API (`/api/v1/users`) setzt dieselben Grenzen durch.
 :::
 
 ## 1. Übersicht
