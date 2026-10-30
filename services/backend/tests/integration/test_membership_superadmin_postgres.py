@@ -762,3 +762,121 @@ async def test_api_planner_has_no_user_administration(owner, app_engine, world) 
     with pytest.raises(HTTPException) as exc:
         await _api(app_engine, owner, member, "list_users")
     assert exc.value.status_code == 403
+
+
+# --- review findings ---------------------------------------------------------
+
+
+async def _in_app_transaction(app_engine, sub: str, *statements: tuple[str, dict]) -> None:
+    async with app_engine.begin() as conn:
+        await conn.execute(text("SELECT set_config('app.current_user_sub', :s, true)"), {"s": sub})
+        for sql, params in statements:
+            await conn.execute(text(sql), params)
+
+
+async def test_temporary_registrations_table_cannot_forge_an_approval(app_engine, world) -> None:
+    member = world["subs"]["member"]
+    with pytest.raises(Exception, match="row-level security"):
+        await _in_app_transaction(
+            app_engine,
+            member,
+            (
+                "CREATE TEMP TABLE leader_registrations (status text, user_sub text, "
+                "assigned_scope_type text, assigned_scope_id uuid, assigned_role text) ON COMMIT DROP",
+                {},
+            ),
+            (
+                "INSERT INTO pg_temp.leader_registrations VALUES ('APPROVED', :s, 'DISTRICT', :d, 'DISTRICT_ADMIN')",
+                {"s": member, "d": world["d1"]},
+            ),
+            (
+                "INSERT INTO public.memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :s, 'DISTRICT_ADMIN', 'DISTRICT', :d, now(), now())",
+                {"s": member, "d": world["d1"]},
+            ),
+        )
+
+
+async def test_temporary_memberships_table_cannot_forge_admin_rights(app_engine, world) -> None:
+    outsider, member = world["subs"]["outsider"], world["subs"]["member"]
+    with pytest.raises(Exception, match="row-level security"):
+        await _in_app_transaction(
+            app_engine,
+            outsider,
+            (
+                "CREATE TEMP TABLE memberships (user_sub text, role text, scope_type text, scope_id uuid) "
+                "ON COMMIT DROP",
+                {},
+            ),
+            (
+                "INSERT INTO pg_temp.memberships VALUES (:s, 'DISTRICT_ADMIN', 'DISTRICT', :d)",
+                {"s": outsider, "d": world["d1"]},
+            ),
+            (
+                "INSERT INTO public.memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :m, 'VIEWER', 'DISTRICT', :d, now(), now())",
+                {"m": member, "d": world["d1"]},
+            ),
+        )
+
+
+async def test_downgrade_keeps_archived_rows_that_conflict_with_a_changed_role(
+    owner, world
+) -> None:
+    """Kept PLANNER changed to VIEWER after upgrade; the archived VIEWER must not abort the downgrade."""
+    migration = _migration_module()
+    member = world["subs"]["member"]
+    async with owner.connect() as conn:
+        tx = await conn.begin()
+        try:
+            await conn.execute(
+                text(
+                    "INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                    "VALUES (:i, :s, 'VIEWER', 'CONGREGATION', :c, now(), now())"
+                ),
+                {"i": uuid.uuid4(), "s": member, "c": world["c1"]},
+            )
+            await conn.execute(
+                text(
+                    f"CREATE TABLE {migration.ARCHIVE_TABLE} AS "
+                    "SELECT gen_random_uuid() AS id, user_sub, role, scope_type, scope_id, created_at, "
+                    "updated_at, now() AS archived_at FROM memberships WHERE user_sub = :s"
+                ),
+                {"s": member},
+            )
+            await conn.execute(
+                text(
+                    f"INSERT INTO {migration.ARCHIVE_TABLE} SELECT gen_random_uuid(), user_sub, 'PLANNER', "
+                    "scope_type, scope_id, created_at, updated_at, now() FROM memberships WHERE user_sub = :s"
+                ),
+                {"s": member},
+            )
+            await conn.execute(
+                text(f"ALTER TABLE memberships DROP CONSTRAINT {migration.NEW_CONSTRAINT}")
+            )
+            await conn.execute(
+                text(
+                    f"ALTER TABLE memberships ADD CONSTRAINT {migration.OLD_CONSTRAINT} "
+                    "UNIQUE (user_sub, role, scope_type, scope_id)"
+                )
+            )
+            await conn.execute(text(migration.RESTORE_DUPLICATES_SQL))
+            restored = (
+                (
+                    await conn.execute(
+                        text("SELECT role FROM memberships WHERE user_sub = :s ORDER BY role"),
+                        {"s": member},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            left = (
+                (await conn.execute(text(f"SELECT role FROM {migration.ARCHIVE_TABLE}")))
+                .scalars()
+                .all()
+            )
+        finally:
+            await tx.rollback()
+    assert restored == ["PLANNER", "VIEWER"]
+    assert left == ["VIEWER"]

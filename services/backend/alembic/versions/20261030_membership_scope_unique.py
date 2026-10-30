@@ -26,6 +26,9 @@ VIEWER and a PLANNER row for the same user and unit. Steps, under a table lock:
    application-role INSERT into memberships fail with "infinite recursion
    detected in policy", including the approval of an already linked
    registration.
+5. Put ``pg_temp`` last in the search path of ``can_admin_membership`` and
+   ``link_approved_registration``, so temporary tables cannot shadow the
+   tables they check.
 
 Revision ID: 20261030_membership_scope_unique
 Revises: 20261022_leader_assignments
@@ -65,12 +68,12 @@ RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
     SELECT p_user_sub = current_setting('app.current_user_sub', true)
        AND EXISTS (
            SELECT 1
-           FROM leader_registrations lr
+           FROM public.leader_registrations lr
            WHERE lr.status = 'APPROVED'
              AND lr.user_sub = p_user_sub
              AND lr.assigned_scope_type = p_scope_type
@@ -148,14 +151,28 @@ BEGIN
     SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) INTO cols
     FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'memberships';
+    -- A kept row may since have been changed to an archived row's role; that
+    -- archived row then conflicts on the old (user, role, unit) key. It stays
+    -- in the archive, which is dropped only once every row is back.
     EXECUTE format(
-        'INSERT INTO memberships (%s) SELECT %s FROM {ARCHIVE_TABLE} ON CONFLICT (id) DO NOTHING',
+        'INSERT INTO memberships (%s) SELECT %s FROM {ARCHIVE_TABLE} ON CONFLICT DO NOTHING',
         cols, cols
     );
-    DROP TABLE {ARCHIVE_TABLE};
+    DELETE FROM {ARCHIVE_TABLE} a WHERE EXISTS (SELECT 1 FROM memberships m WHERE m.id = a.id);
+    IF NOT EXISTS (SELECT 1 FROM {ARCHIVE_TABLE}) THEN
+        DROP TABLE {ARCHIVE_TABLE};
+    END IF;
 END
 $$;
 """
+
+# Revision 0015/0016 left these SECURITY DEFINER helpers with ``search_path =
+# public``, which still searches pg_temp first for tables: an application
+# session could shadow ``memberships`` with a temporary table. pg_temp goes last.
+PINNED_SEARCH_PATH = (
+    "can_admin_membership(TEXT, UUID)",
+    "link_approved_registration(TEXT, TEXT)",
+)
 
 
 def _app_role() -> str:
@@ -202,9 +219,13 @@ def upgrade() -> None:
         """
     )
     _recreate_insert_policy(self_approved_membership_insert_sql("memberships"))
+    for signature in PINNED_SEARCH_PATH:
+        op.execute(f"ALTER FUNCTION {signature} SET search_path = public, pg_temp")
 
 
 def downgrade() -> None:
+    for signature in PINNED_SEARCH_PATH:
+        op.execute(f"ALTER FUNCTION {signature} SET search_path = public")
     _recreate_insert_policy(self_approved_registration_insert_sql("memberships"))
     op.execute(f"DROP FUNCTION IF EXISTS {HELPER_SIGNATURE}")
     _recreate_select_policy(
