@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.user import UserORM
@@ -95,6 +95,28 @@ class SqlUserRepository(UserRepository):
             orm.updated_at = datetime.now(UTC)
 
         await self._session.flush()
+
+    async def list_all(self) -> list[User]:
+        """All registered users, ordered by name for administration lists."""
+        result = await self._session.execute(select(UserORM).order_by(UserORM.name, UserORM.email))
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def list_by_subs(self, subs: set[str]) -> list[User]:
+        """The users with the given subjects, ordered like ``list_all``."""
+        if not subs:
+            return []
+        result = await self._session.execute(
+            select(UserORM).where(UserORM.sub.in_(subs)).order_by(UserORM.name, UserORM.email)
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def set_superadmin(self, target_sub: str, value: bool) -> str:
+        """Change the flag through the locked SECURITY DEFINER path (the only writer)."""
+        result = await self._session.execute(
+            text("SELECT set_user_superadmin(:target_sub, :value)"),
+            {"target_sub": target_sub, "value": value},
+        )
+        return str(result.scalar_one())
 
     async def has_any_user(self) -> bool:
         result = await self._session.execute(select(UserORM.id).limit(1))

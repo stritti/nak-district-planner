@@ -479,6 +479,22 @@ class UserRepository(ABC):
         """Check whether at least one user exists."""
         pass
 
+    @abstractmethod
+    async def list_all(self) -> list[User]:
+        """All registered users."""
+
+    @abstractmethod
+    async def list_by_subs(self, subs: set[str]) -> list[User]:
+        """The registered users with the given subjects."""
+
+    @abstractmethod
+    async def set_superadmin(self, target_sub: str, value: bool) -> str:
+        """Grant or revoke the superadmin flag as the current subject.
+
+        Returns ``granted``, ``revoked``, ``unchanged``, ``forbidden``,
+        ``not_found`` or ``last_superadmin``.
+        """
+
 
 class NotificationRepository(ABC):
     @abstractmethod

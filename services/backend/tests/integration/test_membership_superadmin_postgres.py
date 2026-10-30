@@ -518,3 +518,247 @@ async def test_user_inserts_own_membership_only_from_an_approved_registration(
             await conn.execute(
                 text("DELETE FROM leader_registrations WHERE id = :i"), {"i": registration_id}
             )
+
+
+# --- user administration API ------------------------------------------------
+
+
+async def _api(app_engine, owner, actor: str, handler, **kwargs):
+    """Call a users router handler like a request of ``actor``: one session, then commit."""
+    from fastapi import HTTPException
+    from sqlalchemy import event
+
+    from app.adapters.api.deps import CurrentUserContext
+    from app.adapters.api.routers import users as users_router
+    from app.adapters.db.repositories.congregation import SqlCongregationRepository
+    from app.adapters.db.repositories.district import SqlDistrictRepository
+    from app.adapters.db.repositories.user import SqlUserRepository
+    from app.adapters.db.session import AuditedSession, _set_tenant_gucs
+    from app.tenant import TenantContext
+
+    event.listen(app_engine.sync_engine, "begin", _set_tenant_gucs)
+    sessions = async_sessionmaker(
+        app_engine, expire_on_commit=False, sync_session_class=AuditedSession
+    )
+    TenantContext.set_context(user_sub=actor)
+    try:
+        async with sessions() as session:
+            user = await SqlUserRepository(session).get_by_sub(actor)
+            memberships = await SqlMembershipRepository(session).get_all_by_user(actor)
+            auth = CurrentUserContext(user=user, memberships=memberships)
+            repos = {
+                "user_repo": SqlUserRepository(session),
+                "membership_repo": SqlMembershipRepository(session),
+                "district_repo": SqlDistrictRepository(session),
+                "congregation_repo": SqlCongregationRepository(session),
+            }
+            func = getattr(users_router, handler)
+            params = __import__("inspect").signature(func).parameters
+            call = {k: v for k, v in repos.items() if k in params}
+            if "db" in params:
+                call["db"] = session
+            try:
+                result = await func(auth=auth, **call, **kwargs)
+            except HTTPException:
+                await session.rollback()
+                raise
+            await session.commit()
+            return result
+    finally:
+        TenantContext.clear_context()
+        event.remove(app_engine.sync_engine, "begin", _set_tenant_gucs)
+
+
+async def _audit_count(owner, resource_type: str, actor: str) -> int:
+    async with owner.connect() as conn:
+        return await conn.scalar(
+            text("SELECT count(*) FROM audit_logs WHERE resource_type = :t AND user_sub = :s"),
+            {"t": resource_type, "s": actor},
+        )
+
+
+async def test_api_district_admin_adds_second_unit_and_removes_one(
+    owner, app_engine, world
+) -> None:
+    from app.adapters.api.schemas.user_admin import MembershipAssign
+
+    admin, member = world["subs"]["admin"], world["subs"]["member"]
+    await _api(
+        app_engine,
+        owner,
+        admin,
+        "assign_membership",
+        sub=member,
+        body=MembershipAssign(
+            scope_type=ScopeType.CONGREGATION, scope_id=world["c1"], role=Role.VIEWER
+        ),
+    )
+    out = await _api(
+        app_engine,
+        owner,
+        admin,
+        "assign_membership",
+        sub=member,
+        body=MembershipAssign(
+            scope_type=ScopeType.DISTRICT, scope_id=world["d1"], role=Role.PLANNER
+        ),
+    )
+    assert {(m.scope_id, m.role) for m in out.memberships} == {
+        (world["c1"], Role.VIEWER),
+        (world["d1"], Role.PLANNER),
+    }
+    assert out.is_superadmin is None  # hidden from non-superadmins
+    assert await _audit_count(owner, "membership", admin) == 2
+
+    removed = next(m for m in out.memberships if m.scope_id == world["c1"])
+    await _api(app_engine, owner, admin, "remove_membership", sub=member, membership_id=removed.id)
+    listed = await _api(app_engine, owner, admin, "list_users")
+    member_row = next(u for u in listed if u.sub == member)
+    assert [(m.scope_id, m.role) for m in member_row.memberships] == [(world["d1"], Role.PLANNER)]
+    assert await _audit_count(owner, "membership", admin) == 3
+
+
+async def test_api_rejects_units_outside_the_admins_authority(owner, app_engine, world) -> None:
+    from fastapi import HTTPException
+
+    from app.adapters.api.schemas.user_admin import MembershipAssign
+
+    admin, member = world["subs"]["admin"], world["subs"]["member"]
+    with pytest.raises(HTTPException) as foreign:
+        await _api(
+            app_engine,
+            owner,
+            admin,
+            "assign_membership",
+            sub=member,
+            body=MembershipAssign(
+                scope_type=ScopeType.CONGREGATION, scope_id=world["c2"], role=Role.VIEWER
+            ),
+        )
+    # The foreign district's congregation is not even readable: 404 like an unknown unit.
+    assert foreign.value.status_code in (403, 404)
+    rows = await _as(
+        app_engine,
+        world["subs"]["root"],
+        "SELECT 1 FROM memberships WHERE user_sub = :s",
+        {"s": member},
+    )
+    assert rows == []
+
+
+async def test_api_congregation_admin_cannot_grant_district_roles(owner, app_engine, world) -> None:
+    from fastapi import HTTPException
+
+    from app.adapters.api.schemas.user_admin import MembershipAssign
+
+    member, outsider = world["subs"]["member"], world["subs"]["outsider"]
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                "VALUES (:i, :s, 'CONGREGATION_ADMIN', 'CONGREGATION', :c, now(), now())"
+            ),
+            {"i": uuid.uuid4(), "s": outsider, "c": world["c1"]},
+        )
+    with pytest.raises(HTTPException) as exc:
+        await _api(
+            app_engine,
+            owner,
+            outsider,
+            "assign_membership",
+            sub=member,
+            body=MembershipAssign(
+                scope_type=ScopeType.DISTRICT, scope_id=world["d1"], role=Role.VIEWER
+            ),
+        )
+    assert exc.value.status_code == 403
+    out = await _api(
+        app_engine,
+        owner,
+        outsider,
+        "assign_membership",
+        sub=member,
+        body=MembershipAssign(
+            scope_type=ScopeType.CONGREGATION, scope_id=world["c1"], role=Role.PLANNER
+        ),
+    )
+    assert [(m.scope_id, m.role) for m in out.memberships] == [(world["c1"], Role.PLANNER)]
+
+
+async def test_api_superadmin_appoints_and_cannot_revoke_the_last(owner, app_engine, world) -> None:
+    from fastapi import HTTPException
+
+    from app.adapters.api.schemas.user_admin import SuperadminUpdate
+
+    root, other, admin = world["subs"]["root"], world["subs"]["other"], world["subs"]["admin"]
+    out = await _api(
+        app_engine,
+        owner,
+        root,
+        "set_superadmin",
+        sub=other,
+        body=SuperadminUpdate(is_superadmin=True),
+    )
+    assert out.is_superadmin is True
+    assert await _audit_count(owner, "user_superadmin", root) == 1
+
+    with pytest.raises(HTTPException) as denied:
+        await _api(
+            app_engine,
+            owner,
+            admin,
+            "set_superadmin",
+            sub=admin,
+            body=SuperadminUpdate(is_superadmin=True),
+        )
+    assert denied.value.status_code == 403
+
+    # Self-revocation works while another superadmin remains, and is audited.
+    await _api(
+        app_engine,
+        owner,
+        root,
+        "set_superadmin",
+        sub=root,
+        body=SuperadminUpdate(is_superadmin=False),
+    )
+    assert await _is_superadmin(owner, root) is False
+    assert await _audit_count(owner, "user_superadmin", root) == 2
+
+    with pytest.raises(HTTPException) as last:
+        await _api(
+            app_engine,
+            owner,
+            other,
+            "set_superadmin",
+            sub=other,
+            body=SuperadminUpdate(is_superadmin=False),
+        )
+    assert last.value.status_code == 409
+    assert await _is_superadmin(owner, other) is True
+    assert await _audit_count(owner, "user_superadmin", other) == 0  # rolled back with the refusal
+
+
+async def test_api_superadmin_lists_users_without_memberships(owner, app_engine, world) -> None:
+    listed = await _api(app_engine, owner, world["subs"]["root"], "list_users")
+    subs = {u.sub for u in listed}
+    assert set(world["subs"].values()) <= subs
+    root_row = next(u for u in listed if u.sub == world["subs"]["root"])
+    assert root_row.is_superadmin is True
+
+
+async def test_api_planner_has_no_user_administration(owner, app_engine, world) -> None:
+    from fastapi import HTTPException
+
+    member = world["subs"]["member"]
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                "VALUES (:i, :s, 'PLANNER', 'DISTRICT', :d, now(), now())"
+            ),
+            {"i": uuid.uuid4(), "s": member, "d": world["d1"]},
+        )
+    with pytest.raises(HTTPException) as exc:
+        await _api(app_engine, owner, member, "list_users")
+    assert exc.value.status_code == 403

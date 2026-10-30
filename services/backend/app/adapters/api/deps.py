@@ -309,6 +309,7 @@ get_membership_repository = make_repository_dependency(SqlMembershipRepository)
 get_planning_series_repository = make_repository_dependency(SqlPlanningSeriesRepository)
 get_planning_slot_repository = make_repository_dependency(SqlPlanningSlotRepository)
 get_service_assignment_repository = make_repository_dependency(SqlServiceAssignmentRepository)
+get_user_repository = make_repository_dependency(SqlUserRepository)
 get_external_event_candidate_repository = make_repository_dependency(
     SqlExternalEventCandidateRepository
 )

@@ -1,6 +1,6 @@
 ## 1. Mehrfachzuordnungen
 
-- [ ] 1.1 Mitgliedschafts- und Benutzerverwaltung auf mehrere unabhängige Bezirk-/Gemeindezuordnungen pro Benutzer prüfen und vervollständigen.
+- [x] 1.1 Mitgliedschafts- und Benutzerverwaltung auf mehrere unabhängige Bezirk-/Gemeindezuordnungen pro Benutzer prüfen und vervollständigen.
 - [x] 1.2 Hinzufügen, Aktualisieren und Entfernen einzelner Zuordnungen ohne Verlust anderer Zuordnungen ermöglichen; alte rollenbasierte Unique-Constraint durch `(user_sub, scope_type, scope_id)` ersetzen. Vorher rollenverschiedene Same-Scope-Dubletten deterministisch auf höchste Rolle konsolidieren, entfallende Zeilen für Audit/Downgrade sichern und parallele Upserts testen.
 - [ ] 1.3 Alle effektiven Mitgliedschaften und Rollen in Benutzerverwaltung und Zugriffskontext anzeigen.
 - [ ] 1.4 Auswahl und Zugriff auf mehrere berechtigte Einheiten im Frontend prüfen.
@@ -12,7 +12,7 @@
 - [ ] 2.3 Globalen Zugriff ohne Mitgliedschaften durch verifizierte API-RBAC-Dependencies, Datenzugriff/RLS und Frontend durchgängig sicherstellen; Entzug spätestens beim nächsten Request durchsetzen.
 - [ ] 2.4 Freigabe-/Pending-Zustände mit der bestehenden Superadmin-Ausnahme vereinbaren.
 - [x] 2.5 Neue Alembic-Migration für `grant_bootstrap_superadmin`: einmalige initiale, owner-kontrollierte Vergabe mit persistiertem Abschlusszustand; niemals bei Logins delegierte Grants entziehen oder einen explizit entzogenen Bootstrap-Subject wieder erhöhen. Bestandsdaten und Recovery-/Rotation-Verfahren absichern.
-- [ ] 2.6 `get_current_user` muss nach dem Bootstrap den aktuellen persistierten `users.is_superadmin`-Wert autorisieren statt den Funktionsrückgabewert. Vergabe/Entzug über eng berechtigten DB-Schreibpfad trotz Runtime-Update-Sperre; atomare Letzter-Superadmin-Sperre und Audit überprüfen.
+- [x] 2.6 `get_current_user` muss nach dem Bootstrap den aktuellen persistierten `users.is_superadmin`-Wert autorisieren statt den Funktionsrückgabewert. Vergabe/Entzug über eng berechtigten DB-Schreibpfad trotz Runtime-Update-Sperre; atomare Letzter-Superadmin-Sperre und Audit überprüfen.
 
 ## 3. Verifikation
 

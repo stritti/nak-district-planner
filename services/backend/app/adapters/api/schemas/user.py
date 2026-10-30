@@ -21,6 +21,7 @@ class AccessContextOut(BaseModel):
 
     status: Literal["ACTIVE", "PENDING_APPROVAL"]
     memberships: list[MembershipOut] = Field(default_factory=list)
+    is_superadmin: bool = Field(default=False, description="Current persisted superadmin status")
 
 
 class UserOut(BaseModel):

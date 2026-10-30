@@ -84,6 +84,11 @@ class SqlMembershipRepository:
         rows = result.scalars().all()
         return [_orm_to_domain(row) for row in rows]
 
+    async def list_visible(self) -> list[Membership]:
+        """All memberships the current subject may read (RLS: own, managed units, superadmin)."""
+        result = await self._session.execute(select(MembershipORM))
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def get_all_by_scope(
         self,
         scope_type: ScopeType,
