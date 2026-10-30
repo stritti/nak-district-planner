@@ -7,17 +7,37 @@ Separates self-registration from access activation: a district administrator app
 ## Requirements
 
 ### Requirement: Registration approval SHALL activate user access explicitly
-The system SHALL treat self-registration and access activation as separate steps. A registered user MUST NOT gain access to protected business endpoints until a district administrator approves the registration and assigns an authorization scope.
+
+The system SHALL treat self-registration and access activation as separate steps. A registered non-superadmin user MUST NOT gain access to protected business endpoints until an authorized administrator approves the registration and assigns an authorization scope.
 
 #### Scenario: Registered but not approved user logs in
-- **WHEN** a user authenticates successfully via OIDC but has no approved access assignment
-- **THEN** protected business endpoints return `403 Forbidden`
+
+- **WHEN** a non-superadmin user authenticates successfully via OIDC but has no approved access assignment
+- **THEN** protected business endpoints return 403 Forbidden
 - **AND** the response indicates that approval is pending
 
 #### Scenario: District admin approves registration
-- **WHEN** a district admin approves a pending registration
-- **THEN** the registration status changes to `APPROVED`
-- **AND** approval metadata (`approved_by_sub`, `approved_at`) is stored
+
+- **WHEN** a district admin approves a pending registration within their authorized scope
+- **THEN** the registration status changes to APPROVED
+- **AND** approval metadata (approved_by_sub, approved_at) is stored
+
+### Requirement: Superadmin status SHALL stand in for approval while it lasts
+
+A user explicitly granted superadmin status by an existing superadmin SHALL have global access without an approval-created membership. If that status is later revoked and no approved effective membership exists, protected business access SHALL revert to 403 and the pending client state, regardless of any earlier registration state.
+
+#### Scenario: Appointed superadmin has no memberships
+
+- **WHEN** a registered user securely linked to an authenticated subject has been appointed superadmin by an existing superadmin
+- **THEN** protected business endpoints allow global access without requiring a membership
+- **AND** the frontend does not treat the user as pending approval solely because their membership list is empty
+
+#### Scenario: Revoked superadmin without memberships
+
+- **WHEN** the superadmin status of a user without approved memberships is revoked
+- **THEN** protected business endpoints return 403 on the next request
+- **AND** the access context reports the pending state again
+
 
 ### Requirement: Approval SHALL include role and scope assignment
 The system SHALL require explicit authorization assignment during approval. Approval payload MUST include `role`, `scope_type`, and `scope_id`.
@@ -100,3 +120,22 @@ When an invitation is sent on approval, the system SHALL request the required ac
 #### Scenario: No return URI configured
 - **WHEN** an invitation is sent without a configured return URI
 - **THEN** the invitation request carries neither `client_id` nor `redirect_uri`
+
+### Requirement: Administrators can manage additional unit assignments
+
+Superadmins SHALL manage district and congregation memberships of securely linked users across all units. Other administrators MAY manage only authorised scopes and roles no higher than their own. A congregation admin MUST NOT create district roles. Managing one assignment SHALL preserve the existing account and other assignments.
+
+#### Scenario: Superadmin adds a second assignment
+
+- **WHEN** a superadmin adds a membership in another congregation or district to an already linked user
+- **THEN** both the previous and new assignments remain available for that same user account
+
+#### Scenario: Congregation administrator attempts district membership
+- **WHEN** a congregation administrator attempts to grant a district-scoped role even inside the parent district
+- **THEN** the request is rejected with 403 and no membership is modified
+
+#### Scenario: Administrator assigns outside their authority
+
+- **WHEN** a non-superadmin administrator attempts to assign a user to a unit outside their management permissions
+- **THEN** the request returns 403 Forbidden
+- **AND** existing memberships remain unchanged
