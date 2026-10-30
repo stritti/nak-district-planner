@@ -14,14 +14,21 @@ or with bearer token: {"url": "...", "access_token": "token"}
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
-from urllib.parse import urljoin, urlsplit
+from datetime import datetime
 
-import defusedxml.ElementTree as ET
 import httpx
 from icalendar import Calendar as ICalendar
 
+from app.adapters.calendar.caldav_protocol import (
+    build_calendar_query,
+    collection_url,
+    dav_auth,
+    format_utc,
+    parse_multistatus,
+    resource_url,
+)
 from app.adapters.calendar.deletion import delete_resource
+from app.adapters.calendar.http_policy import resilient_request
 from app.adapters.calendar.ical_events import expand_events
 from app.adapters.calendar.url_guard import guarded_client
 from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
@@ -41,7 +48,11 @@ def _refuse_occurrence_write(event: RawCalendarEvent) -> None:
 
 
 class CalDAVConnector(CalendarConnector):
-    """Adapter for CalDAV servers."""
+    """Adapter for CalDAV servers.
+
+    DAV XML, hrefs and authentication are handled by ``caldav_protocol``;
+    only idempotent REPORT/GET requests are retried.
+    """
 
     authoritative_snapshot = True
     window_bounded_snapshot = True
@@ -55,85 +66,29 @@ class CalDAVConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        url_value = credentials.get("url")
-        if not url_value:
-            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
-        url: str = str(url_value).rstrip("/")
+        collection = collection_url(credentials)
+        auth = dav_auth(credentials)
+        query = build_calendar_query(from_dt, to_dt)
+        kwargs = auth.request_kwargs()
+        kwargs["headers"].update({"Content-Type": "application/xml; charset=utf-8", "Depth": "1"})
 
-        # Determine authentication method
-        headers = {}
-        if "access_token" in credentials:
-            headers["Authorization"] = f"Bearer {credentials['access_token']}"
-        elif not ("username" in credentials and "password" in credentials):
-            raise CalendarConnectorError(
-                "CalDAV credentials must include either access_token or username/password"
-            )
-
-        # Build CalDAV calendar-query REPORT for VEVENTs overlapping the window.
-        # RFC 4791 9.9: unset bounds are omitted, never sent as empty attributes.
-        bounds = " ".join(
-            f'{name}="{self._format_datetime(value)}"'
-            for name, value in (("start", from_dt), ("end", to_dt))
-            if value is not None
+        # Generic text on failure: no status/transport oracle, no URL or credentials (#463).
+        response = await resilient_request(
+            lambda: self._client.request("REPORT", collection, content=query, **kwargs),
+            provider="CalDAV",
         )
-        time_range = f"\n                <C:time-range {bounds}/>" if bounds else ""
-        calendar_query = f"""<?xml version="1.0" encoding="UTF-8"?>
-<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-    <D:prop>
-        <D:getetag/>
-        <C:calendar-data/>
-    </D:prop>
-    <C:filter>
-        <C:comp-filter name="VCALENDAR">
-            <C:comp-filter name="VEVENT">{time_range}
-            </C:comp-filter>
-        </C:comp-filter>
-    </C:filter>
-</C:calendar-query>"""
-
-        # Use the calendar-multiget REPORT if we know the hrefs, otherwise use calendar-query
-        # For simplicity, we'll use calendar-query on the calendar collection itself
-        report_url = f"{url}" if url.endswith("/") else f"{url}/"
-
-        try:
-            response = await self._client.request(
-                "REPORT",
-                report_url,
-                data=calendar_query.encode("utf-8"),  # type: ignore[arg-type]
-                headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1", **headers},
-                auth=(str(credentials["username"]), str(credentials["password"]))
-                if "username" in credentials and "password" in credentials
-                else None,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            # Generic text: no status/transport oracle, no URL or credentials (#463).
-            raise CalendarConnectorError("CalDAV Kalender konnte nicht geladen werden") from exc
-
-        # Parse the multi-status response
-        # This is simplified - a production implementation would properly parse XML
-        # For now, we'll look for calendar-data elements
-        try:
-            root = ET.fromstring(response.content)
-        except ET.ParseError as exc:
-            raise CalendarConnectorError("Ungültige XML-Antwort vom CalDAV Server") from exc
-
-        # Define namespaces
-        namespaces = {
-            "D": "DAV:",
-            "C": "urn:ietf:params:xml:ns:caldav",
-            "ical": "http://apple.com/ns/ical/",
-        }
 
         events: list[RawCalendarEvent] = []
-
         # A resource that is missing, empty or unparseable is skipped, but the
         # result then no longer proves deletions (snapshot_complete=False).
         unusable = 0
-        for resp in root.findall(".//D:response", namespaces):
-            cal_data = resp.findtext(".//C:calendar-data", namespaces=namespaces) or ""
+        for resource in parse_multistatus(response.content):
             try:
-                cal = ICalendar.from_ical(cal_data) if cal_data.strip() else None
+                cal = (
+                    ICalendar.from_ical(resource.calendar_data)
+                    if resource.calendar_data.strip()
+                    else None
+                )
             except Exception:
                 cal = None
             if cal is None:
@@ -145,9 +100,8 @@ class CalDAVConnector(CalendarConnector):
                     cal,
                     from_dt=from_dt,
                     to_dt=to_dt,
-                    revision_marker=resp.findtext("D:getetag", namespaces=namespaces)
-                    or resp.findtext(".//D:getetag", namespaces=namespaces),
-                    resource_id=resp.findtext("D:href", namespaces=namespaces),
+                    revision_marker=resource.etag,
+                    resource_id=resource.href,
                 )
             except Exception as exc:
                 # Fail the snapshot instead of silently dropping (and then
@@ -167,34 +121,17 @@ class CalDAVConnector(CalendarConnector):
     ) -> str | None:
         """Update only event times while preserving the provider's current resource fields."""
         _refuse_occurrence_write(event)
-        if not event.resource_id or "url" not in credentials:
-            raise CalendarConnectorError("CalDAV resource href oder Basis-URL fehlt")
-        base = credentials["url"].rstrip("/") + "/"
-        url = urljoin(base, event.resource_id)
-        source, target = urlsplit(base), urlsplit(url)
-        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
-            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
-
-        auth = (
-            (credentials["username"], credentials["password"])
-            if "username" in credentials and "password" in credentials
-            else None
-        )
-        request_headers: dict[str, str] = {}
-        if "access_token" in credentials:
-            request_headers["Authorization"] = f"Bearer {credentials['access_token']}"
-        elif auth is None:
-            raise CalendarConnectorError("CalDAV Credentials fehlen")
+        url = self._resource_url(credentials, event.resource_id)
+        auth = dav_auth(credentials)
 
         try:
-            current_response = await self._client.get(
-                url,
-                headers=request_headers,
-                auth=auth,
+            current_response = await resilient_request(
+                lambda: self._client.get(url, **auth.request_kwargs()), provider="CalDAV"
             )
-            current_response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise CalendarConnectorError("CalDAV Kalender-Ressource konnte nicht geladen werden") from exc
+        except CalendarConnectorError as exc:
+            raise CalendarConnectorError(
+                "CalDAV Kalender-Ressource konnte nicht geladen werden"
+            ) from exc
 
         try:
             calendar = ICalendar.from_ical(current_response.content)
@@ -212,31 +149,25 @@ class CalDAVConnector(CalendarConnector):
         if component is None:
             raise CalendarConnectorError("CalDAV Ereignis wurde in der Ressource nicht gefunden")
 
-        if "DTSTART" in component:
-            del component["DTSTART"]
-        if "DTEND" in component:
-            del component["DTEND"]
-        if "DURATION" in component:
-            del component["DURATION"]
+        for prop in ("DTSTART", "DTEND", "DURATION"):
+            if prop in component:
+                del component[prop]
         component.add("dtstart", start_at)
         component.add("dtend", end_at)
 
-        headers = {"Content-Type": "text/calendar; charset=utf-8", **request_headers}
+        kwargs = auth.request_kwargs()
+        kwargs["headers"]["Content-Type"] = "text/calendar; charset=utf-8"
         if event.revision_marker:
-            headers["If-Match"] = event.revision_marker
+            kwargs["headers"]["If-Match"] = event.revision_marker
         elif current_etag := current_response.headers.get("etag"):
             # Explicit conflict resolution intentionally omits the stale revision.
             # Use the freshly fetched revision so remote soft fields are preserved
             # while still detecting a race between GET and PUT.
-            headers["If-Match"] = current_etag
+            kwargs["headers"]["If-Match"] = current_etag
 
+        # PUT is not retried: a lost response would turn a retry into a 412.
         try:
-            response = await self._client.put(
-                url,
-                content=calendar.to_ical(),
-                headers=headers,
-                auth=auth,
-            )
+            response = await self._client.put(url, content=calendar.to_ical(), **kwargs)
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise CalendarConnectorError("CalDAV Kalender-Aktualisierung fehlgeschlagen") from exc
@@ -244,44 +175,17 @@ class CalDAVConnector(CalendarConnector):
 
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         _refuse_occurrence_write(event)
-        if not event.resource_id:
-            raise CalendarConnectorError("CalDAV resource href fehlt")
-        if "url" not in credentials:
-            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
-        base = credentials["url"].rstrip("/") + "/"
-        url = urljoin(base, event.resource_id)
-        source, target = urlsplit(base), urlsplit(url)
-        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
-            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
-        headers = {}
+        url = self._resource_url(credentials, event.resource_id)
+        kwargs = dav_auth(credentials).request_kwargs()
         if event.revision_marker:
-            headers["If-Match"] = event.revision_marker
-        if "access_token" in credentials:
-            headers["Authorization"] = f"Bearer {credentials['access_token']}"
-        await delete_resource(
-            self._client, url, headers=headers,
-            auth=(credentials["username"], credentials["password"]) if "username" in credentials else None,
-        )
+            kwargs["headers"]["If-Match"] = event.revision_marker
+        await delete_resource(self._client, url, **kwargs)
 
     async def resource_exists(self, credentials: dict, resource_id: str) -> bool:
         """GET the resource href; 404/410 means deleted, other failures raise."""
-        if "url" not in credentials:
-            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
-        base = credentials["url"].rstrip("/") + "/"
-        url = urljoin(base, resource_id)
-        source, target = urlsplit(base), urlsplit(url)
-        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
-            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
-        headers = {}
-        if "access_token" in credentials:
-            headers["Authorization"] = f"Bearer {credentials['access_token']}"
-        auth = (
-            (credentials["username"], credentials["password"])
-            if "username" in credentials and "password" in credentials
-            else None
-        )
+        url = self._resource_url(credentials, resource_id)
         try:
-            response = await self._client.get(url, headers=headers, auth=auth)
+            response = await self._client.get(url, **dav_auth(credentials).request_kwargs())
             if response.status_code in (404, 410):
                 return False
             response.raise_for_status()
@@ -289,13 +193,12 @@ class CalDAVConnector(CalendarConnector):
             raise CalendarConnectorError("CalDAV Ressource konnte nicht geprüft werden") from exc
         return True
 
+    @staticmethod
+    def _resource_url(credentials: dict, href: str | None) -> str:
+        if not href:
+            raise CalendarConnectorError("CalDAV resource href fehlt")
+        return resource_url(collection_url(credentials), href)
+
     def _format_datetime(self, dt: datetime | None) -> str:
         """Format datetime for CalDAV time-range format."""
-        if dt is None:
-            return ""
-        # CalDAV expects format like: 20230101T000000Z
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        else:
-            dt = dt.astimezone(UTC)
-        return dt.strftime("%Y%m%dT%H%M%SZ")
+        return format_utc(dt) if dt is not None else ""
