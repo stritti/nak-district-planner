@@ -314,7 +314,9 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: 'Trotzdem zuweisen' }).click()
     await expect(page.getByRole('dialog')).toBeHidden()
-    await expect(page.getByText(/Service temporarily unavailable/)).toBeVisible()
+    // A 5xx detail is never shown; the dialog gives the shared server-error text.
+    await expect(page.getByText(/Der Server konnte die Anfrage gerade nicht verarbeiten/)).toBeVisible()
+    await expect(page.getByText(/Service temporarily unavailable/)).toHaveCount(0)
     expect(attempts).toBe(2)
   })
   test('submits a selected leader ID when the server reports a conflict', async ({ page }) => {
