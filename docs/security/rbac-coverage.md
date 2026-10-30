@@ -142,7 +142,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | Methode | Pfad | Handler | Authentifizierung | Guards |
 |---|---|---|---|---|
 | GET, HEAD, OPTIONS | `/api/health` | `health.health` | 🔓 Public | – |
-| GET | `/api/v1/auth/access` | `auth.get_access_context` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
+| GET | `/api/v1/auth/access` | `auth.get_access_context` | 🔐 Auth | `is_superadmin` |
 | GET | `/api/v1/auth/me` | `auth.get_current_user_info` | 🔐 Auth | `is_superadmin` |
 | GET | `/api/v1/auth/oidc/discovery` | `auth.get_oidc_discovery` | 🔓 Public | – |
 | POST | `/api/v1/auth/oidc/revoke` | `auth.revoke_oidc_refresh_token` | 🔓 Public | – |
@@ -262,7 +262,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/public/districts` | `registrations.list_districts_public` | 🔓 Public | – |
 | GET | `/api/v1/public/districts/{district_id}/congregations` | `registrations.list_congregations_public` | 🔓 Public | – |
 | GET | `/api/v1/registrations/pending-overview` | `registrations.get_pending_overview` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
-| GET | `/api/v1/system/version` | `system.get_version` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
+| GET | `/api/v1/system/version` | `system.get_version` | 🔐 Auth | `get_congregations_where_user_has_role`, `get_districts_where_user_has_role`, `is_superadmin` |
 | GET | `/api/v1/users` | `users.list_users` | 🔐 Auth | `is_superadmin` |
 | PUT | `/api/v1/users/{sub}/memberships` | `users.assign_membership` | 🔐 Auth | `is_superadmin` |
 | DELETE | `/api/v1/users/{sub}/memberships/{membership_id}` | `users.remove_membership` | 🔐 Auth | `is_superadmin` |

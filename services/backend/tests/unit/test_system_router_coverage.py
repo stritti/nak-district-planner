@@ -40,18 +40,26 @@ def _auth(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", [None, Role.VIEWER, Role.PLANNER])
-async def test_non_admin_cannot_probe_versions(role: Role | None) -> None:
+@pytest.mark.parametrize("scope", [ScopeType.DISTRICT, ScopeType.CONGREGATION])
+async def test_non_admin_cannot_probe_versions(role: Role | None, scope: ScopeType) -> None:
     with patch.object(system.GhcrTagFetcher, "fetch_tags") as fetch:
         with pytest.raises(HTTPException) as error:
-            await system.get_version(_auth(role=role), refresh=True)
+            await system.get_version(_auth(role=role, scope=scope), refresh=True)
     assert error.value.status_code == 403
     fetch.assert_not_called()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.DISTRICT_ADMIN, Role.CONGREGATION_ADMIN])
+@pytest.mark.parametrize(
+    ("role", "scope"),
+    [
+        (Role.DISTRICT_ADMIN, ScopeType.DISTRICT),
+        (Role.CONGREGATION_ADMIN, ScopeType.DISTRICT),
+        (Role.CONGREGATION_ADMIN, ScopeType.CONGREGATION),
+    ],
+)
 async def test_district_admin_roles_may_fetch_versions(
-    monkeypatch: pytest.MonkeyPatch, role: Role
+    monkeypatch: pytest.MonkeyPatch, role: Role, scope: ScopeType
 ) -> None:
     cache = VersionCache(ttl_seconds=3600)
     monkeypatch.setattr(system, "version_cache", cache)
@@ -59,7 +67,7 @@ async def test_district_admin_roles_may_fetch_versions(
         system.GhcrTagFetcher, "fetch_tags",
         return_value=["latest", "1.0.0", "1.0.1"],
     ) as fetch:
-        out = await system.get_version(_auth(role=role), refresh=False)
+        out = await system.get_version(_auth(role=role, scope=scope), refresh=False)
 
     assert out.latest_version == "1.0.1"
     assert out.release_url.endswith("/releases/tag/v1.0.1")

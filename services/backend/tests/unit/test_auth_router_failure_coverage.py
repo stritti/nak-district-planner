@@ -250,21 +250,36 @@ async def test_revoke_discovery_error_still_clears_cookie(
 
 
 @pytest.mark.asyncio
-async def test_access_denies_only_foreign_congregation_role() -> None:
+async def test_congregation_only_member_has_active_access() -> None:
+    congregations = [uuid.uuid4(), uuid.uuid4()]
     auth = SimpleNamespace(
         user=SimpleNamespace(is_superadmin=False),
         memberships=[
             Membership.create(
                 user_sub="operator",
-                role=Role.CONGREGATION_ADMIN,
+                role=role,
                 scope_type=ScopeType.CONGREGATION,
-                scope_id=uuid.uuid4(),
+                scope_id=congregation,
+            )
+            for role, congregation in zip(
+                (Role.CONGREGATION_ADMIN, Role.VIEWER), congregations, strict=True
             )
         ],
     )
-    with pytest.raises(HTTPException) as error:
-        await router.get_access_context(auth)
-    assert error.value.status_code == 403
+    result = await router.get_access_context(auth)
+    assert result.status == "ACTIVE"
+    assert [(m.role, m.scope_type, m.scope_id) for m in result.memberships] == [
+        ("CONGREGATION_ADMIN", "CONGREGATION", str(congregations[0])),
+        ("VIEWER", "CONGREGATION", str(congregations[1])),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_revoked_superadmin_without_memberships_is_pending_again() -> None:
+    auth = SimpleNamespace(user=SimpleNamespace(is_superadmin=False), memberships=[])
+    result = await router.get_access_context(auth)
+    assert result.status == "PENDING_APPROVAL"
+    assert result.is_superadmin is False
 
 
 @pytest.mark.asyncio

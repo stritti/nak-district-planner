@@ -16,11 +16,16 @@ In a multi-tenant application, insufficient tenant isolation can lead to:
 
 The implementation provides **Defense in Depth** with multiple layers of tenant isolation:
 
-### Layer 1: Application-Level (Middleware)
+### Layer 1: Application-Level (Middleware and route guards)
 
-- **TenantMiddleware**: Extracts tenant context from requests
-- **TenantValidationMiddleware**: Validates tenant access
-- **Permission Checks**: Role-based access control
+- **TenantMiddleware**: Extracts untrusted tenant routing hints (path, `district_id`
+  query parameter, `X-District-ID` header). It makes no authorization decision.
+- **Route guards**: verified OIDC dependencies load the persisted superadmin flag
+  and all effective memberships on every request; `require_role_in_district`,
+  `has_role_in_congregation` and friends decide per route.
+
+`TenantValidationMiddleware` was removed from the runtime stack. It is not an
+authorization boundary; `app/main.py` registers only `TenantMiddleware`.
 
 ### Layer 2: Service-Level (Validation)
 
@@ -98,7 +103,6 @@ class TenantContext:
 ### Tenant Middleware (`app/adapters/api/middleware/tenant.py`)
 
 ```python
-```python
 class TenantMiddleware:
     """Extracts tenant context from requests."""
 
@@ -119,14 +123,6 @@ class TenantMiddleware:
         TenantContext.clear_context()
 
         return response
-
-class TenantValidationMiddleware:
-    """Validates tenant access for authenticated users."""
-
-    async def __call__(self, request: Request, call_next: Callable) -> Response:
-        # Skip for exempt paths/methods
-        # Validate tenant access
-        # Return 403 if access denied
 ```
 
 ### Tenant Validation Service (`app/application/tenant_validation.py`)
@@ -240,20 +236,14 @@ foreign rows being invisible even under the own district path, and the
 ### FastAPI Integration (`app/main.py`)
 
 ```python
-from app.adapters.api.middleware.tenant import TenantMiddleware, TenantValidationMiddleware
-from app.tenant import TenantContext
+from app.adapters.api.middleware.tenant import TenantMiddleware
 
-# Add middleware (order matters!)
-# TenantMiddleware should run before TenantValidationMiddleware
+# TenantMiddleware only extracts routing context. Authorization is performed
+# after OIDC validation by FastAPI RBAC dependencies and PostgreSQL RLS.
 app.add_middleware(
     TenantMiddleware,
-    exempt_paths={"/api/health", "/api/v1/auth"},
+    exempt_paths={"/health", "/api/health", "/api/v1/auth"},
     exempt_methods={"OPTIONS"},
-)
-app.add_middleware(
-    TenantValidationMiddleware,
-    exempt_paths={"/api/health", "/api/v1/auth"},
-    exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 ```
 
@@ -327,10 +317,20 @@ class EventService:
 | DISTRICT_ADMIN | Full access | Full access in all congregations | Yes (to congregations in district) |
 | SUPERADMIN | Full access | Full access | Yes (all tenants) |
 
+A user may hold several memberships, one per unit, in congregations and
+districts of different districts. Each membership grants its own role in its
+own unit only: VIEWER in congregation A and PLANNER in congregation B lets the
+user plan in B but not in A, and grants nothing in a third unit. A
+congregation membership never grants district-wide access by itself.
+
 ### Cross-Tenant Access Rules
 
 1. **District Admin → Congregation**: Can access all congregations in their district
-2. **Superadmin → Any Tenant**: Can access all districts and congregations
+2. **Superadmin → Any Tenant**: Can access all districts and congregations,
+   with or without memberships. The flag is read from `users.is_superadmin` on
+   every request and by the RLS policies; after a revocation the next request
+   falls back to the user's own memberships (or to 403 and the pending state
+   when there are none).
 3. **Regular User → Same Tenant**: Can access their own district/congregation
 4. **Regular User → Different Tenant**: Access denied
 
@@ -361,13 +361,9 @@ SELECT set_config('app.is_system_worker', 'true', true);  -- Celery tasks
 Only a **verified** identity may reach `app.current_user_sub`:
 
 - `TenantMiddleware` stores the subject in `TenantContext` only when a user was
-  authenticated earlier in the stack (`request.state.user`). The subject it
-  decodes from the Bearer token without verification is kept in
-  `request.state.tenant_context` and used for nothing but the validation
-  pre-check. Before this rule, a forged token let public endpoints (which never
-  verify a token) run their queries with any chosen RLS identity.
-- `TenantValidationMiddleware` sets the claimed subject explicitly on its own,
-  short-lived session to read that subject's memberships.
+  authenticated earlier in the stack (`request.state.user`). It never decodes
+  the Bearer token. Before this rule, a forged token let public endpoints
+  (which never verify a token) run their queries with any chosen RLS identity.
 - The route dependency (`get_current_user_with_memberships`) verifies the token
   and then sets the verified subject and roles for the rest of the request.
 
@@ -477,8 +473,8 @@ pytest tests/unit/test_tenant_validation.py -v
 
 ## Monitoring
 
-Every request rejected with HTTP 403, whether by `TenantValidationMiddleware`
-or by a role guard in a router, leaves two signals:
+Every request rejected with HTTP 403 by a role guard in a router leaves two
+signals:
 
 1. **Audit entry** with `action = ACCESS_DENIED`, `status = FAILED`, the probed
    `district_id`/`congregation_id` and the route in `extra_metadata`. Reads are
