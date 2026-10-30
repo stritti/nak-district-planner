@@ -295,4 +295,6 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
             )
 
     access_status = "ACTIVE" if auth.user.is_superadmin or memberships else "PENDING_APPROVAL"
-    return AccessContextOut(status=access_status, memberships=memberships)
+    return AccessContextOut(
+        status=access_status, memberships=memberships, is_superadmin=auth.user.is_superadmin
+    )

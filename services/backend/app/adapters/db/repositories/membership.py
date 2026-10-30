@@ -12,6 +12,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import and_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.membership import MembershipORM
@@ -83,6 +84,11 @@ class SqlMembershipRepository:
         rows = result.scalars().all()
         return [_orm_to_domain(row) for row in rows]
 
+    async def list_visible(self) -> list[Membership]:
+        """All memberships the current subject may read (RLS: own, managed units, superadmin)."""
+        result = await self._session.execute(select(MembershipORM))
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def get_all_by_scope(
         self,
         scope_type: ScopeType,
@@ -132,23 +138,32 @@ class SqlMembershipRepository:
         scope_id: uuid.UUID,
         role: Role,
     ) -> Membership:
-        """Idempotently create or update membership by user and scope."""
-        existing = await self.get_by_user_and_scope(user_sub, scope_type, scope_id)
-        now = datetime.now(UTC)
-        if existing is None:
-            membership = Membership.create(
-                user_sub=user_sub,
-                role=role,
-                scope_type=scope_type,
-                scope_id=scope_id,
-            )
-            await self.save(membership)
-            return membership
+        """Create or update the user's membership in one unit, atomically.
 
-        existing.role = role
-        existing.updated_at = now
-        await self.save(existing)
-        return existing
+        One row per ``(user_sub, scope_type, scope_id)`` is guaranteed by
+        ``uq_memberships_user_scope``; concurrent calls update the same row.
+        """
+        now = datetime.now(UTC)
+        statement = (
+            pg_insert(MembershipORM)
+            .values(
+                id=uuid.uuid4(),
+                user_sub=user_sub,
+                role=role.value,
+                scope_type=scope_type.value,
+                scope_id=scope_id,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                constraint="uq_memberships_user_scope",
+                set_={"role": role.value, "updated_at": now},
+            )
+            .returning(MembershipORM)
+            .execution_options(populate_existing=True)
+        )
+        row = (await self._session.execute(statement)).scalar_one()
+        return _orm_to_domain(row)
 
     async def delete(self, membership_id: uuid.UUID) -> None:
         """Delete membership by ID."""

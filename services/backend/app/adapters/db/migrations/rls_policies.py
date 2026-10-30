@@ -428,6 +428,36 @@ def scoped_membership_admin_sql(alias: str = "memberships") -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
+def membership_row_read_sql(alias: str = "memberships") -> str:
+    """Own memberships, plus those of units the current user may administer."""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {alias}.user_sub = current_setting('app.current_user_sub', true)
+    OR can_admin_membership({alias}.scope_type, {alias}.scope_id)
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def self_approved_membership_insert_sql(alias: str = "memberships") -> str:
+    """Self-insert of an approved registration's membership, without policy recursion.
+
+    ``self_approved_registration_insert_sql`` reads ``leader_registrations``,
+    whose policies read ``memberships`` again; PostgreSQL rejects every
+    application-role INSERT into memberships with "infinite recursion". The
+    SECURITY DEFINER helper ``is_self_approved_membership`` (Alembic
+    ``20261030_membership_scope_unique``) performs the same check opaquely.
+    """
+    return f"""
+(
+    {alias}.user_sub = current_setting('app.current_user_sub', true)
+    AND is_self_approved_membership({alias}.user_sub, {alias}.scope_type, {alias}.scope_id, {alias}.role)
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def self_approved_registration_insert_sql(alias: str = "memberships") -> str:
     return f"""
 (

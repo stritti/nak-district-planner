@@ -23,9 +23,7 @@ class MembershipORM(Base):
 
     __tablename__ = "memberships"
     __table_args__ = (
-        UniqueConstraint(
-            "user_sub", "role", "scope_type", "scope_id", name="uq_memberships_user_role_scope"
-        ),
+        UniqueConstraint("user_sub", "scope_type", "scope_id", name="uq_memberships_user_scope"),
         Index("ix_memberships_scope", "scope_type", "scope_id"),
     )
 
