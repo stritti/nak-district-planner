@@ -85,6 +85,12 @@ User administration SHALL display all memberships of a user within the administr
 - **WHEN** a superadmin opens a registered user's administration details
 - **THEN** all of that user's unit assignments and their roles, and the global superadmin status, are visible
 
+#### Scenario: Congregation-only member requests the access context
+
+- **WHEN** an authenticated user whose memberships are all congregation-scoped requests the access context
+- **THEN** the response lists those memberships with status ACTIVE
+- **AND** the user is not treated as pending approval
+
 #### Scenario: Client requests a superadmin's access context
 
 - **WHEN** an authenticated superadmin with no memberships requests the access context
@@ -95,7 +101,7 @@ User administration SHALL display all memberships of a user within the administr
 
 ### Requirement: Superadmin
 
-Users with is_superadmin SHALL have global access to all districts, congregations, business data and administrative functions, including management of registered users and appointment of further superadmins. They SHALL pass all role and scope checks without requiring memberships, including the pre-router `TenantValidationMiddleware`. The flag MUST be loaded from the trusted current database user record for the authenticated subject and set in transaction-local RLS context; unverified token claims or stale frontend state SHALL NOT grant global access. This global access SHALL be applied consistently in API authorization, data access including row-level security, and frontend navigation and action visibility. Authentication and business validation rules SHALL remain applicable.
+Users with is_superadmin SHALL have global access to all districts, congregations, business data and administrative functions, including management of registered users and appointment of further superadmins. They SHALL pass all role and scope checks without requiring memberships; no pre-router middleware makes tenant authorization decisions. The flag MUST be loaded from the trusted current database user record for the authenticated subject and set in transaction-local RLS context; unverified token claims or stale frontend state SHALL NOT grant global access. This global access SHALL be applied consistently in API authorization, data access including row-level security, and frontend navigation and action visibility. Authentication and business validation rules SHALL remain applicable.
 
 Superadmins SHALL be the only users allowed to create districts and to list cross-district resources without a district filter. The initial superadmin SHALL be provisioned through the owner-configured bootstrap function `grant_bootstrap_superadmin` **once only**. After bootstrap initialization, logging in as the configured subject SHALL NOT re-grant a revoked status, revoke appointed superadmins, or overwrite any explicit administrative decision. Bootstrap completion SHALL be persisted across requests and restarts and existing superadmins SHALL be preserved during migration. An explicit owner-controlled recovery or rotation SHALL NOT occur implicitly on login. Authentication SHALL authorize from the current persisted `users.is_superadmin` value rather than from the bootstrap function's return value, including when the authenticated subject is not the configured bootstrap subject. Changes to the flag SHALL use an audited, minimally privileged transactional database operation; the application DB role MUST NOT be granted unrestricted updates to `users.is_superadmin`.
 

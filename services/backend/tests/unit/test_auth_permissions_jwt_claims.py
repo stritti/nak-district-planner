@@ -225,3 +225,57 @@ def test_congregation_helper_rejects_unrelated_district_admin_membership() -> No
     ])
     assert has_role_in_congregation(direct, Role.VIEWER, congregation_id)
     assert not has_role_in_congregation(direct, Role.VIEWER, uuid.uuid4())
+
+
+def test_roles_in_several_units_stay_independent() -> None:
+    """VIEWER in congregation A and PLANNER in B (another district): no rights leak."""
+    district_a, district_b = uuid.uuid4(), uuid.uuid4()
+    congregation_a, congregation_b = uuid.uuid4(), uuid.uuid4()
+    auth = _auth(
+        [
+            Membership.create(
+                user_sub="oidc|x",
+                role=Role.VIEWER,
+                scope_type=ScopeType.CONGREGATION,
+                scope_id=congregation_a,
+            ),
+            Membership.create(
+                user_sub="oidc|x",
+                role=Role.PLANNER,
+                scope_type=ScopeType.CONGREGATION,
+                scope_id=congregation_b,
+            ),
+        ]
+    )
+
+    assert has_role_in_congregation(auth, Role.VIEWER, congregation_a)
+    assert not has_role_in_congregation(auth, Role.PLANNER, congregation_a)
+    assert has_role_in_congregation(auth, Role.PLANNER, congregation_b)
+    assert not has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, congregation_b)
+    assert has_role_in_district(auth, Role.PLANNER, district_b, {congregation_b})
+    assert not has_role_in_district(auth, Role.PLANNER, district_a, {congregation_a})
+    # A congregation membership never grants district-wide access on its own.
+    assert not has_role_in_district(auth, Role.VIEWER, district_a)
+    assert get_districts_where_user_has_role(auth, Role.VIEWER) == []
+    assert set(get_congregations_where_user_has_role(auth, Role.VIEWER)) == {
+        congregation_a,
+        congregation_b,
+    }
+    assert get_congregations_where_user_has_role(auth, Role.PLANNER) == [congregation_b]
+
+
+def test_revoked_superadmin_keeps_only_own_memberships() -> None:
+    district_id, foreign = uuid.uuid4(), uuid.uuid4()
+    membership = Membership.create(
+        user_sub="oidc|x",
+        role=Role.PLANNER,
+        scope_type=ScopeType.DISTRICT,
+        scope_id=district_id,
+    )
+    assert has_role_in_district(
+        _auth([membership], is_superadmin=True), Role.DISTRICT_ADMIN, foreign
+    )
+    revoked = _auth([membership], is_superadmin=False)
+    assert not has_role_in_district(revoked, Role.VIEWER, foreign)
+    assert has_role_in_district(revoked, Role.PLANNER, district_id)
+    assert not has_role_in_district(revoked, Role.DISTRICT_ADMIN, district_id)

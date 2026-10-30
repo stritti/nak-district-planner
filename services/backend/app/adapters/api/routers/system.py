@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.adapters.api.deps import CurrentUserWithMemberships
 from app.adapters.api.schemas.system import SystemVersionResponse
 from app.adapters.auth.permissions import (
+    get_congregations_where_user_has_role,
     get_districts_where_user_has_role,
 )
 from app.adapters.version_check.cache import version_cache
@@ -43,11 +44,11 @@ async def get_version(
 ) -> SystemVersionResponse:
     """Return the current running version and the latest available version.
 
-    **RBAC:** Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role in any district.
+    **RBAC:** Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role in any district or congregation.
     """
-    # RBAC Guard: User must have DISTRICT_ADMIN or CONGREGATION_ADMIN in any district
-    districts_with_admin = get_districts_where_user_has_role(auth, Role.DISTRICT_ADMIN)
-    congregations_with_admin = get_districts_where_user_has_role(auth, Role.CONGREGATION_ADMIN)
+    # RBAC Guard: an admin role in any unit, district- or congregation-scoped
+    districts_with_admin = get_districts_where_user_has_role(auth, Role.CONGREGATION_ADMIN)
+    congregations_with_admin = get_congregations_where_user_has_role(auth, Role.CONGREGATION_ADMIN)
 
     if not districts_with_admin and not congregations_with_admin and not auth.user.is_superadmin:
         raise HTTPException(

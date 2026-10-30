@@ -211,7 +211,42 @@ describe('useAuthStore', () => {
 
     await store.refreshCurrentUserFlags()
 
+    expect(store.isSuperadmin).toBe(true)
+    expect(store.accessStatus).toBe('ACTIVE')
+    expect(store.canAdminDistrict('any-district')).toBe(true)
     expect(store.pendingRegistrationsCount).toBe(3)
+    spyUser.mockRestore()
+    spyAccess.mockRestore()
+    spyPending.mockRestore()
+  })
+
+  it('drops global access once the superadmin status is revoked', async () => {
+    const store = useAuthStore()
+    store.setToken({
+      accessToken: 'test_token',
+      idToken: 'test_id_token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    })
+    const me = { sub: 'admin', email: 'admin@example.com', username: 'admin', name: null, given_name: null, family_name: null }
+    const spyUser = vi
+      .spyOn(authApi, 'getCurrentUser')
+      .mockResolvedValueOnce({ ...me, is_superadmin: true })
+      .mockResolvedValueOnce({ ...me, is_superadmin: false })
+    const spyAccess = vi
+      .spyOn(authApi, 'getAccessContext')
+      .mockResolvedValueOnce({ status: 'ACTIVE', memberships: [] })
+      .mockResolvedValueOnce({ status: 'PENDING_APPROVAL', memberships: [] })
+    const spyPending = vi
+      .spyOn(registrationsApi, 'getPendingRegistrationsOverview')
+      .mockResolvedValue({ total_pending: 0, by_district: [] })
+
+    await store.refreshCurrentUserFlags()
+    await store.refreshCurrentUserFlags()
+
+    expect(store.isSuperadmin).toBe(false)
+    expect(store.accessStatus).toBe('PENDING_APPROVAL')
+    expect(store.canAdminDistrict('any-district')).toBe(false)
+    expect(spyPending).toHaveBeenCalledOnce()
     spyUser.mockRestore()
     spyAccess.mockRestore()
     spyPending.mockRestore()

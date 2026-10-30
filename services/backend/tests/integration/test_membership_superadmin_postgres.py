@@ -977,3 +977,101 @@ async def test_upgrade_appends_to_an_archive_left_by_a_downgrade(owner, world) -
         finally:
             await tx.rollback()
     assert [tuple(row) for row in archived] == [("CONGREGATION", "VIEWER"), ("DISTRICT", "VIEWER")]
+
+
+# --- effective access under RLS ---------------------------------------------
+
+
+async def _slots(owner, world) -> dict[str, uuid.UUID]:
+    """One congregation slot per district, created by the owner."""
+    slots = {"c1": uuid.uuid4(), "c2": uuid.uuid4()}
+    async with owner.begin() as conn:
+        for key, district in (("c1", "d1"), ("c2", "d2")):
+            await conn.execute(
+                text(
+                    "INSERT INTO planning_slots (id, district_id, congregation_id, planning_date, "
+                    "planning_time, status, created_at, updated_at) "
+                    "VALUES (:i, :d, :c, '2027-02-07', '10:00', 'ACTIVE', now(), now())"
+                ),
+                {"i": slots[key], "d": world[district], "c": world[key]},
+            )
+    return slots
+
+
+async def _drop_slots(owner, slots: dict[str, uuid.UUID]) -> None:
+    async with owner.begin() as conn:
+        await conn.execute(
+            text("DELETE FROM planning_slots WHERE id = ANY(:i)"), {"i": list(slots.values())}
+        )
+
+
+async def _visible_slots(app_engine, sub: str, slots: dict[str, uuid.UUID]) -> set[uuid.UUID]:
+    rows = await _as(
+        app_engine,
+        sub,
+        "SELECT id FROM planning_slots WHERE id = ANY(:i)",
+        {"i": list(slots.values())},
+    )
+    return {row[0] for row in rows}
+
+
+async def _may_write_slot(app_engine, sub: str, slot_id: uuid.UUID) -> bool:
+    """Whether ``sub`` can update the slot; RLS either hides it or rejects the row."""
+    from sqlalchemy.exc import ProgrammingError
+
+    try:
+        async with app_engine.begin() as conn:
+            await conn.execute(
+                text("SELECT set_config('app.current_user_sub', :s, true)"), {"s": sub}
+            )
+            result = await conn.execute(
+                text("UPDATE planning_slots SET updated_at = now() WHERE id = :i"), {"i": slot_id}
+            )
+            return result.rowcount == 1
+    except ProgrammingError as exc:
+        assert "row-level security" in str(exc)
+        return False
+
+
+async def test_roles_in_units_of_two_districts_stay_independent(owner, app_engine, world) -> None:
+    member, outsider = world["subs"]["member"], world["subs"]["outsider"]
+    async with owner.begin() as conn:
+        for role, unit in (("VIEWER", "c1"), ("PLANNER", "c2")):
+            await conn.execute(
+                text(
+                    "INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+                    "VALUES (:i, :s, :r, 'CONGREGATION', :c, now(), now())"
+                ),
+                {"i": uuid.uuid4(), "s": member, "r": role, "c": world[unit]},
+            )
+    slots = await _slots(owner, world)
+    try:
+        assert await _visible_slots(app_engine, member, slots) == set(slots.values())
+        assert await _may_write_slot(app_engine, member, slots["c2"])
+        assert not await _may_write_slot(app_engine, member, slots["c1"])  # VIEWER only
+        assert await _visible_slots(app_engine, outsider, slots) == set()
+    finally:
+        await _drop_slots(owner, slots)
+
+
+async def test_superadmin_without_memberships_and_its_revocation(owner, app_engine, world) -> None:
+    root, other = world["subs"]["root"], world["subs"]["other"]
+    slots = await _slots(owner, world)
+    try:
+        assert await _visible_slots(app_engine, root, slots) == set(slots.values())
+        assert await _may_write_slot(app_engine, root, slots["c2"])
+
+        assert await _set_superadmin(app_engine, root, other, True) == "granted"
+        assert await _set_superadmin(app_engine, other, root, False) == "revoked"
+
+        # The next request reads the persisted flag, as get_current_user does,
+        # and RLS no longer opens any district to the former superadmin.
+        flag = await _as(
+            app_engine, root, "SELECT is_superadmin FROM users WHERE sub = :s", {"s": root}
+        )
+        assert flag == [(False,)]
+        assert await _visible_slots(app_engine, root, slots) == set()
+        assert not await _may_write_slot(app_engine, root, slots["c2"])
+        assert await _visible_slots(app_engine, other, slots) == set(slots.values())
+    finally:
+        await _drop_slots(owner, slots)

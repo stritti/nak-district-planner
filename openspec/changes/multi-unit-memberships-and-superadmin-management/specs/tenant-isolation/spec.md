@@ -14,6 +14,12 @@
 - **THEN** the verified route authorization rejects the request with 403
 - **AND** PostgreSQL RLS does not disclose the foreign district's protected rows
 
+#### Scenario: Memberships in two districts
+
+- **WHEN** a non-superadmin holds memberships in units of district A and district B
+- **THEN** route authorization and RLS allow each unit according to its own membership
+- **AND** a district in which the user holds no membership remains rejected with 403
+
 #### Scenario: Superadmin with no membership selects a district
 
 - **WHEN** a verified superadmin with no memberships requests `/api/v1/districts/{other}/...`
