@@ -283,12 +283,17 @@
     :action-label="canCreateCongregation ? 'Gemeinde anlegen' : undefined"
     @action="createCongregation"
   />
-  <div
-    v-else-if="matrixLoaded && matrixStore.matrix?.dates.length === 0"
-    class="text-sm text-gray-500 dark:text-gray-400"
-  >
-    Keine Ereignisse im gewählten Zeitraum.
-  </div>
+  <EmptyState
+    v-else-if="matrixLoaded && !hasPlannedServices"
+    compact
+    message="Keine Ereignisse im gewählten Zeitraum."
+    :hint="canPlan
+      ? 'Aus den Gottesdienstzeiten der Gemeinden lassen sich Entwürfe für diesen Zeitraum erzeugen.'
+      : 'Die Planung legt die Gottesdienste für diesen Zeitraum an.'"
+    :action-label="canPlan && !generatingDrafts ? 'Entwürfe erzeugen' : undefined"
+    data-testid="matrix-no-services"
+    @action="generateDrafts"
+  />
 </template>
 
 <script setup lang="ts">
@@ -316,6 +321,7 @@ function conflictTitle(cell: MatrixCell): string {
 import { useScrollShadow } from '../composables/useScrollShadow'
 import { useStickyScrollbar } from '../composables/useStickyScrollbar'
 import EmptyState from './EmptyState.vue'
+import { useToast } from '../composables/useToast'
 import DeviationIndicator from './DeviationIndicator.vue'
 import EventApprovalStatusBadge from './EventApprovalStatusBadge.vue'
 
@@ -354,7 +360,11 @@ function showAllGroups(): void {
 }
 
 function createCongregation(): void {
-  void router?.push({ name: 'admin-districts' })
+  // The districts view opens the new-congregation dialog for this district.
+  void router?.push({
+    name: 'admin-districts',
+    query: { new: 'congregation', district: matrixStore.districtId },
+  })
 }
 
 function canInlineAssign(cell: MatrixCell): boolean {
@@ -443,6 +453,25 @@ const leaderNameClass = computed(() => {
     props.compactMode ? 'text-[10px] max-w-[13ch] xl:max-w-[15ch]' : 'text-[11px] max-w-[18ch] xl:max-w-[24ch]',
   ]
 })
+
+const hasPlannedServices = computed(() =>
+  (matrixStore.matrix?.rows ?? []).some((row) => Object.values(row.cells).some((cell) => !!cell.event_id)),
+)
+const canPlan = computed(() => auth.canPlanDistrict(matrixStore.districtId))
+const generatingDrafts = ref(false)
+const toast = useToast()
+
+async function generateDrafts(): Promise<void> {
+  generatingDrafts.value = true
+  try {
+    const result = await matrixStore.generateDraftsForCurrentRange()
+    toast.success('Entwürfe erzeugt', `Neu: ${result.created}, bereits vorhanden: ${result.skipped_existing}`)
+  } catch (e) {
+    toast.error('Entwurfsgenerierung fehlgeschlagen', e)
+  } finally {
+    generatingDrafts.value = false
+  }
+}
 
 const matrixLoaded = computed(() => !matrixStore.loading && !matrixStore.error && !!matrixStore.matrix)
 const hasCongregations = computed(() => (matrixStore.matrix?.rows.length ?? 0) > 0)
