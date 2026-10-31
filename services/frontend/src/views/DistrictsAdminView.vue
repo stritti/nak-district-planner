@@ -423,8 +423,8 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { inject, nextTick, onMounted, reactive, ref } from 'vue'
+import { onBeforeRouteLeave, routeLocationKey } from 'vue-router'
 import {
   BuildingLibraryIcon,
   CheckIcon,
@@ -604,7 +604,20 @@ async function saveEditCong() {
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
-onMounted(loadAll)
+// Optional so the view also mounts without a router (component tests).
+const route = inject(routeLocationKey, null)
+
+onMounted(async () => {
+  await loadAll()
+  openRequestedDialog()
+})
+
+/** `?new=congregation&district=<id>` (from the empty matrix) opens the new-congregation dialog. */
+function openRequestedDialog(): void {
+  const districtId = route?.query.district
+  if (route?.query.new !== 'congregation' || typeof districtId !== 'string') return
+  if (districts.value.some((district) => district.id === districtId)) openNewCongregation(districtId)
+}
 
   async function loadAll() {
     loadingDistricts.value = true
