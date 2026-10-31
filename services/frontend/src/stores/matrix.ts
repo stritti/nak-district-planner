@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '../api/matrix'
-import { parseConflictError } from '../api/errors'
+import { parseConflictError, userMessage } from '../api/errors'
 import {
   createAssignment,
   deleteAssignment,
@@ -47,7 +47,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       conflictsStale.value = false
       conflictsRefreshError.value = null
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unbekannter Fehler'
+      error.value = userMessage(e, 'Unbekannter Fehler')
     } finally {
       loading.value = false
     }

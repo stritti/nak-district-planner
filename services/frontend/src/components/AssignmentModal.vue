@@ -141,7 +141,7 @@
         <p v-if="modal.moveError" class="text-xs text-red-600 dark:text-red-400 mt-2">{{ modal.moveError }}</p>
       </div>
 
-      <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
+      <ErrorAlert v-if="modal.error" :message="modal.error" class="mt-2" />
 
       <div class="flex justify-end gap-3 mt-5">
         <button
@@ -190,7 +190,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
-import { ApiError, ConflictError } from '../api/errors'
+import { ApiError, ConflictError, userMessage } from '../api/errors'
 import { useConflictStore, type PendingConflictAction } from '../stores/conflict'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
@@ -208,6 +208,7 @@ import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } fr
 import ConflictBanner from './ConflictBanner.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { useToast } from '../composables/useToast'
+import ErrorAlert from './ErrorAlert.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
@@ -383,7 +384,7 @@ async function loadEventInvitations() {
   try {
     invitation.existing = await listEventInvitations(modal.eventId)
   } catch (e) {
-    invitation.error = e instanceof Error ? e.message : 'Einladungen konnten nicht geladen werden'
+    invitation.error = userMessage(e, 'Einladungen konnten nicht geladen werden')
   } finally {
     invitation.loadingExisting = false
   }
@@ -407,7 +408,7 @@ async function submitInvitation() {
     toast.success('Einladung gespeichert')
     await Promise.all([matrixStore.fetch(), loadEventInvitations()])
   } catch (e) {
-    invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht gespeichert werden'
+    invitation.error = userMessage(e, 'Einladung konnte nicht gespeichert werden')
   } finally {
     invitation.saving = false
   }
@@ -421,7 +422,7 @@ async function removeInvitation(invitationId: string) {
     toast.success('Einladung gelöscht')
     await Promise.all([matrixStore.fetch(), loadEventInvitations()])
   } catch (e) {
-    invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht geloescht werden'
+    invitation.error = userMessage(e, 'Einladung konnte nicht geloescht werden')
   } finally {
     invitation.saving = false
   }
@@ -537,9 +538,10 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
       // The error belongs to the underlying assignment modal, not the teleported dialog.
       // Close the overlay so the user can actually see it and decide how to proceed.
       dismissWarnConfirmation()
-      modal.error = e instanceof Error ? e.message : action === 'confirm'
-        ? 'Fehler beim Bestaetigen'
-        : 'Fehler beim Speichern'
+      modal.error = userMessage(
+        e,
+        action === 'confirm' ? 'Fehler beim Bestaetigen' : 'Fehler beim Speichern',
+      )
     }
   } finally {
     modal.saving = false
@@ -561,7 +563,7 @@ async function removeAssignmentFromModal() {
     dismissModal()
   } catch (e) {
     if (isStaleRevision(e)) handleStaleRevision()
-    else modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
+    else modal.error = userMessage(e, 'Fehler beim Entfernen')
   } finally {
     modal.saving = false
   }
@@ -603,7 +605,7 @@ async function moveServiceDateTime() {
     toast.success('Termin verschoben', modal.eventTitle)
     dismissModal()
   } catch (e) {
-    modal.moveError = e instanceof Error ? e.message : 'Verschieben fehlgeschlagen'
+    modal.moveError = userMessage(e, 'Verschieben fehlgeschlagen')
   } finally {
     modal.moveSaving = false
   }

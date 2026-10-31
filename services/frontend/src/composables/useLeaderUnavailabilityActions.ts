@@ -11,6 +11,7 @@ import {
   type LeaderUnavailabilityResponse,
 } from '../api/leaderUnavailabilities'
 import type { LeaderResponse } from '../api/leaders'
+import { userMessage } from '../api/errors'
 
 export function useLeaderUnavailabilityActions(
   selectedDistrictId: Ref<string>,
@@ -52,7 +53,7 @@ export function useLeaderUnavailabilityActions(
     } catch (e) {
       toastStore.error(
         'Abwesenheit konnte nicht erfasst werden',
-        e instanceof Error ? e.message : undefined,
+        userMessage(e, 'Unbekannter Fehler'),
       )
     } finally {
       if (unavailabilitySavingDistrictId.value === districtId) unavailabilitySavingDistrictId.value = ''
@@ -72,7 +73,7 @@ export function useLeaderUnavailabilityActions(
       pendingDeleteUnavailability.value = null
       toastStore.success('Abwesenheit gelöscht', formatUnavailabilityPeriod(item))
     } catch (e) {
-      toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+      toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
     } finally {
       unavailabilityDeleting.value = false
     }

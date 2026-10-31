@@ -13,6 +13,7 @@ import {
 } from '../api/eventDuties'
 import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
+import { userMessage } from '../api/errors'
 
 const districts = useDistrictsStore()
 const auth = useAuthStore()
@@ -132,7 +133,7 @@ async function save(row: Row) {
     }
     await load()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'Speichern fehlgeschlagen'
+    error.value = userMessage(cause, 'Speichern fehlgeschlagen')
   } finally {
     loading.value = false
   }
@@ -176,7 +177,7 @@ async function create() {
     code.value = ''
     await load()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'Anlegen fehlgeschlagen'
+    error.value = userMessage(cause, 'Anlegen fehlgeschlagen')
   } finally {
     loading.value = false
   }

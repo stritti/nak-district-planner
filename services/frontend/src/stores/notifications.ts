@@ -12,6 +12,7 @@ import {
   type NotificationItem,
   type NotificationListResponse,
 } from '../api/notifications'
+import { userMessage } from '../api/errors'
 
 export const useNotificationStore = defineStore('notifications', () => {
   const items = ref<NotificationItem[]>([])
@@ -52,7 +53,7 @@ export const useNotificationStore = defineStore('notifications', () => {
       total.value = data.total
     } catch (e) {
       if (requestGeneration !== generation) return
-      error.value = e instanceof Error ? e.message : 'Fehler beim Laden der Benachrichtigungen'
+      error.value = userMessage(e, 'Fehler beim Laden der Benachrichtigungen')
     } finally {
       if (requestGeneration === generation) loading.value = false
     }

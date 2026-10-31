@@ -32,7 +32,7 @@
       <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
         Erstelle einen persönlichen Kalender-Export-Token. Die URL enthält alle zugewiesenen Gottesdienste.
       </p>
-      <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ modal.error }}</p>
+      <ErrorAlert v-if="modal.error" :message="modal.error" class="mb-3" />
       <div class="flex justify-end gap-3">
         <button
           class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -57,6 +57,7 @@
 import type { ExportModalState } from './modalState'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import CopyButton from '../CopyButton.vue'
+import ErrorAlert from '../ErrorAlert.vue'
 
 // The parent owns the form state (reactive object) and the save logic; this
 // component only renders it. Aliasing the prop avoids prop-mutation lint noise

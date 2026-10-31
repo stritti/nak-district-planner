@@ -3,7 +3,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { ApiError } from '../api/errors'
+import { ApiError, userMessage } from '../api/errors'
 import {
   createReminderConfig,
   deleteReminderConfig,
@@ -33,7 +33,7 @@ export const useReminderConfigsStore = defineStore('reminder-configs', () => {
       const result = await listReminderConfigs(id)
       if (districtId.value === id) items.value = result
     } catch (cause) {
-      if (districtId.value === id) error.value = cause instanceof Error ? cause.message : 'Erinnerungen konnten nicht geladen werden'
+      if (districtId.value === id) error.value = userMessage(cause, 'Erinnerungen konnten nicht geladen werden')
     } finally {
       if (districtId.value === id) loading.value = false
     }
@@ -48,7 +48,7 @@ export const useReminderConfigsStore = defineStore('reminder-configs', () => {
       const config = await createReminderConfig(id, input)
       if (districtId.value === id) items.value.push(config)
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : 'Erinnerung konnte nicht angelegt werden'
+      error.value = userMessage(cause, 'Erinnerung konnte nicht angelegt werden')
       throw cause
     } finally {
       saving.value = false
@@ -81,7 +81,7 @@ export const useReminderConfigsStore = defineStore('reminder-configs', () => {
         error.value = STALE
         await refresh(id)
       } else {
-        error.value = cause instanceof Error ? cause.message : 'Erinnerung konnte nicht gespeichert werden'
+        error.value = userMessage(cause, 'Erinnerung konnte nicht gespeichert werden')
       }
       throw cause
     } finally {
@@ -102,7 +102,7 @@ export const useReminderConfigsStore = defineStore('reminder-configs', () => {
         error.value = STALE
         await refresh(id)
       } else {
-        error.value = cause instanceof Error ? cause.message : 'Erinnerung konnte nicht deaktiviert werden'
+        error.value = userMessage(cause, 'Erinnerung konnte nicht deaktiviert werden')
       }
       throw cause
     } finally {

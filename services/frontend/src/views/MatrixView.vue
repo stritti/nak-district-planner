@@ -17,7 +17,7 @@
 
     <!-- Loading / Error -->
     <MatrixSkeleton v-if="matrixStore.loading" />
-    <div v-else-if="matrixStore.error" class="text-sm text-red-600 dark:text-red-400">{{ matrixStore.error }}</div>
+    <ErrorAlert v-else-if="matrixStore.error" :message="matrixStore.error" />
 
     <!-- Mobile hint: matrix stays a scrollable table, unlike other views -->
     <p
@@ -60,6 +60,7 @@ import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
 import MatrixSkeleton from '../components/MatrixSkeleton.vue'
 import ContextualHelp from '../components/ContextualHelp.vue'
 import { useToast } from '../composables/useToast'
+import ErrorAlert from '../components/ErrorAlert.vue'
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()

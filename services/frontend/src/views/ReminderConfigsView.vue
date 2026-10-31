@@ -25,6 +25,7 @@ import { useSessionViewSettings, sessionField, sessionText } from '../composable
 import { listDistricts, type DistrictResponse } from '../api/districts'
 import EventHooksPanel from '../components/EventHooksPanel.vue'
 import ReminderConfigsPanel from '../components/ReminderConfigsPanel.vue'
+import { userMessage } from '../api/errors'
 
 const districts = ref<DistrictResponse[]>([])
 const districtId = ref('')
@@ -40,7 +41,7 @@ onMounted(async () => {
       districtId.value = districts.value[0]?.id ?? ''
     }
   } catch (cause) {
-    loadError.value = cause instanceof Error ? cause.message : 'Bezirke konnten nicht geladen werden'
+    loadError.value = userMessage(cause, 'Bezirke konnten nicht geladen werden')
   }
 })
 </script>

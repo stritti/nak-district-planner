@@ -120,6 +120,41 @@ beforeEach(() => {
 })
 
 describe('DistrictsAdminView', () => {
+  it('offers to create the first congregation of an empty district', async () => {
+    const { wrapper } = setup()
+    await flushPromises()
+
+    const empty = wrapper.findAll('[data-testid="empty-state"]').find((node) => node.text().includes('Noch keine Gemeinden.'))!
+    await empty.get('button').trigger('click')
+    await flushPromises()
+
+    expect(findModal(wrapper, 'Neue Gemeinde').exists()).toBe(true)
+  })
+
+  it('offers to create the first district', async () => {
+    vi.mocked(districtsApi.listDistricts).mockResolvedValue([])
+    const { wrapper } = setup()
+    await flushPromises()
+
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Noch keine Bezirke angelegt.')
+    await empty.get('button').trigger('click')
+    await flushPromises()
+
+    expect(findModal(wrapper, 'Neuer Bezirk').exists()).toBe(true)
+  })
+
+  it('shows a load failure in the shared alert instead of the empty state', async () => {
+    vi.mocked(districtsApi.listDistricts).mockRejectedValue(new ApiError(503, 'Unavailable', undefined))
+    const { wrapper } = setup()
+    await flushPromises()
+
+    const alert = wrapper.get('[data-testid="error-alert"]')
+    expect(alert.attributes('role')).toBe('alert')
+    expect(alert.text()).toContain('später erneut versuchen')
+    expect(wrapper.find('[data-testid="empty-state"]').exists()).toBe(false)
+  })
+
   it('loads districts, groups and congregations and selects a district', async () => {
     const { wrapper, districtsStore } = setup()
     await flushPromises()

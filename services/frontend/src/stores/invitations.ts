@@ -9,6 +9,7 @@ import {
   listOverwriteRequests,
   type OverwriteRequestResponse,
 } from '../api/invitations'
+import { userMessage } from '../api/errors'
 
 export const useInvitationsStore = defineStore('invitations', () => {
   const items = ref<OverwriteRequestResponse[]>([])
@@ -22,7 +23,7 @@ export const useInvitationsStore = defineStore('invitations', () => {
     try {
       items.value = await listOverwriteRequests(districtId)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Fehler beim Laden von Ueberschreibungsanfragen'
+      error.value = userMessage(e, 'Fehler beim Laden von Ueberschreibungsanfragen')
     } finally {
       loading.value = false
     }

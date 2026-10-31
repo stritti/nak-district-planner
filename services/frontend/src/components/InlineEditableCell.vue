@@ -70,7 +70,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { ApiError } from '../api/errors'
+import { ApiError, userMessage } from '../api/errors'
 import type { InlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 
 const props = withDefaults(defineProps<{
@@ -154,7 +154,7 @@ function saveError(cause: unknown): string {
     if (cause.status === 409) return 'Konflikt: Änderung konnte nicht gespeichert werden.'
     if (cause.status === 422 || cause.status === 400) return 'Ungültiger Wert. Bitte Eingabe prüfen.'
   }
-  return cause instanceof Error ? cause.message : 'Speichern fehlgeschlagen. Erneut versuchen.'
+  return userMessage(cause, 'Speichern fehlgeschlagen. Erneut versuchen.')
 }
 
 async function commit(): Promise<boolean> {

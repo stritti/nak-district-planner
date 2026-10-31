@@ -95,7 +95,7 @@
       </p>
     </div>
 
-    <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ modal.error }}</p>
+    <ErrorAlert v-if="modal.error" :message="modal.error" class="mb-3" />
 
     <div class="flex justify-end gap-3">
       <button
@@ -122,6 +122,7 @@ import type { AddModalState } from './modalState'
 import { BuildingOffice2Icon, HomeModernIcon, PlusIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { LEADER_RANKS } from '../../api/leaders'
 import { roleChoicesFor } from '../../api/leaderRoles'
+import ErrorAlert from '../ErrorAlert.vue'
 
 // The parent owns the form state (reactive object) and the save logic; this
 // component only renders it. Aliasing the prop avoids prop-mutation lint noise

@@ -4,7 +4,7 @@
 <template>
   <!-- Matrix Table -->
   <div
-    v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
+    v-if="matrixLoaded && hasCongregations && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
     class="relative"
   >
     <div
@@ -265,8 +265,26 @@
     />
   </div>
 
+  <!-- No rows at all: an empty group, or a district without congregations (with or without dates). -->
+  <EmptyState
+    v-if="matrixLoaded && !hasCongregations && matrixStore.groupId"
+    compact
+    message="Diese Gruppe hat keine Gemeinden."
+    action-label="Alle Gruppen zeigen"
+    @action="showAllGroups"
+  />
+  <EmptyState
+    v-else-if="matrixLoaded && !hasCongregations"
+    compact
+    message="Dieser Bezirk hat noch keine Gemeinden."
+    :hint="canCreateCongregation
+      ? 'Legen Sie die erste Gemeinde an, damit die Matrix Gottesdienste zeigen kann.'
+      : 'Die Bezirksverwaltung legt die Gemeinden an.'"
+    :action-label="canCreateCongregation ? 'Gemeinde anlegen' : undefined"
+    @action="createCongregation"
+  />
   <div
-    v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length === 0"
+    v-else-if="matrixLoaded && matrixStore.matrix?.dates.length === 0"
     class="text-sm text-gray-500 dark:text-gray-400"
   >
     Keine Ereignisse im gewählten Zeitraum.
@@ -275,7 +293,8 @@
 
 <script setup lang="ts">
 import type { Directive } from 'vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, inject, nextTick, ref, watch } from 'vue'
+import { routerKey } from 'vue-router'
 import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
@@ -322,6 +341,21 @@ const inlineCoordinator = useInlineCellCoordinator()
 const saveAssignment = useInlineAssignmentSave()
 
 const leaderChoices = computed(() => leadersStore.choices)
+
+// Optional so the table also renders without a router (component tests).
+const router = inject(routerKey, null)
+const canCreateCongregation = computed(() =>
+  router !== null && auth.canAdminDistrict(matrixStore.districtId),
+)
+
+function showAllGroups(): void {
+  matrixStore.groupId = ''
+  void matrixStore.fetch()
+}
+
+function createCongregation(): void {
+  void router?.push({ name: 'admin-districts' })
+}
 
 function canInlineAssign(cell: MatrixCell): boolean {
   return !!cell.event_id &&
@@ -409,6 +443,9 @@ const leaderNameClass = computed(() => {
     props.compactMode ? 'text-[10px] max-w-[13ch] xl:max-w-[15ch]' : 'text-[11px] max-w-[18ch] xl:max-w-[24ch]',
   ]
 })
+
+const matrixLoaded = computed(() => !matrixStore.loading && !matrixStore.error && !!matrixStore.matrix)
+const hasCongregations = computed(() => (matrixStore.matrix?.rows.length ?? 0) > 0)
 
 const displayedRows = computed((): MatrixRow[] => {
   const rows = filterMatrixRows(matrixStore.matrix?.rows ?? [], matrixStore.congregationQuery)

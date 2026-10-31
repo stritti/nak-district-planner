@@ -282,7 +282,7 @@ describe('MatrixTable coverage gaps', () => {
 
   it('renders the no-events state when the matrix has no dates', () => {
     const matrixStore = useMatrixStore()
-    matrixStore.matrix = { dates: [], rows: [], holidays: {} }
+    matrixStore.matrix = { dates: [], rows: [{ congregation_id: 'c1', congregation_name: 'Nord', group_name: null, cells: {} }], holidays: {} }
 
     const wrapper = mount(MatrixTable, {
       props: { compactMode: false, matrixSortMode: 'default' },

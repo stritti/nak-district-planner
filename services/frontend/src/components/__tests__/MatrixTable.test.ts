@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { beforeEach, describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import MatrixTable from '@/components/MatrixTable.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useMatrixStore } from '@/stores/matrix'
 import type { MatrixResponse, MatrixRow } from '@/api/matrix'
 
@@ -260,10 +262,79 @@ describe('MatrixTable sticky date header', () => {
 
   it('does not create a scrollable header when there are no dates', () => {
     const store = useMatrixStore()
-    store.matrix = { dates: [], rows: [], holidays: {} }
+    store.matrix = { dates: [], rows: [{ congregation_id: 'c1', congregation_name: 'Nord', group_name: null, cells: {} }], holidays: {} }
     const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
     expect(wrapper.find('[data-testid="matrix-scroll"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Keine Ereignisse im gewählten Zeitraum.')
     wrapper.unmount()
+  })
+})
+
+describe('MatrixTable without congregations', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  function mountEmpty(options: { admin: boolean; withRouter: boolean; dates?: string[] }) {
+    const store = useMatrixStore()
+    store.districtId = 'd1'
+    store.matrix = { dates: options.dates ?? ['2026-10-04'], rows: [], holidays: {} }
+    const auth = useAuthStore()
+    auth.isSuperadmin = options.admin
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/admin/districts', name: 'admin-districts', component: { template: '<div />' } },
+      ],
+    })
+    const wrapper = mount(MatrixTable, {
+      props: { compactMode: false, matrixSortMode: 'default' },
+      global: options.withRouter ? { plugins: [router] } : {},
+    })
+    return { wrapper, router }
+  }
+
+  it('invites a district admin to create the first congregation', async () => {
+    const { wrapper, router } = mountEmpty({ admin: true, withRouter: true })
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Dieser Bezirk hat noch keine Gemeinden.')
+    expect(empty.text()).not.toContain('Keine Gemeinde passt')
+    await empty.get('button').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('admin-districts')
+  })
+
+  it('shows the onboarding for a new district without any date columns', () => {
+    const { wrapper } = mountEmpty({ admin: true, withRouter: true, dates: [] })
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Dieser Bezirk hat noch keine Gemeinden.')
+    expect(empty.find('button').text()).toBe('Gemeinde anlegen')
+    expect(wrapper.text()).not.toContain('Keine Ereignisse im gewählten Zeitraum.')
+    expect(wrapper.find('table').exists()).toBe(false)
+  })
+
+  it('offers to clear an empty group filter instead of the district onboarding', async () => {
+    const { wrapper } = mountEmpty({ admin: true, withRouter: true })
+    const store = useMatrixStore()
+    const fetch = vi.spyOn(store, 'fetch').mockResolvedValue()
+    store.groupId = 'g1'
+    await wrapper.vm.$nextTick()
+
+    const empty = wrapper.get('[data-testid="empty-state"]')
+    expect(empty.text()).toContain('Diese Gruppe hat keine Gemeinden.')
+    expect(empty.text()).not.toContain('noch keine Gemeinden')
+    await empty.get('button').trigger('click')
+
+    expect(store.groupId).toBe('')
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('only explains the next step to everyone else', () => {
+    for (const options of [{ admin: false, withRouter: true }, { admin: true, withRouter: false }]) {
+      const empty = mountEmpty(options).wrapper.get('[data-testid="empty-state"]')
+      expect(empty.text()).toContain('Die Bezirksverwaltung legt die Gemeinden an.')
+      expect(empty.find('button').exists()).toBe(false)
+    }
   })
 })

@@ -14,6 +14,7 @@ import {
   type CalendarIntegrationUpdate,
   type SyncResult,
 } from '../api/calendarIntegrations'
+import { userMessage } from '../api/errors'
 
 export const useCalendarIntegrationsStore = defineStore('calendarIntegrations', () => {
   const integrations = ref<CalendarIntegrationResponse[]>([])
@@ -32,7 +33,7 @@ export const useCalendarIntegrationsStore = defineStore('calendarIntegrations', 
       const res = await listIntegrations(districtId)
       integrations.value = res.items
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+      error.value = userMessage(e, 'Fehler beim Laden')
     } finally {
       loading.value = false
     }
@@ -66,7 +67,7 @@ export const useCalendarIntegrationsStore = defineStore('calendarIntegrations', 
       await fetchIntegrations(districtFilter.value)
       return result
     } catch (e) {
-      syncErrors.value[id] = e instanceof Error ? e.message : 'Sync fehlgeschlagen'
+      syncErrors.value[id] = userMessage(e, 'Sync fehlgeschlagen')
       return null
     } finally {
       syncingId.value = null

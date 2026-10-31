@@ -48,9 +48,9 @@
 
 ## 4. Frontend: Konfliktanzeige
 
-- [ ] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht
-- [ ] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe)
-- [ ] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung
+- [x] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht *(`src/components/ConflictBanner.vue` mit Tests)*
+- [x] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe) *(PR #655; seit 1.7.0 auch Dienste, Zuweisungen außerhalb der Matrix und Abwesenheiten, Change `matrix-conflicts-duties-absences`)*
+- [x] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung *(`AssignmentModal.vue`)*
 - [x] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Begründung *(`canSubmit`-Guard + `aria-describedby`-Beschreibung; `title`-Tooltip auf deaktivierten Buttons ist browserabhängig unzuverlässig)*
 - [x] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?" *(bestehendes `ConfirmDialog.vue`, Retry mit `confirm_warnings: true`)*
 - [x] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`) *(`src/stores/conflict.ts`)*
@@ -71,11 +71,11 @@
 
 ## 6. Frontend: Formular-Validierung und Fehlerzustände
 
-- [ ] 6.1 Event-Formular: Validierung von Pflichtfeldern, Datumslogik (Ende > Start)
-- [ ] 6.2 ServiceAssignment-Formular: Leader-Auswahl validieren, 409-Konflikte anzeigen
-- [ ] 6.3 District-Congregation-Formulare: Eindeutigkeit prüfen (Name innerhalb Bezirk)
-- [ ] 6.4 Einheitliche Fehleranzeige: `ErrorAlert.vue` für API-Fehler (400, 401, 403, 409, 500)
-- [ ] 6.5 Onboarding-Erstnutzer: Leere-Zustände mit Handlungsaufforderung ("Noch keine Gemeinden")
+- [x] 6.1 Event-Formular: Validierung von Pflichtfeldern, Datumslogik (Ende > Start) *(`EventCreateModal.vue` mit `required`, Prüfung „Ende muss nach dem Beginn liegen“ in `EventListView.vue`)*
+- [x] 6.2 ServiceAssignment-Formular: Leader-Auswahl validieren, 409-Konflikte anzeigen *(`parseConflictError` + `ConflictBanner` im `AssignmentModal.vue`)*
+- [x] 6.3 District-Congregation-Formulare: Eindeutigkeit prüfen (Name innerhalb Bezirk) *(serverseitig 409 seit PR #651; die Formulare zeigen die Servermeldung über `userMessage`)*
+- [x] 6.4 Einheitliche Fehleranzeige: `ErrorAlert.vue` für API-Fehler (400, 401, 403, 409, 500) *(`userMessage` liefert je Status einen festen deutschen Text, zeigt Serverdetails nur für 400/404/409/422 und nie für 403/5xx; Views, Stores und Toasts nutzen sie statt der Rohmeldung `403 Forbidden: {…}`. `ErrorAlert.vue` mit `role="alert"` ersetzt die Fehlerabsätze der Views und Dialoge)*
+- [x] 6.5 Onboarding-Erstnutzer: Leere-Zustände mit Handlungsaufforderung ("Noch keine Gemeinden") *(Bezirke & Gemeinden: „Bezirk anlegen“/„Gemeinde anlegen“; Matrix ohne Gemeinden zeigt statt des Filterhinweises „Dieser Bezirk hat noch keine Gemeinden.“ und für Bezirksadmins „Gemeinde anlegen“)*
 
 ## 7. E2E-Tests für Planungsflows
 

@@ -662,6 +662,7 @@ import {
   type LeaderUnavailabilityCreate,
   type LeaderUnavailabilityResponse,
 } from '../api/leaderUnavailabilities'
+import { userMessage } from '../api/errors'
 
 const authStore = useAuthStore()
 const districtsStore = useDistrictsStore()
@@ -884,7 +885,7 @@ async function switchToUnavailabilities(leaderId?: string) {
   try {
     await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
   } catch (e) {
-    toastStore.error('Abwesenheiten konnten nicht geladen werden', e instanceof Error ? e.message : undefined)
+    toastStore.error('Abwesenheiten konnten nicht geladen werden', userMessage(e, 'Unbekannter Fehler'))
   }
 }
 
@@ -957,7 +958,7 @@ async function doApprove() {
       canIncludeInactiveLeaders(selectedDistrictId.value),
     ).then((l) => (leaders.value = l))
   } catch (e) {
-    approveModal.error = e instanceof Error ? e.message : 'Fehler beim Genehmigen'
+    approveModal.error = userMessage(e, 'Fehler beim Genehmigen')
   } finally {
     saving.value = false
   }
@@ -992,7 +993,7 @@ async function doReject() {
     rejectModal.open = false
     toastStore.success('Registrierung abgelehnt', rejectModal.name)
   } catch (e) {
-    rejectModal.error = e instanceof Error ? e.message : 'Fehler beim Ablehnen'
+    rejectModal.error = userMessage(e, 'Fehler beim Ablehnen')
   } finally {
     saving.value = false
   }
@@ -1014,7 +1015,7 @@ async function executeDeleteReg() {
     pendingDeleteReg.value = null
     toastStore.success('Registrierung gelöscht', reg.name)
   } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+    toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
   } finally {
     saving.value = false
   }
@@ -1127,7 +1128,7 @@ async function loadSelfLink() {
     selfLinkedLeader.value = linked.leader
     selfSelectedLeaderId.value = linked.leader?.id ?? ''
   } catch (e) {
-    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Laden der Zuordnung'
+    selfLinkError.value = userMessage(e, 'Fehler beim Laden der Zuordnung')
   }
 }
 
@@ -1143,7 +1144,7 @@ async function connectSelfLink() {
       canIncludeInactiveLeaders(selectedDistrictId.value),
     )
   } catch (e) {
-    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Verknüpfen'
+    selfLinkError.value = userMessage(e, 'Fehler beim Verknüpfen')
   } finally {
     selfLinkLoading.value = false
   }
@@ -1162,7 +1163,7 @@ async function removeSelfLink() {
       canIncludeInactiveLeaders(selectedDistrictId.value),
     )
   } catch (e) {
-    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Lösen'
+    selfLinkError.value = userMessage(e, 'Fehler beim Lösen')
   } finally {
     selfLinkLoading.value = false
   }
@@ -1234,7 +1235,7 @@ async function saveAdd() {
         ].join(' · '),
       }))
     } else {
-      addModal.error = e instanceof Error ? e.message : 'Fehler'
+      addModal.error = userMessage(e, 'Fehler')
     }
   } finally {
     saving.value = false
@@ -1297,7 +1298,7 @@ async function saveEdit() {
     editModal.open = false
     toastStore.success('Amtsträger:in gespeichert', updated.name)
   } catch (e) {
-    editModal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    editModal.error = userMessage(e, 'Fehler beim Speichern')
   } finally {
     saving.value = false
   }
@@ -1314,7 +1315,7 @@ async function runAssignmentChange(change: (districtId: string) => Promise<void>
   try {
     await change(districtId)
   } catch (e) {
-    editModal.error = e instanceof Error ? e.message : 'Fehler beim Ändern der Zuordnung'
+    editModal.error = userMessage(e, 'Fehler beim Ändern der Zuordnung')
   } finally {
     // Whatever happened, show the stored state (also after a 409/412).
     try {
@@ -1381,7 +1382,7 @@ async function executeDeleteLeader() {
     pendingDeleteLeader.value = null
     toastStore.success('Amtsträger:in ausgeblendet', leader.name)
   } catch (e) {
-    toastStore.error('Ausblenden fehlgeschlagen', e instanceof Error ? e.message : undefined)
+    toastStore.error('Ausblenden fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
   } finally {
     saving.value = false
   }
@@ -1424,7 +1425,7 @@ async function createExportToken() {
     const base = window.location.origin
     exportModal.icsUrl = `${base}/api/v1/export/${token.token}/calendar.ics`
   } catch (e) {
-    exportModal.error = e instanceof Error ? e.message : 'Fehler beim Erstellen'
+    exportModal.error = userMessage(e, 'Fehler beim Erstellen')
   } finally {
     saving.value = false
   }
