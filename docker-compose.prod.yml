@@ -230,7 +230,7 @@ services:
         limits:
           memory: 512m
           pids: 128
-    image: valkey/valkey:9.1.2-alpine
+    image: valkey/valkey:9.1.3-alpine
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}
     command: ["sh", "-c", "exec valkey-server --requirepass \"$${VALKEY_PASSWORD}\""]

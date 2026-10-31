@@ -8,6 +8,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import MatrixTable from '@/components/MatrixTable.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useMatrixStore } from '@/stores/matrix'
+import { useToastStore } from '@/stores/toast'
 import type { MatrixResponse, MatrixRow } from '@/api/matrix'
 
 function row(name: string, groupName: string | null = null): MatrixRow {
@@ -303,6 +304,7 @@ describe('MatrixTable without congregations', () => {
     await empty.get('button').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('admin-districts')
+    expect(router.currentRoute.value.query).toEqual({ new: 'congregation', district: 'd1' })
   })
 
   it('shows the onboarding for a new district without any date columns', () => {
@@ -336,5 +338,59 @@ describe('MatrixTable without congregations', () => {
       expect(empty.text()).toContain('Die Bezirksverwaltung legt die Gemeinden an.')
       expect(empty.find('button').exists()).toBe(false)
     }
+  })
+})
+
+describe('MatrixTable without planned services', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  function mountWithoutServices(planner: boolean) {
+    const store = useMatrixStore()
+    store.districtId = 'd1'
+    store.matrix = { dates: ['2026-10-04'], rows: [row('Nord')], holidays: {} }
+    useAuthStore().isSuperadmin = planner
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+    return { store, wrapper }
+  }
+
+  it('offers planners to generate drafts from the service times', async () => {
+    const { store, wrapper } = mountWithoutServices(true)
+    const generate = vi.spyOn(store, 'generateDraftsForCurrentRange').mockResolvedValue({
+      created: 4, skipped_existing: 0, generated_in_requested_range: 4,
+    } as Awaited<ReturnType<typeof store.generateDraftsForCurrentRange>>)
+
+    const empty = wrapper.get('[data-testid="matrix-no-services"]')
+    expect(empty.text()).toContain('Keine Ereignisse im gewählten Zeitraum.')
+    await empty.get('button').trigger('click')
+    await flushPromises()
+
+    expect(generate).toHaveBeenCalledOnce()
+    expect(useToastStore().messages.at(-1)?.title).toBe('Entwürfe erzeugt')
+  })
+
+  it('reports a failed generation and only explains the step to viewers', async () => {
+    const { store, wrapper } = mountWithoutServices(true)
+    vi.spyOn(store, 'generateDraftsForCurrentRange').mockRejectedValue(new Error('kaputt'))
+    await wrapper.get('[data-testid="matrix-no-services"] button').trigger('click')
+    await flushPromises()
+    expect(useToastStore().messages.at(-1)?.title).toBe('Entwurfsgenerierung fehlgeschlagen')
+
+    setActivePinia(createPinia())
+    const viewer = mountWithoutServices(false).wrapper.get('[data-testid="matrix-no-services"]')
+    expect(viewer.text()).toContain('Die Planung legt die Gottesdienste')
+    expect(viewer.find('button').exists()).toBe(false)
+  })
+
+  it('hides the hint once a service is planned', () => {
+    const store = useMatrixStore()
+    store.matrix = {
+      dates: ['2026-10-04'],
+      rows: [{ ...row('Nord'), cells: { '2026-10-04': { event_id: 'e1' } as MatrixRow['cells'][string] } }],
+      holidays: {},
+    }
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+    expect(wrapper.find('[data-testid="matrix-no-services"]').exists()).toBe(false)
   })
 })
