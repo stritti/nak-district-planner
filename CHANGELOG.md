@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.7.0](https://github.com/stritti/nak-district-planner/compare/v1.6.0...v1.7.0) (2026-10-31)
+
+
+### Features
+
+* **frontend:** consistent error texts per HTTP status and onboarding empty states ([#770](https://github.com/stritti/nak-district-planner/issues/770)) ([df9cfd8](https://github.com/stritti/nak-district-planner/commit/df9cfd852fcc967983a440ac0fd574410f9be9a3))
+* **frontend:** shortcuts from the empty matrix ([#771](https://github.com/stritti/nak-district-planner/issues/771)) ([8adc646](https://github.com/stritti/nak-district-planner/commit/8adc646e4d26f02e45dd9a225e6ae358265c04a8))
+* **matrix:** show conflicts with duties, outside services and absences ([#769](https://github.com/stritti/nak-district-planner/issues/769)) ([d46f309](https://github.com/stritti/nak-district-planner/commit/d46f309cb5fea99653b37131112bfcb99b9da5a8))
+* **rbac:** finish multi-unit memberships and superadmin access ([#766](https://github.com/stritti/nak-district-planner/issues/766)) ([1e246e2](https://github.com/stritti/nak-district-planner/commit/1e246e2fc5dbc908f94f327a111c3a186e6fa20c))
+* **rbac:** multiple memberships per user and appointable superadmins (backend) ([#763](https://github.com/stritti/nak-district-planner/issues/763)) ([bf46cf0](https://github.com/stritti/nak-district-planner/commit/bf46cf07f8fed82801b58651b0e1aa27dff31bd8))
+* **users:** user administration view for memberships and superadmins ([#765](https://github.com/stritti/nak-district-planner/issues/765)) ([a037ea5](https://github.com/stritti/nak-district-planner/commit/a037ea5f76c486b3a5c8d05c2c83133541d7128b))
+
+
+### Bug Fixes
+
+* **backend:** build the image on Python 3.14 again ([#789](https://github.com/stritti/nak-district-planner/issues/789)) ([61c8781](https://github.com/stritti/nak-district-planner/commit/61c8781035fd9e722575f6313e435cc99425ddf2))
+* **deps:** override glob and minimatch for moderate advisories ([#774](https://github.com/stritti/nak-district-planner/issues/774)) ([71ebdd5](https://github.com/stritti/nak-district-planner/commit/71ebdd5eb700a6b46903213c6fe97ae8316c7bdb))
+* **deps:** replace removal-deprecated SQLAlchemy ARRAY.any() and tenacity initial ([#751](https://github.com/stritti/nak-district-planner/issues/751)) ([60d500d](https://github.com/stritti/nak-district-planner/commit/60d500df650ffb74c8a71162b5b1b638bd37e6f6))
+* **onboarding:** case-insensitive Keycloak guard and locked account email on registration ([#768](https://github.com/stritti/nak-district-planner/issues/768)) ([195b820](https://github.com/stritti/nak-district-planner/commit/195b820194e5b3f2eb7c6c7c15ca0e1c86ed1281))
+
+
+### Performance Improvements
+
+* **db:** disable PostgreSQL JIT for the application database ([#762](https://github.com/stritti/nak-district-planner/issues/762)) ([7ebdb17](https://github.com/stritti/nak-district-planner/commit/7ebdb173f4ebafe4890f34bcc61d948e552120a1))
+
 ## [1.6.0](https://github.com/stritti/nak-district-planner/compare/v1.5.0...v1.6.0) (2026-10-24)
 
 
