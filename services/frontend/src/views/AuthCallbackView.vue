@@ -84,9 +84,9 @@ async function handleCallback() {
 
     success.value = true
 
-    // Redirect to events page
+    // The start page sends users who do not plan on to the event list.
     await new Promise((resolve) => setTimeout(resolve, 500))
-    await router.push('/events')
+    await router.push('/')
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
     error.value = errorMsg

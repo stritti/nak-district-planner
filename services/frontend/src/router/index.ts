@@ -71,8 +71,11 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      // Planners start with the getting-started checklist; everyone else is sent on to /events.
       path: '/',
-      redirect: '/events',
+      name: 'getting-started',
+      component: () => import('../views/GettingStartedView.vue'),
+      beforeEnter: requireAuth,
     },
     {
       path: '/login',

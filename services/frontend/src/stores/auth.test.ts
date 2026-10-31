@@ -268,6 +268,20 @@ describe('District planning permission', () => {
     },
   )
 
+  it('knows whether the user plans any district', () => {
+    const store = useAuthStore()
+    store.memberships = [
+      { role: 'VIEWER', scope_type: 'DISTRICT', scope_id: 'd1' },
+      { role: 'PLANNER', scope_type: 'CONGREGATION', scope_id: 'c1' },
+    ]
+    expect(store.canPlanAnyDistrict).toBe(false)
+    store.memberships = [...store.memberships, { role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd2' }]
+    expect(store.canPlanAnyDistrict).toBe(true)
+    store.memberships = []
+    store.isSuperadmin = true
+    expect(store.canPlanAnyDistrict).toBe(true)
+  })
+
   it('denies viewers, congregation-only memberships and unknown districts', () => {
     const store = useAuthStore()
     store.memberships = [

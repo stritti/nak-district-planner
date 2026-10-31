@@ -104,11 +104,21 @@ make migrate
 
 ---
 
-### 3a. Testdaten seeden (Bezirke, Gemeinden, Amtsträger)
+### 3a. Testdaten und Demo-Bezirk seeden
 
 ```bash
 make seed
 ```
+
+Legt Testbezirke mit Gemeinden und Amtsträgern an und einmalig den **Demo-Bezirk Aremorica** für Vorführungen. Der Demo-Bezirk hat vier Gemeinden mit Gottesdienstzeiten und sechs Wochen Gottesdienste ab dem Montag der laufenden Woche. Die ersten zwei Wochen sind freigegeben. Er zeigt je ein Beispiel für:
+
+- Lücken (Gottesdienst ohne Dienstleiter)
+- Doppelbelegung und zu kurze Wechselzeit
+- Abwesenheit (Urlaub)
+- Organistendienst, der mit einem Gottesdienst kollidiert
+- kirchliche Feiertage (Entschlafenen-Gottesdienst, Advent)
+
+Außerdem bekommt er ein öffentliches Kalender-Abo. Dessen Adresse gibt der Seed einmalig aus, gespeichert wird nur der Hash. Die Planungsdaten sind relativ zum Ausführungstag; vor einer Vorführung legt `make seed-reset-demo` den Demo-Bezirk für die aktuellen Wochen neu an (der alte Demo-Bezirk wird dabei gelöscht). Gesetzliche Feiertage lassen sich unter Kalender-Integrationen („Deutsche Feiertage importieren“) nachladen.
 
 Optional ohne persistente Änderungen:
 

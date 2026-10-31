@@ -248,6 +248,7 @@ import {
   CalendarDaysIcon,
   LinkIcon,
   MoonIcon,
+  RocketLaunchIcon,
   SunIcon,
   TableCellsIcon,
   UserGroupIcon,
@@ -320,9 +321,13 @@ const baseLinks = [
 const usersLink = { to: '/admin/users', label: 'Benutzer', icon: UserGroupIcon }
 
 // The server answers 403 to everyone else; the link only appears for administrators.
-const links = computed(() =>
-  managesAnyUnit(authStore.memberships, authStore.isSuperadmin) ? [...baseLinks, usersLink] : baseLinks,
-)
+const startLink = { to: '/', label: 'Erste Schritte', icon: RocketLaunchIcon }
+
+const links = computed(() => [
+  ...(authStore.canPlanAnyDistrict ? [startLink] : []),
+  ...baseLinks,
+  ...(managesAnyUnit(authStore.memberships, authStore.isSuperadmin) ? [usersLink] : []),
+])
 
 async function handleLogout() {
   menuOpen.value = false

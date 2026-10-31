@@ -4,7 +4,7 @@ Die Dokumentation folgt Aufgaben und besitzt pro Thema eine **maßgebliche Quell
 
 | Zweck | Einstieg | Detailquelle |
 | --- | --- | --- |
-| Mehrwert und Ablauf | [Startseite](/), [Workflows](/guide/workflows) | [Use Cases](/features/use-cases) |
+| Mehrwert und Ablauf | [Startseite](/), [Workflows](/guide/workflows), [Rundgang Demo-Bezirk](/guide/demo-district) | [Use Cases](/features/use-cases) |
 | Dienstplanung und Freigaben | [Dienstmatrix](/guide/workflows#dienstplanung) | [Rollen](/features/roles), [Freigabe](/features/approval-workflow), [Einladungen](/features/invitations) |
 | Nächste Features | [Roadmap](/roadmap) | [offene Issues](https://github.com/stritti/nak-district-planner/issues?q=is%3Aissue%20is%3Aopen), [aktive OpenSpec-Changes](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes) |
 | Implementierter Vertrag | [Use Cases](/features/use-cases) | [OpenSpec-Baseline](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs) |
