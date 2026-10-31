@@ -40,6 +40,11 @@ export const useAuthStore = defineStore(
       ))
     }
 
+    /** Whether the user plans at least one district (start page, getting-started checklist). */
+    const canPlanAnyDistrict = computed(() => isSuperadmin.value || memberships.value.some((membership) =>
+      membership.scope_type === 'DISTRICT' && canPlanDistrict(membership.scope_id),
+    ))
+
     /** Mirrors district DISTRICT_ADMIN guards (rename, master data). */
     function canAdminDistrict(districtId: string | null | undefined): boolean {
       return isSuperadmin.value || (!!districtId && memberships.value.some((membership) =>
@@ -112,6 +117,7 @@ export const useAuthStore = defineStore(
       isAuthenticated,
       isTokenExpired,
       canPlanDistrict,
+      canPlanAnyDistrict,
       canAdminDistrict,
       setToken,
       refreshCurrentUserFlags,
