@@ -34,6 +34,8 @@ Wer einen Bezirk plant, landet nach der Anmeldung auf der Seite **Erste Schritte
 
 Die Schritte 4 bis 6 beziehen sich auf die nächsten vier Wochen. Jeder Schritt verlinkt die passende Seite. Den Schritt bieten nur die Rollen an, die ihn ausführen dürfen. Alle anderen sehen, wer ihn übernimmt. Personen ohne Planungsrolle starten wie bisher bei den Ereignissen.
 
+Alle sieben Schritte an einem durchgängigen Beispiel zeigt der [Rundgang mit dem Demo-Bezirk](/guide/demo-district).
+
 ## Dienstplanung
 
 **Beispiel:** An einem Sonntag finden Gottesdienste in mehreren Gemeinden statt. Die Matrix zeigt Termine und Gemeinden gemeinsam an. Fehlende Dienstzuweisungen sind sichtbar, ohne getrennte Kalender vergleichen zu müssen.

@@ -137,6 +137,8 @@ Authoritative descriptions live in `openspec/specs/` (notably `planning-model`, 
 
 **Credential encryption:** API keys and OAuth tokens must be encrypted at the service layer (decorator pattern) before storing to DB.
 
+**Docs follow changes:** Every OpenSpec change that alters user-visible behaviour updates the affected VitePress pages under `docs/` in the same change (rules in `openspec/config.yaml`). The demo district walkthrough `docs/guide/demo-district.md` describes `services/backend/seed_demo.py`; change both together — `tests/unit/test_seed_demo.py` fails when they diverge.
+
 **Pydantic v2** for all schemas — not v1.
 
 **Tailwind classes only** — no custom CSS unless unavoidable.

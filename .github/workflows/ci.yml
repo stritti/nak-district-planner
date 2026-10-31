@@ -38,6 +38,8 @@ jobs:
           filters: |
             backend:
               - 'services/backend/**'
+              # Checked against the demo seed by tests/unit/test_seed_demo.py.
+              - 'docs/guide/demo-district.md'
               - '.github/workflows/**'
               - '.github/workflows/ci.yml'
             frontend:

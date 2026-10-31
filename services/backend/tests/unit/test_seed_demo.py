@@ -8,6 +8,7 @@ from __future__ import annotations
 import uuid
 from collections import Counter
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -16,8 +17,10 @@ from app.domain.planning.duty_conflicts import ScheduledDuty
 from app.domain.planning.matrix_conflicts import PlannedService, matrix_conflicts
 from seed_demo import (
     DEMO_CONGREGATIONS,
+    DEMO_DISTRICT_NAME,
     DEMO_LEADERS,
     DEMO_TIMEZONE,
+    DEMO_TOKEN_LABEL,
     DEMO_WEEKS,
     ORGANIST_NAME,
     DemoService,
@@ -103,3 +106,32 @@ def test_gaps_release_and_organist() -> None:
     assert len(plan.confirmed) == 12
     assert [name for _, name in plan.organist_duties].count(ORGANIST_NAME) == DEMO_WEEKS
     assert set(plan.leaders.values()) <= set(LEADER_IDS)
+
+
+# The VitePress walkthrough describes this seed; it must change together with it.
+WALKTHROUGH = Path(__file__).resolve().parents[4] / "docs" / "guide" / "demo-district.md"
+WEEKDAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+
+
+def test_walkthrough_names_the_seeded_district() -> None:
+    text = WALKTHROUGH.read_text(encoding="utf-8")
+    assert DEMO_DISTRICT_NAME in text
+    assert DEMO_TOKEN_LABEL in text
+    assert ORGANIST_NAME in text
+    assert f"insgesamt {6 * DEMO_WEEKS}" in text
+    for name, service_times in DEMO_CONGREGATIONS.items():
+        row = next(line for line in text.splitlines() if line.startswith(f"| {name} |"))
+        for service_time in service_times:
+            assert f"{WEEKDAYS[service_time['weekday']]} {service_time['time']}" in row, name
+    for leader in DEMO_LEADERS:
+        assert f"| {leader.name} |" in text, leader.name
+
+
+def test_walkthrough_shows_each_conflict_in_its_week() -> None:
+    monday = date(2026, 10, 26)
+    rows = [line for line in WALKTHROUGH.read_text(encoding="utf-8").splitlines() if line.startswith("| ")]
+    for (_, week), rule_ids in _conflicts(_services(monday), monday).items():
+        # The walkthrough counts the current week as week 1.
+        week_rows = [row for row in rows if row.startswith(f"| {week + 1} |")]
+        for rule_id in rule_ids:
+            assert any(f"`{rule_id}`" in row for row in week_rows), (week + 1, rule_id)

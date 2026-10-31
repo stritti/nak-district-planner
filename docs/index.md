@@ -45,7 +45,7 @@ Version 1 unterstützt als externe Kalenderquellen **ICS und CalDAV über HTTPS*
 
 ## Der richtige Einstieg
 
-- **Planung:** [Workflows](/guide/workflows), [Use Cases](/features/use-cases) und [Rollenkonzept](/features/roles)
+- **Planung:** [Workflows](/guide/workflows), [Rundgang mit dem Demo-Bezirk](/guide/demo-district), [Use Cases](/features/use-cases) und [Rollenkonzept](/features/roles)
 - **Weiterentwicklung:** [Roadmap und nächster Feature-Backlog](/roadmap)
 - **Entwicklung:** [Lokaler Einstieg](/guide/getting-started), [Engineering Standards](/development/engineering-standards)
 - **Betrieb:** [Produktiv-Stack](/operations/production-compose), [Runbook](/operations/production-runbook)

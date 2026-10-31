@@ -44,6 +44,8 @@ Die Matrix (`GET /api/v1/districts/{id}/matrix`) zeigt je Zelle dieselben Konfli
 - organisatorischen Diensten derselben Person (Organist, Dirigent, …) und ihren Zuweisungen außerhalb der geladenen Matrix, etwa in einer anderen Gruppe; ein Dienst im selben Gottesdienst zählt nicht,
 - erfassten Abwesenheiten des Amtsträgers.
 
+Der [Rundgang mit dem Demo-Bezirk](/guide/demo-district#dienstleiter-zuweisen) zeigt jede dieser Regeln an einem Beispiel.
+
 Dienste fließen nur für Personen ab der Rolle `PLANNER` ein, weil die Dienst-Abfrage nur Planenden antwortet. Abwesenheiten folgen der Row-Level Security.
 
 ## E2E-Tests

@@ -19,6 +19,16 @@ agents:
 #     We use conventional commits
 #     Domain: e-commerce platform
 
+# Keep the VitePress user documentation in step with every change
+# (requirement "User documentation follows every change", documentation-experience).
+rules:
+  proposal:
+    - "Impact names the VitePress pages under docs/ that the change affects (guide, features, operations), or states that none are affected"
+    - "When the change touches the demo district (services/backend/seed_demo.py) or behaviour it shows, Impact names docs/guide/demo-district.md"
+  tasks:
+    - "Include a task that updates the affected docs/ pages in the same change"
+    - "When the demo district shows the changed behaviour, include a task that updates seed_demo.py and docs/guide/demo-district.md together"
+
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
 # Example:
