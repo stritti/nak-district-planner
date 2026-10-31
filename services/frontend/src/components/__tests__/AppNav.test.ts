@@ -98,4 +98,23 @@ describe('AppNav mobile menu', () => {
 
     expect(wrapper.find('a[href="/admin/users"]').exists()).toBe(visible)
   })
+
+  it.each([
+    ['a viewer', [{ role: 'VIEWER', scope_type: 'DISTRICT' as const, scope_id: 'd1' }], false, false],
+    ['a planner', [{ role: 'PLANNER', scope_type: 'DISTRICT' as const, scope_id: 'd1' }], false, true],
+    ['a superadmin without memberships', [], true, true],
+  ])('shows the getting-started link to %s only when it plans a district', async (_who, memberships, superadmin, visible) => {
+    const router = makeRouter()
+    await router.push('/events')
+    await router.isReady()
+
+    const authStore = useAuthStore()
+    authStore.setToken({ accessToken: 'x', idToken: 'x', expiresAt: Date.now() / 1000 + 3600 })
+    authStore.memberships = memberships
+    authStore.isSuperadmin = superadmin
+
+    const wrapper = mount(AppNav, { global: { plugins: [router] } })
+
+    expect(wrapper.findAll('a[href="/"]').some((link) => link.text().includes('Erste Schritte'))).toBe(visible)
+  })
 })
