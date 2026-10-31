@@ -5,7 +5,7 @@
     "": {
       "name": "nak-district-planner",
       "devDependencies": {
-        "@stritti/vitepress-plugin-openspec": "^0.8.0",
+        "@stritti/vitepress-plugin-openspec": "^0.8.4",
         "vitepress": "^1.6.3",
         "vitepress-plugin-mermaid-diagram": "0.3.2",
         "vue": "^3.5.44",
@@ -181,7 +181,7 @@
 
     "@shikijs/vscode-textmate": ["@shikijs/vscode-textmate@10.0.2", "", {}, "sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg=="],
 
-    "@stritti/vitepress-plugin-openspec": ["@stritti/vitepress-plugin-openspec@0.8.0", "", { "dependencies": { "js-yaml": "^5.4.2", "picocolors": "^1.1.1" }, "peerDependencies": { "vite": ">=5.0.0", "vitepress": ">=1.0.0" }, "optionalPeers": ["vitepress"] }, "sha512-HEOk4TDku/am0n+xfnTXe+pCxKHzKsIFibkV1uw5xNno+GB61KzlNY9vk6g3Paq8qY4oYmJEZfSuH0Uh4ST5Yg=="],
+    "@stritti/vitepress-plugin-openspec": ["@stritti/vitepress-plugin-openspec@0.8.4", "", { "dependencies": { "js-yaml": "^5.4.2", "picocolors": "^1.1.1" }, "peerDependencies": { "vite": ">=5.0.0", "vitepress": ">=1.0.0" }, "optionalPeers": ["vitepress"] }, "sha512-KEEC0/01euJ6hxBTJkcBjcc9bj2sGb9wsuKER/idp76awhso9sLxz0phgSufrP7LWuepVovWi1yjjy0DZqJxbQ=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 
