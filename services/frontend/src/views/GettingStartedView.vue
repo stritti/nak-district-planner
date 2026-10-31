@@ -118,7 +118,10 @@ function value<T>(result: PromiseSettledResult<T>): T | null {
 }
 
 /** Each fact loads on its own: a failing or forbidden request marks only its step unknown. */
+let loadRun = 0
+
 async function load(): Promise<void> {
+  const run = ++loadRun
   loading.value = true
   error.value = null
   try {
@@ -128,16 +131,20 @@ async function load(): Promise<void> {
       facts.value = { ...facts.value, districtCount: districtsStore.districts.length }
       return
     }
-    const from = new Date()
-    from.setHours(0, 0, 0, 0)
+    // The matrix filters by the UTC dates of both bounds (end inclusive), so send today's
+    // calendar date at UTC midnight and the last day of the window.
+    const today = new Date()
+    const from = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
     const to = new Date(from)
-    to.setDate(to.getDate() + 7 * GETTING_STARTED_WEEKS)
+    to.setUTCDate(to.getUTCDate() + 7 * GETTING_STARTED_WEEKS - 1)
     const [congregations, leaders, matrix, tokens] = await Promise.allSettled([
       listCongregations(id),
       listLeaders(id),
       fetchMatrix(id, from.toISOString(), to.toISOString()),
       auth.canAdminDistrict(id) ? listExportTokens(id) : Promise.reject(new Error('forbidden')),
     ])
+    // A newer load (another district was selected meanwhile) owns the result.
+    if (run !== loadRun) return
     facts.value = {
       districtCount: districtsStore.districts.length,
       congregations: value(congregations),
@@ -146,9 +153,9 @@ async function load(): Promise<void> {
       exportTokenCount: value(tokens)?.filter((token) => token.district_id === id).length ?? null,
     }
   } catch (e) {
-    error.value = userMessage(e, 'Bezirke konnten nicht geladen werden.')
+    if (run === loadRun) error.value = userMessage(e, 'Bezirke konnten nicht geladen werden.')
   } finally {
-    loading.value = false
+    if (run === loadRun) loading.value = false
   }
 }
 
@@ -162,6 +169,6 @@ onMounted(() => {
 })
 
 watch(districtId, (next, previous) => {
-  if (next && next !== previous && !loading.value) void load()
+  if (next && next !== previous) void load()
 })
 </script>

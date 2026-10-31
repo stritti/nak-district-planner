@@ -105,6 +105,21 @@ describe('gettingStartedSteps', () => {
     expect(nextStepId(steps)).toBeNull()
   })
 
+  it('does not claim completion when a day has several services', () => {
+    const steps = byId({
+      ...empty,
+      districtCount: 1,
+      matrix: matrix([cell({ approval_status: 'CONFIRMED', service_count: 2 })]),
+    })
+    expect(steps.drafts.detail).toBe('2 Gottesdienste in den nächsten 4 Wochen geplant.')
+    expect(steps.assign).toMatchObject({ state: 'unknown', detail: 'An Tagen mit mehreren Gottesdiensten bitte in der Matrix prüfen.' })
+    expect(steps.release.state).toBe('unknown')
+
+    const withGap = byId({ ...empty, matrix: matrix([cell({ is_gap: true, service_count: 2 })]) })
+    expect(withGap.assign).toMatchObject({ state: 'open', detail: '1 Lücke in den nächsten 4 Wochen.' })
+    expect(withGap.release.detail).toBe('0 von 2 Gottesdiensten in den nächsten 4 Wochen freigegeben.')
+  })
+
   it('offers each step only to the role that may take it', () => {
     const planner = byId(empty, { createDistrict: false, adminDistrict: false, planDistrict: true })
     expect(planner.district).toMatchObject({ actionLabel: null, hint: 'Bezirke legt ein Superadmin an.' })

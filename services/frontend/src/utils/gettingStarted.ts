@@ -42,20 +42,34 @@ interface ServiceCounts {
   services: number
   gaps: number
   unreleased: number
+  /** Services known to be released (on multi-service days only the first is known). */
+  released: number
+  /** Days with several services: the matrix reports assignment and release of the first only. */
+  multiServiceDays: number
 }
 
 function countServices(matrix: MatrixResponse): ServiceCounts {
-  const counts = { services: 0, gaps: 0, unreleased: 0 }
+  const counts = { services: 0, gaps: 0, unreleased: 0, released: 0, multiServiceDays: 0 }
   for (const row of matrix.rows) {
     for (const cell of Object.values(row.cells)) {
       if (!cell.event_id) continue
       if (cell.category !== 'Gottesdienst') continue
-      counts.services += 1
+      const services = Math.max(cell.service_count ?? 1, 1)
+      counts.services += services
+      if (services > 1) counts.multiServiceDays += 1
       if (cell.is_gap) counts.gaps += 1
-      if (cell.approval_status !== 'CONFIRMED') counts.unreleased += 1
+      if (cell.approval_status === 'CONFIRMED') counts.released += 1
+      else counts.unreleased += 1
     }
   }
   return counts
+}
+
+const MULTI_SERVICE_HINT = 'An Tagen mit mehreren Gottesdiensten bitte in der Matrix prüfen.'
+
+/** Without the status of every service on multi-service days, completion cannot be claimed. */
+function completeOrUnsure(counts: ServiceCounts): StepState {
+  return counts.multiServiceDays > 0 ? 'unknown' : 'done'
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -131,13 +145,15 @@ export function gettingStartedSteps(
     {
       id: 'assign',
       title: 'Dienstleiter zuweisen',
-      state: counts === null ? 'unknown' : counts.services > 0 && counts.gaps === 0 ? 'done' : 'open',
+      state: counts === null ? 'unknown' : counts.services > 0 && counts.gaps === 0 ? completeOrUnsure(counts) : 'open',
       detail: counts === null
         ? 'Die Planung konnte nicht geladen werden.'
         : counts.services === 0
           ? 'Erst sind Gottesdienste nötig.'
           : counts.gaps === 0
-            ? `Alle Gottesdienste ${range} haben einen Dienstleiter.`
+            ? counts.multiServiceDays > 0
+              ? MULTI_SERVICE_HINT
+              : `Alle Gottesdienste ${range} haben einen Dienstleiter.`
             : `${plural(counts.gaps, 'Lücke', 'Lücken')} ${range}.`,
       to: '/matrix',
       ...action(can.planDistrict, 'Lücken schließen', PLANNER_HINT),
@@ -147,12 +163,14 @@ export function gettingStartedSteps(
       title: 'Planung freigeben',
       state: counts === null
         ? 'unknown'
-        : counts.services > 0 && counts.unreleased === 0 ? 'done' : 'open',
+        : counts.services > 0 && counts.unreleased === 0 ? completeOrUnsure(counts) : 'open',
       detail: counts === null
         ? 'Die Planung konnte nicht geladen werden.'
         : counts.services === 0
           ? 'Erst sind Gottesdienste nötig.'
-          : `${counts.services - counts.unreleased} von ${plural(counts.services, 'Gottesdienst', 'Gottesdiensten')} ${range} freigegeben.`,
+          : counts.unreleased === 0 && counts.multiServiceDays > 0
+            ? MULTI_SERVICE_HINT
+            : `${counts.released} von ${plural(counts.services, 'Gottesdienst', 'Gottesdiensten')} ${range} freigegeben.`,
       to: '/matrix',
       ...action(can.planDistrict, 'Zur Freigabe', PLANNER_HINT),
     },

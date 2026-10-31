@@ -89,7 +89,11 @@ describe('GettingStartedView', () => {
     expect(step(wrapper, 'subscribe').text()).toContain('Noch kein Kalender-Abo eingerichtet.')
 
     const [, from, to] = vi.mocked(matrixApi.fetchMatrix).mock.calls[0]
-    expect((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000).toBeCloseTo(28, 0)
+    const today = new Date()
+    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    // UTC midnight of the local calendar date; the end date is inclusive (28 days in all).
+    expect(from).toBe(`${localDate}T00:00:00.000Z`)
+    expect((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000).toBe(27)
     expect(exportTokensApi.listExportTokens).toHaveBeenCalledWith('d1')
   })
 
@@ -147,6 +151,27 @@ describe('GettingStartedView', () => {
     await flushPromises()
     expect(districtsApi.listCongregations).toHaveBeenLastCalledWith('d2')
     expect(wrapper.text()).toContain('Bezirk Süd')
+  })
+
+  it('shows the latest district when the selection changes while loading', async () => {
+    let releaseFirst!: () => void
+    vi.mocked(districtsApi.listCongregations).mockImplementation((id) => id === 'd1'
+      ? new Promise((resolve) => { releaseFirst = () => resolve([]) })
+      : Promise.resolve([{ id: 'c2', name: 'Süd', district_id: 'd2', service_times: [{ weekday: 6, time: '10:00' }] } as districtsApi.CongregationResponse]))
+    const auth = useAuthStore()
+    auth.isSuperadmin = true
+    const router = makeRouter()
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(GettingStartedView, { global: { plugins: [router] } })
+    await flushPromises()
+
+    useDistrictsStore().setSelectedDistrict('d2')
+    await flushPromises()
+    releaseFirst()
+    await flushPromises()
+
+    expect(step(wrapper, 'congregations').text()).toContain('1 von 1 Gemeinde hat Gottesdienstzeiten.')
   })
 
   it('sends users who do not plan on to the event list', async () => {
