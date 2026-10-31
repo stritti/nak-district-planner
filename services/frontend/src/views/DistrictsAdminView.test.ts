@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
+import { routeLocationKey } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as districtsApi from '../api/districts'
@@ -120,6 +121,31 @@ beforeEach(() => {
 })
 
 describe('DistrictsAdminView', () => {
+  function setupWithQuery(query: Record<string, string>) {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().isSuperadmin = true
+    return mount(DistrictsAdminView, {
+      global: {
+        plugins: [pinia],
+        stubs: { ConfirmDialog: ConfirmDialogStub },
+        provide: { [routeLocationKey as symbol]: { query } },
+      },
+    })
+  }
+
+  it('opens the new-congregation dialog for the district named in the link', async () => {
+    const wrapper = setupWithQuery({ new: 'congregation', district: 'd2' })
+    await flushPromises()
+    expect(findModal(wrapper, 'Neue Gemeinde').exists()).toBe(true)
+  })
+
+  it('ignores a new-congregation link for an unknown district', async () => {
+    const wrapper = setupWithQuery({ new: 'congregation', district: 'nope' })
+    await flushPromises()
+    expect(wrapper.findAll('.modal-panel').some((node) => node.text().includes('Neue Gemeinde'))).toBe(false)
+  })
+
   it('offers to create the first congregation of an empty district', async () => {
     const { wrapper } = setup()
     await flushPromises()
