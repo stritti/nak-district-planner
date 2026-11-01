@@ -30,6 +30,12 @@ updates:
     directory: "/services/backend"
     schedule:
       interval: "weekly"
+    ignore:
+      # Stay on the Python minor version pinned in pyproject.toml and CI. A
+      # new minor version lacks wheels for several dependencies (watchfiles),
+      # so `uv sync --frozen` fails in the image build. Upgrade deliberately.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: "docker"
     directory: "/services/frontend"
     schedule:

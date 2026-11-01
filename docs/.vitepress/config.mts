@@ -40,6 +40,7 @@ export default defineConfig(
           { text: 'Einstieg', items: [
             { text: 'Projektüberblick', link: '/' },
             { text: 'So funktioniert es', link: '/guide/workflows' },
+            { text: 'Rundgang: Demo-Bezirk', link: '/guide/demo-district' },
             { text: 'Use Cases', link: '/features/use-cases' },
             { text: 'Roadmap', link: '/roadmap' }
           ] },
