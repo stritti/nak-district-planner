@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
@@ -16,6 +17,7 @@ from app.adapters.db.session import AsyncSessionLocal
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from seed_demo import seed_demo_district
 
 
 @dataclass(frozen=True)
@@ -123,7 +125,18 @@ SEED_DATA: list[DistrictSeed] = [
 ]
 
 
-REQUIRED_TABLES = ("districts", "congregations", "leaders")
+REQUIRED_TABLES = (
+    "districts",
+    "congregations",
+    "leaders",
+    "planning_slots",
+    "event_instances",
+    "service_assignments",
+    "leader_unavailabilities",
+    "event_duty_categories",
+    "event_duty_assignments",
+    "export_tokens",
+)
 
 
 async def _ensure_required_tables_exist(session) -> None:
@@ -145,7 +158,7 @@ async def _ensure_required_tables_exist(session) -> None:
         )
 
 
-async def seed_test_data(*, dry_run: bool = False) -> None:
+async def seed_test_data(*, dry_run: bool = False, reset_demo: bool = False) -> None:
     async with AsyncSessionLocal() as session:
         await _ensure_required_tables_exist(session)
 
@@ -222,6 +235,8 @@ async def seed_test_data(*, dry_run: bool = False) -> None:
 
                 await leader_repo.save(leader)
 
+        demo_token = await seed_demo_district(session, today=date.today(), reset=reset_demo)
+
         if dry_run:
             await session.rollback()
             action = "Dry-run"
@@ -235,16 +250,24 @@ async def seed_test_data(*, dry_run: bool = False) -> None:
             f"{created_congregations} Gemeinden, "
             f"{created_leaders} Amtstraeger neu erstellt."
         )
+        if demo_token and not dry_run:
+            # Shown once, like the API does when a token is created; only the hash is stored.
+            print(f"Kalender-Abo des Demo-Bezirks: /api/v1/export/{demo_token}/calendar.ics")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Seed test data for districts, congregations and leaders"
+        description="Seed test data for districts, congregations and leaders plus a demo district"
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simulate seeding and rollback at the end",
+    )
+    parser.add_argument(
+        "--reset-demo",
+        action="store_true",
+        help="Recreate the demo district for the current weeks",
     )
     return parser.parse_args()
 
@@ -254,6 +277,6 @@ if __name__ == "__main__":
 
     args = parse_args()
     try:
-        asyncio.run(seed_test_data(dry_run=args.dry_run))
+        asyncio.run(seed_test_data(dry_run=args.dry_run, reset_demo=args.reset_demo))
     except (RuntimeError, ProgrammingError) as exc:
         raise SystemExit(str(exc)) from exc

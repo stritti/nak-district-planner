@@ -1,4 +1,4 @@
-.PHONY: migrate seed seed-dry-run
+.PHONY: migrate seed seed-dry-run seed-reset-demo
 
 # Runs the one-shot migrate service, which alone loads the owner credentials (.env.db).
 migrate:
@@ -9,3 +9,6 @@ seed:
 
 seed-dry-run:
 	cd services/backend && uv run python seed_testdata.py --dry-run
+
+seed-reset-demo:
+	cd services/backend && uv run python seed_testdata.py --reset-demo

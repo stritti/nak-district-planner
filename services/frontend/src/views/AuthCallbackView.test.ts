@@ -113,7 +113,7 @@ describe('AuthCallbackView', () => {
     await flushPromises()
 
     expect(auth.refreshCurrentUserFlags).toHaveBeenCalledOnce()
-    expect(mocks.push).toHaveBeenCalledWith('/events')
+    expect(mocks.push).toHaveBeenCalledWith('/')
     expect(wrapper.text()).toContain('Erfolgreich angemeldet')
   })
 
