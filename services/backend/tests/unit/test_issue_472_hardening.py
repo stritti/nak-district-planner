@@ -35,7 +35,8 @@ def test_frontend_is_unprivileged_and_serves_fresh_app_shell() -> None:
     dockerfile = _read("services/frontend/Dockerfile")
     nginx = _read("services/frontend/nginx.conf")
     real_ip = _read("services/frontend/15-real-ip-from.sh")
-    assert "nginxinc/nginx-unprivileged:1." in dockerfile
+    assert "nginx/nginx-unprivileged:1." in dockerfile
+    assert "nginxinc/" not in dockerfile
     assert "FROM nginx:alpine" not in dockerfile
     assert "EXPOSE 8080" in dockerfile
     assert "listen 8080;" in nginx
