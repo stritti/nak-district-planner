@@ -340,6 +340,10 @@ describe('EventListView', () => {
   })
 
   it('switches between week and month views, navigates periods and merges district holidays', async () => {
+    // Freeze the clock in the fixtures' month (October 2026); "Heute" and the
+    // month header otherwise follow the real date and the test breaks monthly.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-05T12:00:00Z'))
     const { wrapper } = setup()
     await flushPromises()
 
