@@ -316,7 +316,7 @@ Wichtig: Der Rate-Limit muss pro Client-IP zählen. Dafür die Hinweise unter [C
 ## Haertung seit Issue #472
 
 Die Images des Frontends verwenden ein gepinntes
-`nginxinc/nginx-unprivileged`-Image auf Port 8080.
+`nginx/nginx-unprivileged`-Image auf Port 8080.
 Sowohl die gebuendelten File-Provider-Routen als auch das Override fuer einen
 bestehenden Traefik zeigen deshalb auf `frontend:8080`. Host-Ports
 80/443 bleiben ausschliesslich bei Traefik.
