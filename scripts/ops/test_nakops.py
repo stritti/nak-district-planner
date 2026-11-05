@@ -195,6 +195,18 @@ class BackupsTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("UNVOLLSTÄNDIG: Rollenarchiv fehlt", out)
 
+    def test_empty_archive_does_not_count_as_complete(self) -> None:
+        self.make("nak_planner_{ts}.dump.gpg", 1)
+        self.make("nak_planner_{ts}.roles.sql.gpg", 1)
+        next(self.dir.glob("*.roles.sql.gpg")).write_bytes(b"")
+        code, out = run(
+            ["backups", "--dir", str(self.dir), "--db", "nak_planner", "--max-age-hours", "26"]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("UNVOLLSTÄNDIG: Rollenarchiv ist leer", out)
+        code, _ = run(["backups", "--dir", str(self.dir), "--db", "nak_planner", "--latest-paths"])
+        self.assertEqual(code, 1)
+
     def test_unencrypted_dump_is_marked(self) -> None:
         self.make("nak_planner_{ts}.dump", 1)
         self.make("nak_planner_{ts}.roles.sql", 1)

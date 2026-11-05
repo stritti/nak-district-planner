@@ -322,8 +322,21 @@ class BackupSet:
     roles: Path | None = None
 
     @property
+    def problem(self) -> str | None:
+        """Why the set is not usable, or None. A failed run can leave an empty archive."""
+        if self.roles is None:
+            return "Rollenarchiv fehlt"
+        if self.dump is None:
+            return "Datenbankarchiv fehlt"
+        if self.dump.stat().st_size == 0:
+            return "Datenbankarchiv ist leer"
+        if self.roles.stat().st_size == 0:
+            return "Rollenarchiv ist leer"
+        return None
+
+    @property
     def complete(self) -> bool:
-        return self.dump is not None and self.roles is not None
+        return self.problem is None
 
     @property
     def size(self) -> int:
@@ -385,15 +398,8 @@ def cmd_backups(args: argparse.Namespace) -> int:
         else:
             print(f"{'Datenbank':<16} {'Zeitpunkt (UTC)':<19} {'Alter':>8} {'Größe':>9}  Status")
         for entry in sets:
-            status = (
-                "vollständig"
-                if entry.complete
-                else (
-                    "UNVOLLSTÄNDIG: Rollenarchiv fehlt"
-                    if entry.roles is None
-                    else "UNVOLLSTÄNDIG: Datenbankarchiv fehlt"
-                )
-            )
+            problem = entry.problem
+            status = "vollständig" if problem is None else f"UNVOLLSTÄNDIG: {problem}"
             encrypted = (
                 "" if entry.dump is None or entry.dump.suffix == ".gpg" else " (UNVERSCHLÜSSELT)"
             )
