@@ -37,7 +37,7 @@ scripts/ops/nakctl help backup      # dasselbe
 
 ```bash
 scripts/ops/nakctl status          # Dienste laufen, /health, Alembic-Stand, Backup-Alter, Platz
-scripts/ops/nakctl check certs     # TLS-Zertifikate von APP_HOST und AUTH_HOST (Befund unter 21 Tagen)
+scripts/ops/nakctl check certs     # TLS-Zertifikate von APP_HOST und AUTH_HOST (Befund unter 21 Tagen; ein Host ohne Antwort nach 15 s ist ebenfalls ein Befund)
 scripts/ops/nakctl check disk      # freier Platz (Befund unter 15 %)
 scripts/ops/nakctl check secrets   # .env-Dateien: Rechte 0600, Beispiel- und Standardwerte
 scripts/ops/nakctl check all       # alles zusammen, für den täglichen Cron-Job

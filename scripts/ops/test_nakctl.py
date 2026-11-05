@@ -223,7 +223,9 @@ class BackupTest(NakctlCase):
         result = self.nakctl("backup", "create", BACKUP_POST_HOOK="hook.sh")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(marker.read_text().strip(), "backup@host:/srv/nak/|/keys/id")
-        result = self.nakctl("backup", "create", BACKUP_POST_HOOK="hook.sh", OFFSITE_TARGET="env@host:/x/")
+        result = self.nakctl(
+            "backup", "create", BACKUP_POST_HOOK="hook.sh", OFFSITE_TARGET="env@host:/x/"
+        )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(marker.read_text().strip(), "env@host:/x/|/keys/id")
 
@@ -322,6 +324,19 @@ class DeployTest(NakctlCase):
         self.assertTrue(any(c.startswith("compose run --no-deps --rm migrate") for c in calls))
         self.assertTrue(any(c == "compose up -d" for c in calls))
 
+    def test_update_uses_and_replaces_the_last_duplicate_definition(self) -> None:
+        self.env_file.write_text("APP_VERSION=1.4.0\nPOSTGRES_DB=nak_planner\nAPP_VERSION=1.6.0\n")
+        result = self.nakctl(
+            "deploy", "update", "1.7.0", "--yes", "--skip-backup", STUB_MANIFESTS="1.7.0"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.env_file.read_text().splitlines()
+        self.assertEqual(
+            [line for line in lines if line.startswith("APP_VERSION=")], ["APP_VERSION=1.7.0"]
+        )
+        self.assertIn("POSTGRES_DB=nak_planner", lines)
+        self.assertIn("PREVIOUS_VERSION=1.6.0", (self.deploy / "logs" / "nakctl.state").read_text())
+
     def test_update_without_confirmation_is_aborted(self) -> None:
         result = self.nakctl("deploy", "update", "1.7.0", "--skip-backup", STUB_MANIFESTS="1.7.0")
         self.assertEqual(result.returncode, 4)
@@ -358,6 +373,25 @@ class DeployTest(NakctlCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("APP_VERSION=1.5.0", self.env_file.read_text())
         self.assertIn("PREVIOUS_VERSION=1.6.0", (self.deploy / "logs" / "nakctl.state").read_text())
+
+
+class CertCheckTest(NakctlCase):
+    @unittest.skipUnless(
+        shutil.which("openssl") and shutil.which("timeout"), "openssl/timeout missing"
+    )
+    def test_hanging_tls_handshake_becomes_a_finding(self) -> None:
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            port = listener.getsockname()[1]
+            started = time.monotonic()
+            result = self.nakctl(
+                "check", "certs", "--host", f"localhost:{port}", NAKCTL_CERT_TIMEOUT="1"
+            )
+            elapsed = time.monotonic() - started
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("kein Zertifikat abrufbar", result.stdout)
+        self.assertLess(elapsed, 10)
 
 
 class CleanupTest(NakctlCase):

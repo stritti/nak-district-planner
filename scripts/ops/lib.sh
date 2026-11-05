@@ -78,11 +78,11 @@ enter_deploy_dir() {
   cd "$DEPLOY_DIR" || die "$EXIT_ENV" "kann nicht nach $DEPLOY_DIR wechseln"
 }
 
-# env_get <KEY> [file] — read one value without sourcing the file.
+# env_get <KEY> [file] — read one value without sourcing the file; the last definition wins.
 env_get() {
   local key="$1" file="${2:-$DEPLOY_DIR/.env}" value
   [[ -f "$file" ]] || return 0
-  value="$(grep -m1 -E "^(export[[:space:]]+)?${key}=" "$file" | cut -d= -f2- || true)"
+  value="$(grep -E "^(export[[:space:]]+)?${key}=" "$file" | tail -n1 | cut -d= -f2- || true)"
   value="${value%$'\r'}"
   if [[ ${#value} -ge 2 && ( "${value:0:1}" == '"' || "${value:0:1}" == "'" ) && "${value: -1}" == "${value:0:1}" ]]; then
     value="${value:1:${#value}-2}"
@@ -90,12 +90,13 @@ env_get() {
   printf '%s' "$value"
 }
 
-# env_set <KEY> <value> [file] — replace or append KEY=value, keeping file permissions.
+# env_set <KEY> <value> [file] — replace the first KEY=value, drop later duplicates or
+# append; keeps file permissions.
 env_set() {
   local key="$1" value="$2" file="${3:-$DEPLOY_DIR/.env}" tmp
   tmp="$(mktemp "${file}.XXXXXX")"
-  if grep -q -E "^${key}=" "$file"; then
-    awk -v k="$key" -v v="$value" 'BEGIN{done=0} $0 ~ "^"k"=" && !done {print k"="v; done=1; next} {print}' "$file" >"$tmp"
+  if grep -q -E "^(export[[:space:]]+)?${key}=" "$file"; then
+    awk -v k="$key" -v v="$value" 'BEGIN{done=0} $0 ~ "^(export[ \t]+)?"k"=" {if (!done) print k"="v; done=1; next} {print}' "$file" >"$tmp"
   else
     cat "$file" >"$tmp"
     printf '%s=%s\n' "$key" "$value" >>"$tmp"

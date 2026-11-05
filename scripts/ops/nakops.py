@@ -39,6 +39,8 @@ REDACTED = "[REDACTED]"
 
 # --------------------------------------------------------------------------- redaction
 
+_SECRET_WORDS = r"(?:password|passwd|secret|token|api[_-]?key|credential|authorization|cookie)"
+
 _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
     # ICS export feed: everything below /export/ is the bearer secret
     # (mirrors app/adapters/api/log_redaction.py; `export-tokens` is untouched).
@@ -46,12 +48,18 @@ _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+"), rf"\1 {REDACTED}"),
     # Credentials embedded in URLs: scheme://user:password@host
     (re.compile(r"(://)[^/\s:@]*:[^/\s@]+@"), rf"\1{REDACTED}@"),
-    # key=value / key: value / "key": "value" for secret-looking keys
+    # key=value / key: value / "key": "value" for secret-looking keys; quoted values
+    # (with spaces or escapes) are masked as a whole first.
     (
-        re.compile(
-            r"(?i)(\b[\w-]*(?:password|passwd|secret|token|api[_-]?key|credential|authorization|cookie)[\w-]*"
-            r"[\"']?\s*[=:]\s*[\"']?)[^\s\"'&,;}]+"
-        ),
+        re.compile(rf"(?i)(\b[\w-]*{_SECRET_WORDS}[\w-]*[\"']?\s*[=:]\s*)\"(?:[^\"\\\n]|\\.)*\""),
+        rf'\1"{REDACTED}"',
+    ),
+    (
+        re.compile(rf"(?i)(\b[\w-]*{_SECRET_WORDS}[\w-]*[\"']?\s*[=:]\s*)'(?:[^'\\\n]|\\.)*'"),
+        rf"\1'{REDACTED}'",
+    ),
+    (
+        re.compile(rf"(?i)(\b[\w-]*{_SECRET_WORDS}[\w-]*[\"']?\s*[=:]\s*[\"']?)[^\s\"'&,;}}]+"),
         rf"\1{REDACTED}",
     ),
     # OAuth callback parameters

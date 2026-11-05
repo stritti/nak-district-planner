@@ -47,6 +47,13 @@ class RedactTest(unittest.TestCase):
             self.assertNotIn(secret, redacted)
         self.assertIn("[EMAIL]", redacted)
 
+    def test_quoted_secret_with_spaces_is_masked_completely(self) -> None:
+        text = '{"SMTP_PASSWORD": "alpha beta \\"gamma\\""} password=\'one two\' next'
+        redacted = nakops.redact(text)
+        for part in ("alpha", "beta", "gamma", "one", "two"):
+            self.assertNotIn(part, redacted)
+        self.assertIn("next", redacted)
+
     def test_password_only_url_credentials(self) -> None:
         redacted = nakops.redact("VALKEY_URL redis://:production-password@valkey:6379/0")
         self.assertNotIn("production-password", redacted)

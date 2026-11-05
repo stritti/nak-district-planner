@@ -521,7 +521,8 @@ check_certs() {
     [[ "$host" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "$EXIT_USAGE" "ungültiger Host: $host"
     local name="${host%%:*}" port="${host##*:}"
     [[ "$port" == "$host" ]] && port=443
-    cert="$({ openssl s_client -servername "$name" -connect "$name:$port" </dev/null 2>/dev/null || true; } | openssl x509 2>/dev/null || true)"
+    # timeout bounds TCP connect and TLS handshake; a hanging host becomes a finding.
+    cert="$({ timeout "${NAKCTL_CERT_TIMEOUT:-15}" openssl s_client -servername "$name" -connect "$name:$port" </dev/null 2>/dev/null || true; } | openssl x509 2>/dev/null || true)"
     if [[ -z "$cert" ]]; then
       finding "$name:$port: kein Zertifikat abrufbar"
       rc=1
