@@ -189,6 +189,8 @@ DB_CONTAINER="$(docker compose ps -q keycloak-db)" POSTGRES_USER=keycloak POSTGR
 
 Die Dateien landen in `backups/` (`nak_planner_*.dump.gpg`, `keycloak_*.dump.gpg`). Beide regelmäßig sichern, z. B. per Cron, und außerhalb des Servers aufbewahren.
 
+Kürzer geht beides mit `scripts/ops/nakctl backup create --keycloak`; mit `BACKUP_POST_HOOK` kopiert ein eigenes Skript die Archive danach auf einen anderen Server ([Admin-Skripte](/operations/admin-scripts#backups)).
+
 Wiederherstellen geht genauso mit `scripts/restore.sh`; vorher Keycloak stoppen:
 
 ```bash

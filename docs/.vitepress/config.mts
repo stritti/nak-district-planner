@@ -59,6 +59,7 @@ export default defineConfig(
           { text: 'Betrieb und Sicherheit', items: [
             { text: 'Production Runbook', link: '/operations/production-runbook' },
             { text: 'Produktiv-Stack', link: '/operations/production-compose' },
+            { text: 'Admin-Skripte', link: '/operations/admin-scripts' },
             { text: 'Security Baseline', link: '/security/baseline' },
             { text: 'Release-Prozess', link: '/operations/release-process' }
           ] },

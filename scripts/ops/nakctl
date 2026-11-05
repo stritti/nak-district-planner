@@ -1,0 +1,1125 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# nakctl — helper scripts for operating the NAK District Planner stack.
+#
+# Runs in the deploy directory (the release checkout with .env, default: the
+# repository root; override with NAK_DEPLOY_DIR) and uses COMPOSE_FILE from .env
+# like scripts/backup.sh. Documentation: docs/operations/admin-scripts.md.
+
+set -euo pipefail
+
+# shellcheck source=scripts/ops/lib.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+usage() {
+  cat <<'EOF'
+Aufruf: nakctl <bereich> <befehl> [optionen]
+       nakctl <bereich> --help        Hilfe zu einem Bereich mit Optionen und Beispielen
+       nakctl help [bereich]
+
+Hilfsskripte für den Betrieb des NAK-Bezirksplaners. Läuft im Deploy-Verzeichnis
+(Release-Checkout mit .env; anderes Verzeichnis über NAK_DEPLOY_DIR) und nutzt
+COMPOSE_FILE aus .env.
+
+Bereiche:
+  status                          Zustand des Stacks anzeigen (nur lesend)
+  check certs|disk|secrets|all    Betriebsprüfungen mit Schwellwerten (für Cron)
+  queue status|inspect|purge|purge-results
+                                  Celery-Warteschlange in Valkey prüfen und leeren
+  backup create|list|verify|restore
+                                  Backups erstellen, auflisten, prüfen, wiederherstellen
+  logs analyze|export             Logs redigiert auswerten oder exportieren
+  deploy update <version>|rollback
+                                  Version wechseln mit Backup und Rückweg
+  db stats|vacuum                 Datenbank-Statistik und VACUUM
+  superadmin list|set-sub <sub>   Superadmin nach Subject-Wechsel wiederherstellen
+  cleanup images                  Lokale Images alter App-Versionen entfernen
+
+Gemeinsame Optionen (überall erlaubt):
+  --dry-run    nur anzeigen, was passieren würde; nichts ändern
+  -y, --yes    Bestätigungsabfragen beantworten (für Cron und Skripte)
+  -h, --help   Hilfe anzeigen
+
+Exit-Codes:
+  0  alles in Ordnung          3  Umgebung nicht nutzbar (Docker, Container, Valkey)
+  1  Befund (Schwelle, Fehler) 4  vom Benutzer abgebrochen
+  2  Bedienfehler
+
+Beispiele:
+  nakctl status
+  nakctl check all
+  nakctl queue purge --dry-run
+  nakctl backup create --keycloak
+  nakctl logs analyze --since 2h --service backend
+
+Ausführliche Doku: docs/operations/admin-scripts.md
+EOF
+}
+
+# --------------------------------------------------------------------------- queue
+
+queue_usage() {
+  cat <<'EOF'
+Aufruf: nakctl queue <befehl> [optionen]
+
+Befehle:
+  status                      Länge der Celery-Queue, unbestätigte Nachrichten (unacked),
+                              Anzahl Ergebnis-Schlüssel und ob der worker läuft
+  inspect [--limit N]         Task-Namen der ersten N Nachrichten zählen; Argumente werden
+                              nie angezeigt
+  purge [--include-unacked]   Celery-Queue leeren (zeigt vorher die betroffenen Tasks und
+                              verlangt die Eingabe LEEREN oder --yes)
+  purge-results               Ergebnisse abgeschlossener Tasks (celery-task-meta-*) löschen
+
+Optionen:
+  --limit N                   Anzahl der untersuchten Nachrichten (Standard: 1000)
+  --include-unacked           auch unbestätigte Nachrichten löschen; nur bei gestopptem worker
+  --dry-run                   nur anzeigen, was gelöscht würde
+  -y, --yes                   ohne Rückfrage löschen
+
+Hinweise:
+  Vor purge "docker compose stop beat", sonst plant Beat sofort neu ein.
+  Mail-Tasks werden nach dem Leeren nie versendet; nakctl warnt davor.
+  Rate-Limit-Zähler und andere Schlüssel bleiben immer erhalten (kein FLUSHALL/FLUSHDB).
+
+Beispiele:
+  nakctl queue status
+  nakctl queue inspect --limit 200
+  nakctl queue purge --dry-run
+  docker compose stop beat worker && nakctl queue purge --include-unacked
+EOF
+}
+
+# scan_keys <pattern> — all matching keys; fails (exit 3) when Valkey cannot be scanned.
+scan_keys() {
+  local out
+  out="$(valkey_cli --scan --pattern "$1")" || die "$EXIT_ENV" "Valkey-Scan fehlgeschlagen (Valkey nicht erreichbar?)"
+  [[ -n "$out" ]] && printf '%s\n' "$out"
+  return 0
+}
+
+count_keys() {
+  local keys
+  keys="$(scan_keys "$1")" || exit "$EXIT_ENV"
+  if [[ -z "$keys" ]]; then echo 0; else grep -c . <<<"$keys"; fi
+}
+
+queue_status() {
+  local length unacked results
+  length="$(valkey_cli LLEN "$CELERY_QUEUE_KEY")" || die "$EXIT_ENV" "Valkey nicht erreichbar"
+  unacked="$(valkey_cli HLEN "$CELERY_UNACKED_KEY")"
+  results="$(count_keys "$CELERY_RESULT_PATTERN")"
+  info "Celery-Queue '$CELERY_QUEUE_KEY':   $length Nachricht(en)"
+  info "Unbestätigt (unacked):     $unacked"
+  info "Ergebnis-Schlüssel:        $results"
+  if service_running worker; then
+    info "Worker:                    läuft"
+  else
+    info "Worker:                    gestoppt"
+  fi
+}
+
+queue_messages() {
+  local limit="$1"
+  valkey_cli LRANGE "$CELERY_QUEUE_KEY" 0 "$((limit - 1))"
+}
+
+queue_inspect() {
+  local limit=1000
+  while (($#)); do
+    case "$1" in
+      --limit) require_value "$1" "${2:-}"; limit="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für queue inspect: $1" ;;
+    esac
+  done
+  [[ "$limit" =~ ^[1-9][0-9]*$ ]] || die "$EXIT_USAGE" "--limit braucht eine positive Zahl"
+  info "Task-Namen der ersten $limit Nachricht(en):"
+  local rc=0 messages
+  # Read first, so an unreachable Valkey is an environment error, not an empty queue.
+  messages="$(queue_messages "$limit")" || die "$EXIT_ENV" "Queue konnte nicht gelesen werden (Valkey erreichbar?)"
+  { [[ -z "$messages" ]] || printf '%s\n' "$messages"; } | nakops queue-histogram || rc=$?
+  ((rc <= EXIT_FINDING)) || exit "$rc"
+  return 0
+}
+
+queue_purge() {
+  local include_unacked=0
+  while (($#)); do
+    case "$1" in
+      --include-unacked) include_unacked=1; shift ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für queue purge: $1" ;;
+    esac
+  done
+  if ((include_unacked)) && service_running worker; then
+    die "$EXIT_ENV" "worker läuft: unbestätigte Nachrichten werden gerade bearbeitet. Erst 'docker compose stop worker beat'."
+  fi
+  if service_running beat; then
+    warn "beat läuft und plant periodische Tasks sofort neu ein (docker compose stop beat)."
+  fi
+  local length unacked
+  length="$(valkey_cli LLEN "$CELERY_QUEUE_KEY")" || die "$EXIT_ENV" "Valkey nicht erreichbar"
+  unacked=0
+  ((include_unacked)) && unacked="$(valkey_cli HLEN "$CELERY_UNACKED_KEY")"
+  info "Betroffen: $length Nachricht(en) in '$CELERY_QUEUE_KEY'$( ((include_unacked)) && printf ', %s unbestätigt' "$unacked")"
+  {
+    queue_messages 100000
+    ((include_unacked)) && valkey_cli HVALS "$CELERY_UNACKED_KEY"
+    true
+  } | nakops queue-histogram || true
+  if ((length == 0 && unacked == 0)); then
+    info "Nichts zu leeren."
+    return 0
+  fi
+  if ((DRY_RUN)); then
+    info "--dry-run: nichts gelöscht."
+    return 0
+  fi
+  confirm "Diese Nachrichten werden unwiderruflich gelöscht." "LEEREN"
+  valkey_cli UNLINK "$CELERY_QUEUE_KEY" >/dev/null
+  if ((include_unacked)); then
+    valkey_cli UNLINK "$CELERY_UNACKED_KEY" "$CELERY_UNACKED_INDEX_KEY" >/dev/null
+  fi
+  audit_log "queue purge messages=$length unacked=$unacked"
+  ok "Celery-Queue geleert ($length Nachricht(en)$( ((include_unacked)) && printf ', %s unbestätigt' "$unacked"))."
+}
+
+queue_purge_results() {
+  (($# == 0)) || die "$EXIT_USAGE" "queue purge-results kennt keine Optionen außer --dry-run/--yes"
+  local keys=() key total scanned
+  scanned="$(scan_keys "$CELERY_RESULT_PATTERN")" || exit "$EXIT_ENV"
+  while IFS= read -r key; do
+    [[ -n "$key" ]] && keys+=("$key")
+  done <<<"$scanned"
+  total="${#keys[@]}"
+  info "Betroffen: $total Ergebnis-Schlüssel ($CELERY_RESULT_PATTERN)"
+  ((total > 0)) || return 0
+  if ((DRY_RUN)); then
+    info "--dry-run: nichts gelöscht."
+    return 0
+  fi
+  confirm "Die Ergebnisse abgeschlossener Tasks werden gelöscht." "LEEREN"
+  local i
+  for ((i = 0; i < total; i += 500)); do
+    valkey_cli UNLINK "${keys[@]:i:500}" >/dev/null
+  done
+  audit_log "queue purge-results keys=$total"
+  ok "$total Ergebnis-Schlüssel gelöscht."
+}
+
+cmd_queue() {
+  local action="${1:-}"
+  shift || true
+  require_docker
+  case "$action" in
+    status) (($# == 0)) || die "$EXIT_USAGE" "queue status kennt keine Optionen"; queue_status ;;
+    inspect) queue_inspect "$@" ;;
+    purge) queue_purge "$@" ;;
+    purge-results) queue_purge_results "$@" ;;
+    "" | -h | --help) queue_usage ;;
+    *) queue_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# -------------------------------------------------------------------------- backup
+
+backup_usage() {
+  cat <<'EOF'
+Aufruf: nakctl backup <befehl> [optionen]
+
+Befehle:
+  create [--keycloak]         Backup mit scripts/backup.sh erstellen; --keycloak sichert
+                              zusätzlich die Keycloak-Datenbank (keycloak-db)
+  list [--max-age-hours H]    Backups mit Alter, Größe und Paarprüfung (Datenbank- und
+                              Rollenarchiv); Exit 1, wenn kein vollständiges jünger als H ist
+  verify <datei> [--keycloak] Archiv entschlüsseln und prüfen (restore.sh --dry-run)
+  restore <datei> [--keycloak]
+                              Backup wiederherstellen (restore.sh, mit Bestätigung)
+
+Optionen:
+  --keycloak                  create: auch die Keycloak-Datenbank sichern;
+                              verify/restore: Keycloak-Backup in keycloak-db
+  --max-age-hours H           bei list: Schwelle für das jüngste vollständige Backup
+  --dry-run                   nur anzeigen (bei restore: nur prüfen)
+  -y, --yes                   Rückfrage von restore beantworten
+
+Umgebung:
+  BACKUP_DIR                  Zielverzeichnis (Standard: backups/ im Deploy-Verzeichnis)
+  BACKUP_ENCRYPT_KEY          GPG-Empfänger (Pflicht in Produktion, auch aus .env)
+  BACKUP_POST_HOOK            ausführbare Datei, die nach jedem vollständigen Backup mit den
+                              Pfaden von Datenbank- und Rollenarchiv aufgerufen wird
+                              (z. B. für rsync); nicht für andere schreibbar
+  OFFSITE_*                   Einstellungen für den Hook (z. B. OFFSITE_TARGET); werden aus
+                              .env an den Hook übergeben, gesetzte Umgebungswerte gehen vor
+
+Beispiele:
+  nakctl backup create --keycloak
+  nakctl backup list --max-age-hours 26
+  nakctl backup verify backups/nak_planner_20261105_020000.dump.gpg
+  BACKUP_POST_HOOK=scripts/ops/examples/backup-post-hook-rsync.sh nakctl backup create
+EOF
+}
+
+# run_post_hook <database-name>
+run_post_hook() {
+  local db="$1" hook dir paths=()
+  hook="${BACKUP_POST_HOOK:-$(env_get BACKUP_POST_HOOK)}"
+  [[ -n "$hook" ]] || return 0
+  [[ "$hook" == /* ]] || hook="$DEPLOY_DIR/$hook"
+  [[ -f "$hook" && -x "$hook" ]] || { finding "BACKUP_POST_HOOK $hook ist keine ausführbare Datei"; return "$EXIT_FINDING"; }
+  if [[ -n "$(find "$hook" -maxdepth 0 -perm /022 2>/dev/null)" ]]; then
+    finding "BACKUP_POST_HOOK $hook ist für Gruppe oder andere schreibbar und wird nicht ausgeführt"
+    return "$EXIT_FINDING"
+  fi
+  local owner
+  owner="$(stat -c %u "$hook" 2>/dev/null || echo -1)"
+  if [[ "$owner" != "$(id -u)" && "$owner" != 0 ]]; then
+    finding "BACKUP_POST_HOOK $hook gehört weder dem aktuellen Benutzer noch root und wird nicht ausgeführt"
+    return "$EXIT_FINDING"
+  fi
+  dir="$(backup_dir)"
+  mapfile -t paths < <(nakops backups --dir "$dir" --db "$db" --latest-paths) || true
+  ((${#paths[@]} == 2)) || { finding "kein vollständiges Backup von '$db' für den Hook gefunden"; return "$EXIT_FINDING"; }
+  # OFFSITE_* settings from .env reach the hook; values in the environment win.
+  local hook_env=() key
+  while IFS= read -r key; do
+    [[ -n "${!key+x}" ]] && continue
+    hook_env+=("$key=$(env_get "$key")")
+  done < <(grep -oE '^(export[[:space:]]+)?OFFSITE_[A-Z0-9_]+=' "$DEPLOY_DIR/.env" 2>/dev/null \
+    | sed -E 's/^export[[:space:]]+//; s/=$//' | sort -u)
+  info "==> BACKUP_POST_HOOK für $db"
+  if ! env "${hook_env[@]}" "$hook" "${paths[0]}" "${paths[1]}"; then
+    finding "BACKUP_POST_HOOK ist fehlgeschlagen; das lokale Backup bleibt erhalten"
+    return "$EXIT_FINDING"
+  fi
+  ok "BACKUP_POST_HOOK abgeschlossen"
+}
+
+backup_create() {
+  local keycloak=0
+  while (($#)); do
+    case "$1" in
+      --keycloak) keycloak=1; shift ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für backup create: $1" ;;
+    esac
+  done
+  if ((DRY_RUN)); then
+    info "--dry-run: würde scripts/backup.sh ausführen$( ((keycloak)) && printf ' und die Keycloak-Datenbank sichern')."
+    return 0
+  fi
+  local rc=0 envs=()
+  mapfile -t envs < <(db_script_env app)
+  ((${#envs[@]} == 5)) || exit "$EXIT_ENV"
+  env "${envs[@]}" "$REPO_ROOT/scripts/backup.sh" || die "$EXIT_ENV" "scripts/backup.sh ist fehlgeschlagen"
+  audit_log "backup create db=$(app_db_name)"
+  run_post_hook "$(app_db_name)" || rc=$?
+  if ((keycloak)); then
+    local kc_db
+    mapfile -t envs < <(db_script_env keycloak)
+    ((${#envs[@]} == 5)) || exit "$EXIT_ENV"
+    kc_db="${envs[2]#POSTGRES_DB=}"
+    env "${envs[@]}" "$REPO_ROOT/scripts/backup.sh" || die "$EXIT_ENV" "Keycloak-Backup ist fehlgeschlagen"
+    audit_log "backup create db=$kc_db"
+    run_post_hook "$kc_db" || rc=$?
+  fi
+  return "$rc"
+}
+
+backup_list() {
+  local max_age=""
+  while (($#)); do
+    case "$1" in
+      --max-age-hours) require_value "$1" "${2:-}"; max_age="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für backup list: $1" ;;
+    esac
+  done
+  local args=(backups --dir "$(backup_dir)" --db "$(app_db_name)")
+  [[ -n "$max_age" ]] && args+=(--max-age-hours "$max_age")
+  nakops "${args[@]}"
+}
+
+# db_script_env app|keycloak — the environment for scripts/backup.sh and restore.sh,
+# taken from the deploy directory (those scripts would otherwise read the .env and
+# container of their own checkout). One NAME=value per line, in a fixed order.
+db_script_env() {
+  local service user db file
+  if [[ "$1" == keycloak ]]; then
+    service=keycloak-db file="$DEPLOY_DIR/.env.keycloak-db"
+    user="$(env_get POSTGRES_USER "$file")" db="$(env_get POSTGRES_DB "$file")"
+    user="${user:-keycloak}" db="${db:-keycloak}"
+  else
+    service=db
+    user="$(env_get POSTGRES_USER)"
+    user="${POSTGRES_USER:-${user:-nak}}" db="$(app_db_name)"
+  fi
+  local container key
+  container="$(compose ps -q "$service" 2>/dev/null || true)"
+  [[ -n "$container" ]] || die "$EXIT_ENV" "Container $service läuft nicht"
+  key="${BACKUP_ENCRYPT_KEY:-$(env_get BACKUP_ENCRYPT_KEY)}"
+  printf 'DB_CONTAINER=%s\nPOSTGRES_USER=%s\nPOSTGRES_DB=%s\nBACKUP_ENCRYPT_KEY=%s\nBACKUP_DIR=%s\n' \
+    "$container" "$user" "$db" "$key" "$(backup_dir)"
+}
+
+backup_restore_cmd() {
+  local mode="$1" file="" keycloak=0
+  shift
+  while (($#)); do
+    case "$1" in
+      --keycloak) keycloak=1; shift ;;
+      -*) die "$EXIT_USAGE" "unbekannte Option für backup $mode: $1" ;;
+      *) [[ -z "$file" ]] || die "$EXIT_USAGE" "backup $mode braucht genau eine Backup-Datei"; file="$1"; shift ;;
+    esac
+  done
+  [[ -n "$file" ]] || die "$EXIT_USAGE" "backup $mode braucht eine Backup-Datei"
+  [[ -f "$file" ]] || die "$EXIT_USAGE" "Datei $file nicht gefunden"
+  local envs=()
+  mapfile -t envs < <(db_script_env "$( ((keycloak)) && echo keycloak || echo app)")
+  ((${#envs[@]} == 5)) || exit "$EXIT_ENV"
+  if [[ "$mode" == verify ]] || ((DRY_RUN)); then
+    env "${envs[@]}" "$REPO_ROOT/scripts/restore.sh" "$file" --dry-run
+    return
+  fi
+  ((keycloak)) && warn "Keycloak vorher stoppen: docker compose stop keycloak (danach wieder starten)"
+  local extra=()
+  ((YES)) && extra+=(--yes)
+  env "${envs[@]}" "$REPO_ROOT/scripts/restore.sh" "$file" "${extra[@]}"
+  audit_log "backup restore file=$(basename "$file")"
+}
+
+cmd_backup() {
+  local action="${1:-}"
+  shift || true
+  case "$action" in
+    create) require_docker; require_python; backup_create "$@" ;;
+    list) require_python; backup_list "$@" ;;
+    verify) require_docker; backup_restore_cmd verify "$@" ;;
+    restore) require_docker; backup_restore_cmd restore "$@" ;;
+    "" | -h | --help) backup_usage ;;
+    *) backup_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------- logs
+
+logs_usage() {
+  cat <<'EOF'
+Aufruf: nakctl logs <befehl> [optionen]
+
+Befehle:
+  analyze                     Fehler und Warnungen je Dienst, HTTP-5xx, fehlgeschlagene und
+                              wiederholte Celery-Tasks, Rate-Limiter, Audit- und DB-Fehler
+  export --output DATEI       redigierte Rohzeilen in eine neue Datei (Rechte 0600)
+
+Optionen:
+  --since DAUER               Zeitraum, z. B. 30m, 24h, 7d oder 2026-11-05T08:00 (Standard: 24h)
+  --service NAME              nur diesen Dienst (mehrfach möglich: backend, worker, beat, ...)
+  --top N                     bei analyze: Anzahl der häufigsten Meldungen (Standard: 10)
+  --json                      bei analyze: maschinenlesbare Ausgabe
+  --fail-on-errors            bei analyze: Exit 1, wenn ERROR oder CRITICAL vorkommt
+  --output DATEI              bei export: Zieldatei (darf noch nicht existieren)
+
+Export-Tokens, Bearer-Tokens, Passwörter, Secrets und E-Mail-Adressen werden immer
+maskiert. Einen Export vor dem Teilen trotzdem prüfen.
+
+Beispiele:
+  nakctl logs analyze
+  nakctl logs analyze --since 2h --service backend --service worker
+  nakctl logs analyze --since 1h --fail-on-errors --json
+  nakctl logs export --since 6h --output /tmp/nak-logs.txt
+EOF
+}
+
+cmd_logs() {
+  local action="${1:-}"
+  shift || true
+  case "$action" in
+    "" | -h | --help) logs_usage; return 0 ;;
+    analyze | export) ;;
+    *) logs_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+  local since="24h" services=() output="" analyze_args=()
+  while (($#)); do
+    case "$1" in
+      --since) require_value "$1" "${2:-}"; since="$2"; shift 2 ;;
+      --service) require_value "$1" "${2:-}"; services+=("$2"); shift 2 ;;
+      --output) require_value "$1" "${2:-}"; output="$2"; shift 2 ;;
+      --json | --fail-on-errors) analyze_args+=("$1"); shift ;;
+      --top) require_value "$1" "${2:-}"; analyze_args+=(--top "$2"); shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für logs $action: $1" ;;
+    esac
+  done
+  [[ "$since" =~ ^[0-9]+[smhd]?$|^[0-9]{4}-[0-9]{2}-[0-9]{2} ]] || die "$EXIT_USAGE" "--since erwartet z. B. 30m, 24h oder 2026-11-05T08:00"
+  if [[ "$since" =~ ^([0-9]+)d$ ]]; then
+    since="$((BASH_REMATCH[1] * 24))h"
+  fi
+  require_docker
+  require_python
+  if [[ "$action" == analyze ]]; then
+    [[ -z "$output" ]] || die "$EXIT_USAGE" "--output gibt es nur bei logs export"
+    compose logs --no-color --since "$since" "${services[@]}" 2>&1 | nakops analyze-logs "${analyze_args[@]}"
+    return
+  fi
+  [[ -n "$output" ]] || die "$EXIT_USAGE" "logs export braucht --output DATEI"
+  ((${#analyze_args[@]} == 0)) || die "$EXIT_USAGE" "--json/--top/--fail-on-errors gibt es nur bei logs analyze"
+  [[ ! -e "$output" ]] || die "$EXIT_USAGE" "$output existiert bereits"
+  if ((DRY_RUN)); then
+    info "--dry-run: würde redigierte Logs seit $since nach $output schreiben (Rechte 0600)."
+    return 0
+  fi
+  (
+    umask 077
+    {
+      printf '# NAK District Planner Log-Export (redigiert), %s, since=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$since"
+      printf '# Vor dem Teilen prüfen: Die Maskierung erkennt nur bekannte Formate.\n'
+      compose logs --no-color --since "$since" "${services[@]}" 2>&1 | nakops redact
+    } >"$output"
+  )
+  ok "redigierter Export in $output ($(wc -l <"$output") Zeilen, Rechte 0600)"
+}
+
+# ----------------------------------------------------------------- status & check
+
+check_usage() {
+  cat <<'EOF'
+Aufruf: nakctl check <befehl> [optionen]
+
+Befehle:
+  certs                       Restlaufzeit und Hostname der TLS-Zertifikate (APP_HOST, AUTH_HOST)
+  disk                        freier Platz für Deploy-, Docker- und Backup-Verzeichnis
+  secrets                     .env-Dateien: Rechte 0600, Beispiel- und Standardwerte, Owner-
+                              Credentials in der Laufzeit; nennt nur Schlüssel, nie Werte
+  all                         status und alle Prüfungen (für den täglichen Cron-Job)
+
+Optionen:
+  --host NAME[:PORT]          bei certs: anderen Host prüfen (mehrfach möglich)
+  --warn-days N               bei certs: Befund unter N Tagen Restlaufzeit (Standard: 21)
+  --min-free-percent N        bei disk: Befund unter N % freiem Platz (Standard: 15)
+
+Beispiele:
+  nakctl check certs
+  nakctl check certs --host planer.example.org --warn-days 30
+  nakctl check disk --min-free-percent 20
+  nakctl check all >/var/log/nakctl-check.log || mail -s "NAK-Prüfung" ops@example.org </var/log/nakctl-check.log
+EOF
+}
+
+check_certs() {
+  local hosts=() warn_days=21
+  while (($#)); do
+    case "$1" in
+      --host) require_value "$1" "${2:-}"; hosts+=("$2"); shift 2 ;;
+      --warn-days) require_value "$1" "${2:-}"; warn_days="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für check certs: $1" ;;
+    esac
+  done
+  [[ "$warn_days" =~ ^[0-9]+$ ]] || die "$EXIT_USAGE" "--warn-days braucht eine Zahl"
+  command -v openssl >/dev/null 2>&1 || die "$EXIT_ENV" "openssl ist nicht installiert"
+  if ((${#hosts[@]} == 0)); then
+    local h
+    for h in "$(env_get APP_HOST)" "$(env_get AUTH_HOST)"; do
+      [[ -n "$h" ]] && hosts+=("$h")
+    done
+  fi
+  ((${#hosts[@]} > 0)) || die "$EXIT_ENV" "keine Hosts: APP_HOST/AUTH_HOST in .env setzen oder --host angeben"
+  local host cert end issuer days rc=0
+  for host in "${hosts[@]}"; do
+    [[ "$host" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "$EXIT_USAGE" "ungültiger Host: $host"
+    local name="${host%%:*}" port="${host##*:}"
+    [[ "$port" == "$host" ]] && port=443
+    # timeout bounds TCP connect and TLS handshake; a hanging host becomes a finding.
+    cert="$({ timeout "${NAKCTL_CERT_TIMEOUT:-15}" openssl s_client -servername "$name" -connect "$name:$port" </dev/null 2>/dev/null || true; } | openssl x509 2>/dev/null || true)"
+    if [[ -z "$cert" ]]; then
+      finding "$name:$port: kein Zertifikat abrufbar"
+      rc=1
+      continue
+    fi
+    end="$(openssl x509 -noout -enddate <<<"$cert" | cut -d= -f2)"
+    issuer="$(openssl x509 -noout -issuer <<<"$cert" | sed 's/^issuer= *//')"
+    days=$((($(date -d "$end" +%s) - $(date +%s)) / 86400))
+    if ! openssl x509 -noout -checkhost "$name" <<<"$cert" | grep -q "does match"; then
+      finding "$name: Zertifikat passt nicht zum Hostnamen"
+      rc=1
+    fi
+    if ((days < warn_days)); then
+      finding "$name: Zertifikat läuft in $days Tag(en) ab ($end, $issuer)"
+      rc=1
+    else
+      ok "$name: Zertifikat gültig für $days Tage ($issuer)"
+    fi
+  done
+  return "$rc"
+}
+
+check_disk() {
+  local min_free=15
+  while (($#)); do
+    case "$1" in
+      --min-free-percent) require_value "$1" "${2:-}"; min_free="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für check disk: $1" ;;
+    esac
+  done
+  [[ "$min_free" =~ ^[0-9]+$ ]] || die "$EXIT_USAGE" "--min-free-percent braucht eine Zahl"
+  local paths=("$DEPLOY_DIR") root bdir rc=0
+  root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+  [[ -n "$root" && -d "$root" ]] && paths+=("$root")
+  bdir="$(backup_dir)"
+  [[ -d "$bdir" ]] && paths+=("$bdir")
+  local path line avail pct free mount
+  for path in "${paths[@]}"; do
+    line="$(df -P -k "$path" | tail -1)"
+    read -r _ _ _ avail pct mount <<<"$line"
+    free=$((100 - ${pct%\%}))
+    if ((free < min_free)); then
+      finding "$path ($mount): nur $free % frei ($((avail / 1024 / 1024)) GB)"
+      rc=1
+    else
+      ok "$path ($mount): $free % frei ($((avail / 1024 / 1024)) GB)"
+    fi
+  done
+  if command -v docker >/dev/null 2>&1; then
+    docker system df 2>/dev/null | sed 's/^/  /' || true
+  fi
+  return "$rc"
+}
+
+check_secrets() {
+  (($# == 0)) || die "$EXIT_USAGE" "check secrets kennt keine Optionen"
+  require_python
+  nakops env-check --dir "$DEPLOY_DIR"
+}
+
+status_usage() {
+  cat <<'EOF'
+Aufruf: nakctl status
+
+Zeigt ohne Änderungen: Container-Zustand (jeder Dienst außer migrate muss laufen), Antwort von /health, Alembic-Stand der
+Datenbank gegenüber dem Image-Head, Alter des letzten vollständigen Backups
+(Befund ab 26 Stunden) und freien Plattenplatz.
+
+Exit-Code 1, wenn einer der Punkte auffällig ist.
+
+Beispiele:
+  nakctl status
+  nakctl status || echo "Stack prüfen"     # z. B. im Cron-Job
+EOF
+}
+
+status_cmd() {
+  (($# == 0)) || die "$EXIT_USAGE" "status kennt keine Optionen"
+  require_docker
+  local rc=0 unhealthy
+  heading "Container"
+  compose ps --format 'table {{.Service}}\t{{.Status}}' || die "$EXIT_ENV" "docker compose ps fehlgeschlagen"
+  unhealthy="$(compose ps --format '{{.Service}} {{.Status}}' | grep -E 'unhealthy|Restarting' || true)"
+  if [[ -n "$unhealthy" ]]; then
+    finding "Dienste nicht gesund: $(tr '\n' ' ' <<<"$unhealthy")"
+    rc=1
+  fi
+  # Every long-running service of the active Compose file must run; the one-shot
+  # migrate service is expected to have exited.
+  local expected running missing=() svc
+  expected="$(compose config --services 2>/dev/null || true)"
+  running=" $(compose ps --status running --services 2>/dev/null | tr '\n' ' ') "
+  for svc in $expected; do
+    [[ "$svc" == migrate ]] && continue
+    [[ "$running" == *" $svc "* ]] || missing+=("$svc")
+  done
+  if ((${#missing[@]})); then
+    finding "Dienste laufen nicht: ${missing[*]}"
+    rc=1
+  fi
+
+  heading "Health"
+  if compose exec -T backend curl -fsS --max-time 10 http://localhost:8000/health >/dev/null 2>&1; then
+    ok "/health antwortet"
+  else
+    finding "/health antwortet nicht mit 2xx"
+    rc=1
+  fi
+
+  heading "Migrationen"
+  local heads current
+  heads="$(compose exec -T backend alembic heads 2>/dev/null | awk '{print $1}' | sort || true)"
+  current="$(printf 'SELECT version_num FROM alembic_version ORDER BY 1;\n' | db_psql -tA 2>/dev/null | sort || true)"
+  if [[ -z "$heads" || -z "$current" ]]; then
+    finding "Alembic-Stand nicht ermittelbar (backend und db laufen?)"
+    rc=1
+  elif [[ "$heads" == "$current" ]]; then
+    ok "Datenbank auf Image-Head ($(tr '\n' ' ' <<<"$current"))"
+  else
+    finding "Datenbank $(tr '\n' ' ' <<<"$current")≠ Image-Head $(tr '\n' ' ' <<<"$heads")— 'docker compose run --no-deps --rm migrate'"
+    rc=1
+  fi
+
+  heading "Backup"
+  local brc=0
+  nakops backups --dir "$(backup_dir)" --db "$(app_db_name)" --max-age-hours 26 --quiet || brc=$?
+  ((brc == 0)) || rc=1
+
+  heading "Platz"
+  check_disk || rc=1
+  return "$rc"
+}
+
+cmd_check() {
+  local action="${1:-}"
+  shift || true
+  case "$action" in
+    certs) check_certs "$@" ;;
+    disk) check_disk "$@" ;;
+    secrets) check_secrets "$@" ;;
+    all)
+      (($# == 0)) || die "$EXIT_USAGE" "check all kennt keine Optionen"
+      status_cmd || record $?
+      heading "Zertifikate"
+      check_certs || record $?
+      heading "Secrets"
+      check_secrets || record $?
+      return "$WORST"
+      ;;
+    "" | -h | --help) check_usage ;;
+    *) check_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# -------------------------------------------------------------------------- deploy
+
+deploy_usage() {
+  cat <<'EOF'
+Aufruf: nakctl deploy <befehl> [optionen]
+
+Befehle:
+  update <version>            prüft das Image-Tag, erstellt ein Backup, setzt APP_VERSION in
+                              .env, zieht die Images, migriert, startet und wartet auf /health
+  rollback                    zurück auf die vor dem letzten update laufende Version; bricht
+                              ab, wenn die Datenbank schon weiter migriert ist
+
+Optionen:
+  --skip-backup               bei update: kein Backup vorher (nicht empfohlen)
+  --dry-run                   nur prüfen und anzeigen
+  -y, --yes                   ohne Rückfrage
+
+Vorher das passende Release-Tag auschecken (git checkout v<version>), damit
+Compose-Datei und Skripte zur Version passen. Die Vorversion steht in logs/nakctl.state.
+
+Beispiele:
+  git fetch --tags && git checkout v1.7.0
+  nakctl deploy update 1.7.0 --dry-run
+  nakctl deploy update 1.7.0
+  nakctl deploy rollback
+EOF
+}
+
+wait_for_health() {
+  local timeout="${1:-120}" waited=0
+  info "==> Warte auf /health (max. ${timeout}s)"
+  until compose exec -T backend curl -fsS --max-time 5 http://localhost:8000/health >/dev/null 2>&1; do
+    ((waited >= timeout)) && return 1
+    sleep 5
+    waited=$((waited + 5))
+  done
+  ok "/health antwortet nach ${waited}s"
+}
+
+normalize_version() {
+  local version="${1#v}"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || die "$EXIT_USAGE" "ungültige Version: $1 (erwartet z. B. 1.7.0)"
+  printf '%s' "$version"
+}
+
+deploy_update() {
+  local version="" skip_backup=0
+  while (($#)); do
+    case "$1" in
+      --skip-backup) skip_backup=1; shift ;;
+      -*) die "$EXIT_USAGE" "unbekannte Option für deploy update: $1" ;;
+      *) [[ -z "$version" ]] || die "$EXIT_USAGE" "nur eine Version angeben"; version="$1"; shift ;;
+    esac
+  done
+  [[ -n "$version" ]] || die "$EXIT_USAGE" "deploy update braucht eine Version"
+  version="$(normalize_version "$version")"
+  local registry current image
+  registry="$(image_registry)"
+  current="$(env_get APP_VERSION)"
+  [[ "$current" != "$version" ]] || die "$EXIT_USAGE" "APP_VERSION ist bereits $version"
+  for image in backend frontend; do
+    docker manifest inspect "$registry/$image:$version" >/dev/null 2>&1 ||
+      die "$EXIT_USAGE" "Image $registry/$image:$version ist nicht veröffentlicht"
+  done
+  local tag
+  tag="$(git -C "$DEPLOY_DIR" describe --tags --exact-match 2>/dev/null || true)"
+  [[ "$tag" == "v$version" ]] || warn "ausgecheckt ist '${tag:-kein Tag}', nicht v$version: Compose-Datei und Skripte passen evtl. nicht"
+  info "Update ${current:-?} → $version"
+  if ((DRY_RUN)); then
+    info "--dry-run: würde Backup erstellen, APP_VERSION setzen, pull, migrate, up -d und auf /health warten."
+    return 0
+  fi
+  confirm "Der Stack wird auf $version aktualisiert und kurz neu gestartet." "ja"
+  if ((!skip_backup)); then
+    backup_create || die "$EXIT_ENV" "Backup vor dem Update ist fehlgeschlagen; nichts geändert"
+  fi
+  [[ -n "$current" ]] && state_set PREVIOUS_VERSION "$current"
+  env_set APP_VERSION "$version"
+  audit_log "deploy update from=${current:-?} to=$version"
+  compose pull || die "$EXIT_ENV" "docker compose pull fehlgeschlagen (APP_VERSION=$version gesetzt; zurück mit 'nakctl deploy rollback')"
+  compose up -d db valkey || die "$EXIT_ENV" "db/valkey starten nicht"
+  compose run --no-deps --rm migrate ||
+    die "$EXIT_ENV" "Migration fehlgeschlagen. Backup in $(backup_dir); siehe Runbook Abschnitt 4 (Rollback)"
+  compose up -d || die "$EXIT_ENV" "docker compose up fehlgeschlagen"
+  wait_for_health 120 || die "$EXIT_ENV" "/health antwortet nicht. Logs: nakctl logs analyze --since 15m"
+  ok "Version $version läuft."
+}
+
+deploy_rollback() {
+  (($# == 0)) || die "$EXIT_USAGE" "deploy rollback kennt keine Optionen"
+  local previous current old_heads db_revs
+  previous="$(state_get PREVIOUS_VERSION)"
+  current="$(env_get APP_VERSION)"
+  [[ -n "$previous" ]] || die "$EXIT_USAGE" "keine Vorversion bekannt (logs/nakctl.state); APP_VERSION von Hand setzen"
+  [[ "$previous" != "$current" ]] || die "$EXIT_USAGE" "Vorversion entspricht der laufenden Version $current"
+  info "Rollback $current → $previous"
+  old_heads="$(APP_VERSION="$previous" compose run --rm --no-deps -T migrate alembic heads 2>/dev/null | awk '{print $1}' | sort || true)"
+  db_revs="$(printf 'SELECT version_num FROM alembic_version ORDER BY 1;\n' | db_psql -tA | sort)"
+  [[ -n "$old_heads" ]] || die "$EXIT_ENV" "Alembic-Head von $previous nicht ermittelbar"
+  if [[ "$old_heads" != "$db_revs" ]]; then
+    die "$EXIT_ENV" "Datenbank ($(tr '\n' ' ' <<<"$db_revs"))ist nicht auf dem Head von $previous ($(tr '\n' ' ' <<<"$old_heads")). APP_VERSION bleibt $current. Erst 'nakctl backup restore <datei>' oder mit dem neueren Image 'alembic downgrade <revision>' (Runbook Abschnitt 4)."
+  fi
+  if ((DRY_RUN)); then
+    info "--dry-run: Schema passt; würde APP_VERSION=$previous setzen und neu starten."
+    return 0
+  fi
+  confirm "Der Stack wird auf $previous zurückgesetzt." "ja"
+  env_set APP_VERSION "$previous"
+  state_set PREVIOUS_VERSION "$current"
+  audit_log "deploy rollback from=$current to=$previous"
+  compose pull || die "$EXIT_ENV" "docker compose pull fehlgeschlagen"
+  compose up -d || die "$EXIT_ENV" "docker compose up fehlgeschlagen"
+  wait_for_health 120 || die "$EXIT_ENV" "/health antwortet nicht nach dem Rollback"
+  ok "Version $previous läuft."
+}
+
+cmd_deploy() {
+  local action="${1:-}"
+  shift || true
+  case "$action" in
+    update) require_docker; deploy_update "$@" ;;
+    rollback) require_docker; deploy_rollback "$@" ;;
+    "" | -h | --help) deploy_usage ;;
+    *) deploy_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# ------------------------------------------------------------------------------ db
+
+db_usage() {
+  cat <<'EOF'
+Aufruf: nakctl db <befehl> [optionen]
+
+Befehle:
+  stats                       Größe, größte Tabellen, tote Zeilen, letzter (Auto-)Vacuum,
+                              Verbindungen, lange Abfragen (ohne Literale) und wartende Sperren
+  vacuum                      VACUUM (ANALYZE) nach Bestätigung; nie VACUUM FULL
+
+Optionen:
+  --long-seconds N            bei stats: Abfragen länger als N Sekunden zeigen (Standard: 30)
+  --table NAME                bei vacuum: nur diese Tabelle
+  --dry-run                   nur anzeigen
+  -y, --yes                   ohne Rückfrage
+
+Beispiele:
+  nakctl db stats
+  nakctl db stats --long-seconds 5
+  nakctl db vacuum --table planning_slots
+EOF
+}
+
+db_stats() {
+  local long=30
+  while (($#)); do
+    case "$1" in
+      --long-seconds) require_value "$1" "${2:-}"; long="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für db stats: $1" ;;
+    esac
+  done
+  [[ "$long" =~ ^[0-9]+$ ]] || die "$EXIT_USAGE" "--long-seconds braucht eine Zahl"
+  # Query text is cut at the first comment, dollar quote or backslash (fail safe), then
+  # quoted strings and numbers become '?'; nakops redact masks anything that slips through.
+  db_psql -P pager=off -v long="$long" <<'SQL' | nakops redact
+\echo '== Datenbank =='
+SELECT current_database() AS datenbank, pg_size_pretty(pg_database_size(current_database())) AS groesse;
+\echo '== Größte Tabellen =='
+SELECT relname AS tabelle,
+       pg_size_pretty(pg_total_relation_size(relid)) AS groesse,
+       n_live_tup AS zeilen, n_dead_tup AS tote_zeilen,
+       to_char(greatest(last_autovacuum, last_vacuum), 'YYYY-MM-DD HH24:MI') AS letzter_vacuum,
+       to_char(greatest(last_autoanalyze, last_analyze), 'YYYY-MM-DD HH24:MI') AS letzter_analyze
+FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 15;
+\echo '== Verbindungen =='
+SELECT coalesce(usename, '-') AS benutzer, coalesce(state, '-') AS zustand, count(*) AS anzahl
+FROM pg_stat_activity WHERE datname = current_database() GROUP BY 1, 2 ORDER BY 3 DESC;
+\echo '== Lange Abfragen =='
+SELECT pid, usename AS benutzer, date_trunc('second', now() - query_start) AS dauer, state AS zustand,
+       left(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(query,
+         '\$\d+', '?', 'g'),
+         '(--|/\*|[$\\]).*', ' …'),
+         '''(?:[^'']|'''')*''', '?', 'g'),
+         '''.*', '? …'),
+         '\m\d+(\.\d+)?\M', '?', 'g'), 80) AS abfrage
+FROM pg_stat_activity
+WHERE datname = current_database() AND state <> 'idle' AND pid <> pg_backend_pid()
+  AND now() - query_start > make_interval(secs => :long)
+ORDER BY query_start;
+\echo '== Wartende Sperren =='
+SELECT count(*) AS wartend FROM pg_locks WHERE NOT granted;
+SQL
+}
+
+db_vacuum() {
+  local table=""
+  while (($#)); do
+    case "$1" in
+      --table) require_value "$1" "${2:-}"; table="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für db vacuum: $1" ;;
+    esac
+  done
+  local target="die ganze Datenbank" sql="VACUUM (ANALYZE);"
+  if [[ -n "$table" ]]; then
+    [[ "$table" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || die "$EXIT_USAGE" "ungültiger Tabellenname: $table"
+    target="Tabelle $table"
+    sql="VACUUM (ANALYZE) \"$table\";"
+  fi
+  if ((DRY_RUN)); then
+    info "--dry-run: würde $sql ausführen."
+    return 0
+  fi
+  confirm "VACUUM (ANALYZE) für $target (kann bei großen Tabellen dauern, sperrt nicht)." "ja"
+  printf '%s\n' "$sql" | db_psql -q || die "$EXIT_ENV" "VACUUM fehlgeschlagen"
+  audit_log "db vacuum target=${table:-all}"
+  ok "VACUUM (ANALYZE) für $target abgeschlossen."
+}
+
+cmd_db() {
+  local action="${1:-}"
+  shift || true
+  require_docker
+  case "$action" in
+    stats) require_python; db_stats "$@" ;;
+    vacuum) db_vacuum "$@" ;;
+    "" | -h | --help) db_usage ;;
+    *) db_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------- superadmin
+
+superadmin_usage() {
+  cat <<'EOF'
+Aufruf: nakctl superadmin <befehl>
+
+Befehle:
+  list [--email TEXT]         Superadmins, Bootstrap-Subject und die zuletzt angelegten Benutzer
+                              (Kandidaten für set-sub); --email filtert nach E-Mail-Teil
+  set-sub <sub>               Bootstrap-Subject auf einen vorhandenen Benutzer setzen und die
+                              einmalige Vergabe neu freischalten (Runbook Abschnitt 2.3)
+
+Optionen:
+  --dry-run                   nur prüfen und anzeigen
+  -y, --yes                   ohne Rückfrage
+
+Die Person muss sich vorher einmal mit dem neuen Konto anmelden, damit ihre sub
+existiert. Nach set-sub ab- und wieder anmelden. Gibt es noch einen Superadmin,
+ernennt er das neue Konto einfacher in der Benutzerverwaltung.
+
+Beispiele:
+  nakctl superadmin list
+  nakctl superadmin list --email muster@example.org
+  nakctl superadmin set-sub 3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b
+EOF
+}
+
+superadmin_list() {
+  local email=""
+  while (($#)); do
+    case "$1" in
+      --email) require_value "$1" "${2:-}"; email="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für superadmin list: $1" ;;
+    esac
+  done
+  ((${#email} <= 254)) || die "$EXIT_USAGE" "--email ist zu lang"
+  # The new account after an IdP or realm change is an ordinary user, so list
+  # recent users as candidates; the filter is passed as a psql variable.
+  db_psql -P pager=off -v email="$email" <<'SQL'
+\echo '== Superadmins =='
+SELECT sub, email, created_at FROM users WHERE is_superadmin ORDER BY created_at;
+\echo '== Bootstrap-Konfiguration =='
+SELECT superadmin_sub, bootstrap_completed_at FROM app_superadmin_config WHERE id = 1;
+\echo '== Kandidaten für set-sub (zuletzt angelegte Benutzer) =='
+SELECT sub, email, created_at FROM users
+WHERE NOT is_superadmin
+  AND (:'email' = '' OR strpos(lower(coalesce(email, '')), lower(:'email')) > 0)
+ORDER BY created_at DESC LIMIT 10;
+SQL
+}
+
+superadmin_set_sub() {
+  (($# == 1)) || die "$EXIT_USAGE" "superadmin set-sub braucht genau eine sub"
+  local sub="$1" count
+  [[ "$sub" =~ ^[[:print:]]{1,255}$ ]] || die "$EXIT_USAGE" "ungültige sub"
+  count="$(db_psql -tA -v sub="$sub" <<'SQL'
+SELECT count(*) FROM users WHERE sub = :'sub';
+SQL
+)"
+  [[ "$count" == 1 ]] || die "$EXIT_USAGE" "kein Benutzer mit dieser sub. Die Person muss sich zuerst einmal anmelden (nakctl superadmin list zeigt vorhandene)."
+  info "Bootstrap-Subject wird gesetzt auf: $sub"
+  info "bootstrap_completed_at wird zurückgesetzt; beim nächsten Login dieser sub wird sie Superadmin."
+  if ((DRY_RUN)); then
+    info "--dry-run: nichts geändert."
+    return 0
+  fi
+  confirm "Superadmin-Bootstrap ändern." "ja"
+  db_psql -q -v sub="$sub" <<'SQL' || die "$EXIT_ENV" "Aktualisierung fehlgeschlagen"
+UPDATE app_superadmin_config SET superadmin_sub = :'sub', bootstrap_completed_at = NULL WHERE id = 1;
+SQL
+  audit_log "superadmin set-sub"
+  ok "Bootstrap-Subject gesetzt. Jetzt ab- und wieder anmelden."
+}
+
+cmd_superadmin() {
+  local action="${1:-}"
+  shift || true
+  require_docker
+  case "$action" in
+    list) superadmin_list "$@" ;;
+    set-sub) superadmin_set_sub "$@" ;;
+    "" | -h | --help) superadmin_usage ;;
+    *) superadmin_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# ------------------------------------------------------------------------- cleanup
+
+cleanup_usage() {
+  cat <<'EOF'
+Aufruf: nakctl cleanup images [optionen]
+
+Entfernt lokale backend- und frontend-Images alter App-Versionen. Behalten werden
+APP_VERSION und die gemerkte Vorversion (ohne gemerkte die jüngste andere).
+Volumes werden nie gelöscht.
+
+Optionen:
+  --dry-run                   nur anzeigen, was entfernt würde
+  -y, --yes                   ohne Rückfrage
+
+Beispiele:
+  nakctl cleanup images --dry-run
+  nakctl cleanup images
+EOF
+}
+
+cleanup_images() {
+  (($# == 0)) || die "$EXIT_USAGE" "cleanup images kennt keine Optionen"
+  local registry current previous
+  registry="$(image_registry)"
+  current="$(env_get APP_VERSION)"
+  previous="$(state_get PREVIOUS_VERSION)"
+  [[ -n "$current" ]] || die "$EXIT_ENV" "APP_VERSION ist in .env nicht gesetzt"
+  local lines=() line repo tag remove=() kept_other=""
+  # newest first: decide on the fallback "previous" before listing removals
+  mapfile -t lines < <(docker image ls --format '{{.CreatedAt}}|{{.Repository}}|{{.Tag}}' \
+    --filter "reference=$registry/backend" --filter "reference=$registry/frontend" | sort -r)
+  if [[ -z "$previous" ]]; then
+    for line in "${lines[@]}"; do
+      tag="${line##*|}"
+      if [[ "$tag" != "$current" && "$tag" != "<none>" ]]; then
+        kept_other="$tag"
+        break
+      fi
+    done
+    previous="$kept_other"
+  fi
+  for line in "${lines[@]}"; do
+    repo="$(cut -d'|' -f2 <<<"$line")"
+    tag="${line##*|}"
+    [[ "$tag" == "$current" || "$tag" == "$previous" || "$tag" == "<none>" ]] && continue
+    remove+=("$repo:$tag")
+  done
+  info "Behalten: $current${previous:+, $previous}"
+  if ((${#remove[@]} == 0)); then
+    info "Nichts zu entfernen."
+    return 0
+  fi
+  printf '  entfernen: %s\n' "${remove[@]}"
+  if ((DRY_RUN)); then
+    info "--dry-run: nichts entfernt."
+    return 0
+  fi
+  confirm "${#remove[@]} Image(s) werden entfernt." "ja"
+  docker image rm "${remove[@]}"
+  audit_log "cleanup images removed=${#remove[@]}"
+  ok "${#remove[@]} Image(s) entfernt."
+}
+
+cmd_cleanup() {
+  local action="${1:-}"
+  shift || true
+  case "$action" in
+    images) require_docker; cleanup_images "$@" ;;
+    "" | -h | --help) cleanup_usage ;;
+    *) cleanup_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------- main
+
+# area_help <area> — print the help of one area; false for unknown areas.
+area_help() {
+  case "$1" in
+    status | queue | backup | logs | check | deploy | db | superadmin | cleanup) "${1}_usage" ;;
+    *) return 1 ;;
+  esac
+}
+
+main() {
+  parse_common_flags "$@"
+  set -- "${ARGS[@]+"${ARGS[@]}"}"
+  local area="${1:-}"
+  shift || true
+  if [[ "$area" == help ]]; then
+    if [[ -z "${1:-}" ]]; then
+      usage
+    else
+      area_help "$1" || { usage >&2; exit "$EXIT_USAGE"; }
+    fi
+    return 0
+  fi
+  if [[ -z "$area" ]]; then
+    usage
+    return 0
+  fi
+  if ((HELP)); then
+    if [[ "$area" == -* ]]; then
+      usage
+    else
+      area_help "$area" || { usage >&2; exit "$EXIT_USAGE"; }
+    fi
+    return 0
+  fi
+  enter_deploy_dir
+  # Called without `||` on purpose: errexit stays active inside the commands,
+  # and a non-zero return (1 = finding) becomes the exit code.
+  case "$area" in
+    status) status_cmd "$@" ;;
+    check) cmd_check "$@" ;;
+    queue) cmd_queue "$@" ;;
+    backup) cmd_backup "$@" ;;
+    logs) cmd_logs "$@" ;;
+    deploy) cmd_deploy "$@" ;;
+    db) cmd_db "$@" ;;
+    superadmin) cmd_superadmin "$@" ;;
+    cleanup) cmd_cleanup "$@" ;;
+    *) usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
+main "$@"
