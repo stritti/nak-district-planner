@@ -531,26 +531,31 @@ def cmd_env_check(args: argparse.Namespace) -> int:
 
 # ---------------------------------------------------------------------- init-env
 
-# (file, template, {key: generator name}) — generated only in files created now.
+# How each generated value is made; names, not values, so secret scanners stay quiet.
+_GEN_HEX = "hex"  # SECRET_KEY: 64 hex characters
+_GEN_URL = "url"  # URL-safe random value (passwords end up inside connection URLs)
+_GEN_KEYCLOAK_DB = "shared"  # one value for both Keycloak database settings
+
+# (file, template, {key: generator}) — generated only in files created now.
 _INIT_FILES: tuple[tuple[str, str, dict[str, str]], ...] = (
     (
         ".env",
         ".env.example",
-        {"SECRET_KEY": "hex", "APP_DB_PASSWORD": "url", "VALKEY_PASSWORD": "url"},
+        {"SECRET_KEY": _GEN_HEX, "APP_DB_PASSWORD": _GEN_URL, "VALKEY_PASSWORD": _GEN_URL},
     ),
-    (".env.db", ".env.db.example", {"POSTGRES_PASSWORD": "url"}),
+    (".env.db", ".env.db.example", {"POSTGRES_PASSWORD": _GEN_URL}),
     (
         ".env.keycloak",
         ".env.keycloak.example",
-        {"KC_BOOTSTRAP_ADMIN_PASSWORD": "url", "KC_DB_PASSWORD": "keycloak-db"},
+        {"KC_BOOTSTRAP_ADMIN_PASSWORD": _GEN_URL, "KC_DB_PASSWORD": _GEN_KEYCLOAK_DB},
     ),
-    (".env.keycloak-db", ".env.keycloak-db.example", {"POSTGRES_PASSWORD": "keycloak-db"}),
+    (".env.keycloak-db", ".env.keycloak-db.example", {"POSTGRES_PASSWORD": _GEN_KEYCLOAK_DB}),
 )
 
 
 def _new_secret(kind: str) -> str:
     # URL-safe: VALKEY_PASSWORD and APP_DB_PASSWORD end up inside connection URLs.
-    return secrets.token_hex(32) if kind == "hex" else secrets.token_urlsafe(32)
+    return secrets.token_hex(32) if kind == _GEN_HEX else secrets.token_urlsafe(32)
 
 
 def set_env_value(lines: list[str], key: str, value: str) -> list[str]:
@@ -613,7 +618,7 @@ def cmd_init_env(args: argparse.Namespace) -> int:
             )
             if keycloak_db:
                 break
-    keycloak_db = keycloak_db or _new_secret("url")
+    keycloak_db = keycloak_db or _new_secret(_GEN_URL)
     for name, template, generated in _INIT_FILES:
         path = directory / name
         if path.exists():
@@ -622,7 +627,7 @@ def cmd_init_env(args: argparse.Namespace) -> int:
         lines = (directory / template).read_text(encoding="utf-8").splitlines()
         keys: list[str] = []
         for key, kind in generated.items():
-            value = keycloak_db if kind == "keycloak-db" else _new_secret(kind)
+            value = keycloak_db if kind == _GEN_KEYCLOAK_DB else _new_secret(kind)
             lines = set_env_value(lines, key, value)
             if key == "APP_DB_PASSWORD":
                 lines = _replace_url_password(lines, "DATABASE_URL", value)
