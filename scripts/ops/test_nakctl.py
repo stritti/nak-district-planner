@@ -439,6 +439,15 @@ class LogsAndSecretsTest(NakctlCase):
         self.assertNotIn("abc123", content)
         self.assertNotIn("eva@example.org", content)
 
+    def test_export_dry_run_writes_nothing(self) -> None:
+        out = self.root / "export.log"
+        result = self.nakctl(
+            "logs", "export", "--output", str(out), "--dry-run", STUB_LOGS=self.LOGS
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(out.exists())
+        self.assertIn("--dry-run", result.stdout)
+
     def test_invalid_since_is_rejected(self) -> None:
         self.assertEqual(self.nakctl("logs", "analyze", "--since", "; rm -rf /").returncode, 2)
 
@@ -585,6 +594,11 @@ class QueueTest(NakctlCase):
         self.assertIn("dispatch_event_mail_hooks", result.stdout)
         self.assertIn("lösen Mails aus", result.stdout)
         self.assertEqual(self.cli("HLEN", "unacked"), "2")
+
+    def test_inspect_read_failure_is_an_environment_error(self) -> None:
+        result = self.nakctl("queue", "inspect", NAKCTL_VALKEY_CLI="false")
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertNotIn("keine Nachrichten", result.stdout)
 
     def test_scan_failure_is_an_environment_error(self) -> None:
         result = self.nakctl("queue", "purge-results", "--yes", NAKCTL_VALKEY_CLI="false")

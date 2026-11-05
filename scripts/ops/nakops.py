@@ -426,6 +426,8 @@ _SECRET_KEY_NAME = re.compile(r"(PASSWORD|SECRET|_KEY$|TOKEN)")
 _WEAK_VALUES = frozenset({"changeme", "change-me", "password", "default", "secret", "admin"})
 # Owner credentials must live in .env.db only (app/config.py::production_guard).
 _OWNER_ONLY = ("POSTGRES_PASSWORD", "MIGRATION_DATABASE_URL")
+# Removed from .env.keycloak once a permanent admin exists (production-compose.md).
+_REMOVABLE_SECRETS = frozenset({"KC_BOOTSTRAP_ADMIN_PASSWORD"})
 
 
 def parse_env(path: Path) -> dict[str, str]:
@@ -465,8 +467,11 @@ def check_env_file(path: Path, example: Path | None, *, runtime: bool) -> list[s
         elif not value and example_value:
             findings.append(f"{path.name}: {key} ist leer")
     # Secrets the example sets (e.g. SECRET_KEY, VALKEY_PASSWORD) must exist;
-    # those with an empty example value (e.g. SMTP_PASSWORD) are optional.
+    # those with an empty example value (e.g. SMTP_PASSWORD) are optional, and
+    # temporary bootstrap credentials are removed after setup by design.
     for key, example_value in sorted(examples.items()):
+        if key in _REMOVABLE_SECRETS:
+            continue
         if _SECRET_KEY_NAME.search(key) and example_value and key not in values:
             findings.append(f"{path.name}: {key} fehlt")
     if runtime:

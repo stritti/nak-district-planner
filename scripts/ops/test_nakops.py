@@ -275,6 +275,15 @@ class EnvCheckTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(".env.keycloak: KC_BOOTSTRAP_ADMIN_PASSWORD", out)
 
+    def test_removed_keycloak_bootstrap_password_is_not_missing(self) -> None:
+        self.write_env("SECRET_KEY=" + "a" * 40 + "\n")
+        (self.dir / ".env.keycloak.example").write_text(
+            "KC_BOOTSTRAP_ADMIN_PASSWORD=replace-me\nKC_DB_PASSWORD=replace-me\n"
+        )
+        self.write_env("KC_DB_PASSWORD=" + "b" * 40 + "\n", name=".env.keycloak")
+        _, out = run(["env-check", "--dir", str(self.dir)])
+        self.assertNotIn("KC_BOOTSTRAP_ADMIN_PASSWORD", out)
+
     def test_missing_env_is_a_finding(self) -> None:
         code, _ = run(["env-check", "--dir", str(self.dir)])
         self.assertEqual(code, 1)

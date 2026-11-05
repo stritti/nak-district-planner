@@ -43,7 +43,7 @@ scripts/ops/nakctl check secrets   # .env-Dateien: Rechte 0600, Beispiel- und St
 scripts/ops/nakctl check all       # alles zusammen, für den täglichen Cron-Job
 ```
 
-`check secrets` prüft `.env`, `.env.db`, `.env.keycloak` und `.env.keycloak-db` gegen ihre `*.example`-Dateien. Es meldet zu weite Rechte, übernommene Beispielwerte, Standardwerte wie `changeme`, Owner-Credentials (`POSTGRES_PASSWORD`, `MIGRATION_DATABASE_URL`) in der Laufzeit-`.env` und ein fehlendes `BACKUP_ENCRYPT_KEY` bei `APP_ENV=production`. Es nennt nur Schlüsselnamen, nie Werte.
+`check secrets` prüft `.env`, `.env.db`, `.env.keycloak` und `.env.keycloak-db` gegen ihre `*.example`-Dateien. Es meldet zu weite Rechte, übernommene Beispielwerte, Standardwerte wie `changeme`, Owner-Credentials (`POSTGRES_PASSWORD`, `MIGRATION_DATABASE_URL`) in der Laufzeit-`.env` ein fehlendes `BACKUP_ENCRYPT_KEY` bei `APP_ENV=production` und fehlende Secrets, die das Beispiel vorbelegt. `KC_BOOTSTRAP_ADMIN_PASSWORD` darf nach der Keycloak-Einrichtung fehlen. Es nennt nur Schlüsselnamen, nie Werte.
 
 ## Celery-Warteschlange
 

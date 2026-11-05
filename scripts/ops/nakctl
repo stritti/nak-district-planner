@@ -136,8 +136,10 @@ queue_inspect() {
   done
   [[ "$limit" =~ ^[1-9][0-9]*$ ]] || die "$EXIT_USAGE" "--limit braucht eine positive Zahl"
   info "Task-Namen der ersten $limit Nachricht(en):"
-  local rc=0
-  queue_messages "$limit" | nakops queue-histogram || rc=$?
+  local rc=0 messages
+  # Read first, so an unreachable Valkey is an environment error, not an empty queue.
+  messages="$(queue_messages "$limit")" || die "$EXIT_ENV" "Queue konnte nicht gelesen werden (Valkey erreichbar?)"
+  { [[ -z "$messages" ]] || printf '%s\n' "$messages"; } | nakops queue-histogram || rc=$?
   ((rc <= EXIT_FINDING)) || exit "$rc"
   return 0
 }
@@ -461,6 +463,10 @@ cmd_logs() {
   [[ -n "$output" ]] || die "$EXIT_USAGE" "logs export braucht --output DATEI"
   ((${#analyze_args[@]} == 0)) || die "$EXIT_USAGE" "--json/--top/--fail-on-errors gibt es nur bei logs analyze"
   [[ ! -e "$output" ]] || die "$EXIT_USAGE" "$output existiert bereits"
+  if ((DRY_RUN)); then
+    info "--dry-run: würde redigierte Logs seit $since nach $output schreiben (Rechte 0600)."
+    return 0
+  fi
   (
     umask 077
     {
