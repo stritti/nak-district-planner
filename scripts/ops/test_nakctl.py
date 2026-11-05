@@ -216,10 +216,10 @@ class BackupTest(NakctlCase):
         self.assertEqual(len(list(self.backups.iterdir())), 2)
         self.assertIn("fehlgeschlagen", result.stdout)
 
-    def test_world_writable_hook_is_not_run(self) -> None:
+    def test_group_writable_hook_is_not_run(self) -> None:
         marker = self.root / "ran"
         hook = self.hook(f"touch {marker}\n")
-        hook.chmod(0o777)
+        hook.chmod(0o770)
         result = self.nakctl("backup", "create", BACKUP_POST_HOOK=str(hook))
         self.assertEqual(result.returncode, 1)
         self.assertFalse(marker.exists())
@@ -345,7 +345,7 @@ class LogsAndSecretsTest(NakctlCase):
             "SECRET_KEY=replace-with-a-long-random-secret-key\n"
         )
         self.env_file.write_text("SECRET_KEY=replace-with-a-long-random-secret-key\n")
-        self.env_file.chmod(0o644)
+        self.env_file.chmod(0o640)
         result = self.nakctl("check", "secrets")
         self.assertEqual(result.returncode, 1)
         self.assertIn("SECRET_KEY", result.stdout)

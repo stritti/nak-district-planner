@@ -11,10 +11,10 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -23,7 +23,7 @@ import nakops  # noqa: E402
 
 def run(argv: list[str], stdin: str = "") -> tuple[int, str]:
     out = io.StringIO()
-    with mock.patch.object(sys, "stdin", io.StringIO(stdin)), redirect_stdout(out):
+    with unittest.mock.patch.object(sys, "stdin", io.StringIO(stdin)), redirect_stdout(out):
         code = nakops.main(argv)
     return code, out.getvalue()
 
@@ -235,11 +235,11 @@ class EnvCheckTest(unittest.TestCase):
     def test_permissions_weak_values_owner_credentials_and_backup_key(self) -> None:
         self.write_env(
             "SECRET_KEY=xyz-long-enough\nAPP_DB_PASSWORD=changeme\nPOSTGRES_PASSWORD=owner\nAPP_ENV=production\n",
-            mode=0o644,
+            mode=0o640,
         )
         code, out = run(["env-check", "--dir", str(self.dir)])
         self.assertEqual(code, 1)
-        self.assertIn("Rechte 0644", out)
+        self.assertIn("Rechte 0640", out)
         self.assertIn("APP_DB_PASSWORD", out)
         self.assertIn("POSTGRES_PASSWORD gehört in .env.db", out)
         self.assertIn("BACKUP_ENCRYPT_KEY fehlt", out)
@@ -261,7 +261,7 @@ class EnvCheckTest(unittest.TestCase):
 class ParserTest(unittest.TestCase):
     def test_usage_errors_do_not_echo_values(self) -> None:
         err = io.StringIO()
-        with mock.patch.object(sys, "stderr", err), self.assertRaises(SystemExit) as ctx:
+        with unittest.mock.patch.object(sys, "stderr", err), self.assertRaises(SystemExit) as ctx:
             nakops.main(["backups", "--dir", "x", "--db", "y", "--bogus", "s3cret"])
         self.assertEqual(ctx.exception.code, 2)
         self.assertNotIn("s3cret", err.getvalue())

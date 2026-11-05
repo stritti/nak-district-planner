@@ -543,7 +543,11 @@ def main(argv: list[str] | None = None) -> int:
         return args.func(args)
     except BrokenPipeError:
         # `nakctl ... | head` must not print a traceback.
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull, sys.stdout.fileno())
+        finally:
+            os.close(devnull)
         return EXIT_OK
 
 
