@@ -213,10 +213,14 @@ class EnvCheckTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def write_env(self, content: str, mode: int = 0o600, name: str = ".env") -> None:
+    def write_env(self, content: str, *, group_readable: bool = False, name: str = ".env") -> None:
+        """Create an env file 0600, or 0640 through the umask to exercise the permission check."""
         path = self.dir / name
-        path.write_text(content)
-        os.chmod(path, mode)
+        previous = os.umask(0o027 if group_readable else 0o077)
+        try:
+            path.write_text(content)
+        finally:
+            os.umask(previous)
 
     def test_clean_env_passes(self) -> None:
         self.write_env(
@@ -235,7 +239,7 @@ class EnvCheckTest(unittest.TestCase):
     def test_permissions_weak_values_owner_credentials_and_backup_key(self) -> None:
         self.write_env(
             "SECRET_KEY=xyz-long-enough\nAPP_DB_PASSWORD=changeme\nPOSTGRES_PASSWORD=owner\nAPP_ENV=production\n",
-            mode=0o640,
+            group_readable=True,
         )
         code, out = run(["env-check", "--dir", str(self.dir)])
         self.assertEqual(code, 1)
