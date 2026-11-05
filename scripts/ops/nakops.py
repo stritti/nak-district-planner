@@ -31,6 +31,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 EXIT_OK = 0
 EXIT_FINDING = 1
@@ -582,10 +583,31 @@ def set_env_value(lines: list[str], key: str, value: str) -> list[str]:
     return out
 
 
-def _replace_url_password(lines: list[str], key: str, password: str) -> list[str]:
-    """Keep the host-execution URL (DATABASE_URL, VALKEY_URL) in step with the password."""
-    pattern = re.compile(rf"^({re.escape(key)}=[^:/]+://[^:/@]*:)([^@]*)(@.*)$")
-    return [pattern.sub(lambda m: m.group(1) + password + m.group(3), line) for line in lines]
+def _replace_url_credentials(
+    lines: list[str], key: str, password: str, user: str | None = None
+) -> list[str]:
+    """Keep the host-execution URL (DATABASE_URL, VALKEY_URL) in step with the credentials.
+
+    With ``user`` the URL's username is replaced too, so user and password name the same role.
+    """
+    pattern = re.compile(rf"^({re.escape(key)}=[^:/]+://)([^:/@]*)(:)([^@]*)(@.*)$")
+
+    def repl(m: re.Match[str]) -> str:
+        name = quote(user, safe="") if user is not None else m.group(2)
+        return m.group(1) + name + m.group(3) + quote(password, safe="") + m.group(5)
+
+    return [pattern.sub(repl, line) for line in lines]
+
+
+def _active_value(lines: list[str], key: str) -> str | None:
+    """Return the raw right-hand side of the last active KEY= line (quoting kept)."""
+    active = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}=(.*)$")
+    found = None
+    for line in lines:
+        match = active.match(line)
+        if match:
+            found = match.group(1).strip()
+    return found
 
 
 def _write_private(path: Path, lines: list[str]) -> None:
@@ -608,14 +630,16 @@ def cmd_init_env(args: argparse.Namespace) -> int:
         "AUTH_HOST": args.auth_host,
         "BACKUP_ENCRYPT_KEY": args.backup_key,
     }
+    # Reuse an existing Keycloak DB password verbatim (raw text with its quoting), so
+    # Compose reads the same value from both env files.
     keycloak_db = None
-    for name in (".env.keycloak", ".env.keycloak-db"):
+    for name, key in (
+        (".env.keycloak", "KC_DB_PASSWORD"),
+        (".env.keycloak-db", "POSTGRES_PASSWORD"),
+    ):
         existing = directory / name
-        if existing.is_file():
-            values = parse_env(existing)
-            keycloak_db = values.get(
-                "KC_DB_PASSWORD" if name == ".env.keycloak" else "POSTGRES_PASSWORD"
-            )
+        if existing.is_file() and parse_env(existing).get(key):
+            keycloak_db = _active_value(existing.read_text(encoding="utf-8").splitlines(), key)
             if keycloak_db:
                 break
     keycloak_db = keycloak_db or _new_secret(_GEN_URL)
@@ -630,9 +654,10 @@ def cmd_init_env(args: argparse.Namespace) -> int:
             value = keycloak_db if kind == _GEN_KEYCLOAK_DB else _new_secret(kind)
             lines = set_env_value(lines, key, value)
             if key == "APP_DB_PASSWORD":
-                lines = _replace_url_password(lines, "DATABASE_URL", value)
+                app_user = _active_value(lines, "APP_DB_USER")
+                lines = _replace_url_credentials(lines, "DATABASE_URL", value, app_user or None)
             elif key == "VALKEY_PASSWORD":
-                lines = _replace_url_password(lines, "VALKEY_URL", value)
+                lines = _replace_url_credentials(lines, "VALKEY_URL", value)
             keys.append(key)
         if name == ".env":
             for key, value in settings.items():

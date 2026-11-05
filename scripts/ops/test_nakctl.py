@@ -852,7 +852,7 @@ class SetupTest(NakctlCase):
         self.assertEqual(env["APP_HOST"], "planer.example.org")
         self.assertEqual(len(env["SECRET_KEY"]), 64)
         self.assertNotEqual(env["APP_DB_PASSWORD"], "changeme")
-        self.assertIn(f":{env['APP_DB_PASSWORD']}@", env["DATABASE_URL"])
+        self.assertIn(f"://nak_app:{env['APP_DB_PASSWORD']}@", env["DATABASE_URL"])
         self.assertIn(f":{env['VALKEY_PASSWORD']}@", env["VALKEY_URL"])
         keycloak = self.values(".env.keycloak")
         self.assertEqual(
@@ -880,6 +880,13 @@ class SetupTest(NakctlCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("bleibt unverändert", result.stdout)
         self.assertEqual({n: (self.deploy / n).read_text() for n in before}, before)
+
+    def test_copied_keycloak_password_keeps_its_quoting(self) -> None:
+        raw = "'long-existing$PASSWORD'"
+        (self.deploy / ".env.keycloak-db").write_text(f"POSTGRES_PASSWORD={raw}\n")
+        self.assertEqual(self.nakctl("setup", "init").returncode, 0)
+        text = (self.deploy / ".env.keycloak").read_text()
+        self.assertIn(f"KC_DB_PASSWORD={raw}\n", text)
 
     def test_dry_run_creates_nothing(self) -> None:
         result = self.nakctl("setup", "init", "--dry-run")
