@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Einheitlicher Einstiegspunkt für Betriebsaufgaben
-Das Repository SHALL `scripts/ops/nakctl` mit den Bereichen `queue`, `backup`, `logs` und `status` bereitstellen. Das Werkzeug SHALL `COMPOSE_FILE` und `.env` des Deploy-Verzeichnisses verwenden, `.env` nicht ausführen und nur Docker Compose, Bash und Python 3 auf dem Host voraussetzen.
+Das Repository SHALL `scripts/ops/nakctl` mit den Bereichen `queue`, `backup`, `logs`, `status`, `check`, `deploy`, `db`, `superadmin` und `cleanup` als Shell-Skript bereitstellen. Das Werkzeug SHALL `COMPOSE_FILE` und `.env` des Deploy-Verzeichnisses verwenden, `.env` nicht ausführen und nur Docker Compose, Bash und Python 3 auf dem Host voraussetzen.
 
 #### Scenario: Produktions-Compose-Datei wird verwendet
 - **GIVEN** `.env` enthält `COMPOSE_FILE=docker-compose.prod.yml`
@@ -83,3 +83,66 @@ Das Werkzeug SHALL Passwörter und Tokens weder ausgeben noch als Kommandozeilen
 - **GIVEN** die Datenbank steht nicht auf dem Alembic-Head des Images
 - **WHEN** der Betreiber `status` ausführt
 - **THEN** die Abweichung wird gemeldet und der Exit-Code ist 1
+
+### Requirement: Backup an Off-Site-Ziel übergeben
+Ist `BACKUP_POST_HOOK` gesetzt, SHALL `backup create` nach einem vollständigen Backup diese Datei direkt, ohne Shell, mit den Archivpfaden aufrufen. Eine für andere schreibbare Hook-Datei SHALL abgelehnt werden. Schlägt der Hook fehl, SHALL das lokale Backup erhalten bleiben und der Exit-Code 1 sein.
+
+#### Scenario: Hook schlägt fehl
+- **GIVEN** `BACKUP_POST_HOOK` zeigt auf ein Skript, das mit Fehler endet
+- **WHEN** der Betreiber `backup create` ausführt
+- **THEN** beide Archive liegen im Backup-Verzeichnis
+- **AND** der Befehl endet mit Exit-Code 1
+
+#### Scenario: Unsichere Hook-Datei
+- **GIVEN** die Hook-Datei ist für alle schreibbar
+- **WHEN** der Betreiber `backup create` ausführt
+- **THEN** der Hook wird nicht ausgeführt und das Werkzeug meldet den Grund
+
+### Requirement: Betriebsprüfungen für Zertifikate, Platz und Secrets
+`check certs` SHALL die Restlaufzeit der TLS-Zertifikate von App- und Keycloak-Host melden, `check disk` den freien Platz von Host, Volumes und Backup-Verzeichnis, `check secrets` Dateirechte 0600, gesetzte Pflichtwerte und übernommene Beispielwerte. Unterschreitet ein Wert seinen Schwellwert, SHALL der Exit-Code 1 sein. Secret-Werte SHALL nie ausgegeben werden.
+
+#### Scenario: Zertifikat läuft bald ab
+- **GIVEN** das Zertifikat des App-Hosts läuft in 10 Tagen ab
+- **WHEN** der Betreiber `check certs` ausführt
+- **THEN** der Befund nennt Host und Restlaufzeit und der Exit-Code ist 1
+
+#### Scenario: Beispielwert in der Produktion
+- **GIVEN** ein Pflichtwert in `.env` entspricht dem Wert aus der Beispieldatei
+- **WHEN** der Betreiber `check secrets` ausführt
+- **THEN** der Befund nennt nur den Schlüsselnamen, nicht den Wert
+
+### Requirement: Versionswechsel mit Backup und Rückweg
+`deploy update <version>` SHALL prüfen, dass das Image-Tag existiert, die laufende Version merken, ein Backup erstellen, migrieren, starten und auf `/health` warten. `deploy rollback` SHALL die gemerkte Version nur setzen, wenn deren Alembic-Head zum Datenbankstand passt; sonst SHALL er ohne Änderung abbrechen und auf Restore oder Downgrade verweisen.
+
+#### Scenario: Unbekannte Version
+- **WHEN** der Betreiber `deploy update v9.9.9` für ein nicht veröffentlichtes Tag aufruft
+- **THEN** nichts wird geändert und der Exit-Code ist 2
+
+#### Scenario: Rollback nach Migration
+- **GIVEN** die neue Version hat die Datenbank über den Head der Vorversion hinaus migriert
+- **WHEN** der Betreiber `deploy rollback` ausführt
+- **THEN** `APP_VERSION` bleibt unverändert
+- **AND** die Meldung verweist auf `backup restore` oder `alembic downgrade`
+
+### Requirement: Datenbankwartung ohne Personendaten
+`db stats` SHALL Tabellengrößen, Verbindungen, lange Abfragen, Sperren und Autovacuum-Zeitpunkte zeigen und Abfragetexte ohne Literale ausgeben. `db vacuum` SHALL nach Bestätigung `VACUUM (ANALYZE)` ausführen und nie `VACUUM FULL`.
+
+#### Scenario: Lange Abfrage mit E-Mail-Adresse
+- **GIVEN** eine laufende Abfrage enthält eine E-Mail-Adresse als Literal
+- **WHEN** der Betreiber `db stats` ausführt
+- **THEN** die Abfrage erscheint ohne die E-Mail-Adresse
+
+### Requirement: Superadmin nach Subject-Wechsel wiederherstellen
+`superadmin set-sub <sub>` SHALL nur einen vorhandenen Benutzer-Subject akzeptieren, die Änderung vor der Bestätigung zeigen und dann `app_superadmin_config.superadmin_sub` setzen sowie `bootstrap_completed_at` zurücksetzen. Der Wert SHALL als psql-Variable übergeben werden.
+
+#### Scenario: Unbekannter Subject
+- **WHEN** der Betreiber `superadmin set-sub` mit einer `sub` ohne Benutzer aufruft
+- **THEN** nichts wird geändert und der Exit-Code ist 2
+
+### Requirement: Alte Images aufräumen
+`cleanup images` SHALL lokale Images älterer App-Versionen nach Bestätigung entfernen, die laufende und die gemerkte Vorversion behalten und nie Volumes löschen.
+
+#### Scenario: Vorversion bleibt erhalten
+- **GIVEN** lokal liegen Images von drei App-Versionen
+- **WHEN** der Betreiber `cleanup images --yes` ausführt
+- **THEN** nur das Image der ältesten Version wird entfernt
