@@ -554,6 +554,28 @@ _INIT_FILES: tuple[tuple[str, str, dict[str, str]], ...] = (
 )
 
 
+# Settings both Keycloak env files must agree on: (.env.keycloak key, .env.keycloak-db key).
+_KEYCLOAK_DB_PAIRS = (("KC_DB_USERNAME", "POSTGRES_USER"), ("KC_DB_PASSWORD", "POSTGRES_PASSWORD"))
+_KEYCLOAK_FILES = (".env.keycloak", ".env.keycloak-db")
+
+
+def _existing_keycloak_db_values(directory: Path) -> dict[int, str]:
+    """Raw values (quoting kept) of the shared Keycloak DB settings from an existing file."""
+    found: dict[int, str] = {}
+    for side, name in enumerate(_KEYCLOAK_FILES):
+        path = directory / name
+        if not path.is_file():
+            continue
+        parsed = parse_env(path)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, pair in enumerate(_KEYCLOAK_DB_PAIRS):
+            if index not in found and parsed.get(pair[side]):
+                raw = _active_value(lines, pair[side])
+                if raw:
+                    found[index] = raw
+    return found
+
+
 def _new_secret(kind: str) -> str:
     # URL-safe: VALKEY_PASSWORD and APP_DB_PASSWORD end up inside connection URLs.
     return secrets.token_hex(32) if kind == _GEN_HEX else secrets.token_urlsafe(32)
@@ -630,19 +652,10 @@ def cmd_init_env(args: argparse.Namespace) -> int:
         "AUTH_HOST": args.auth_host,
         "BACKUP_ENCRYPT_KEY": args.backup_key,
     }
-    # Reuse an existing Keycloak DB password verbatim (raw text with its quoting), so
-    # Compose reads the same value from both env files.
-    keycloak_db = None
-    for name, key in (
-        (".env.keycloak", "KC_DB_PASSWORD"),
-        (".env.keycloak-db", "POSTGRES_PASSWORD"),
-    ):
-        existing = directory / name
-        if existing.is_file() and parse_env(existing).get(key):
-            keycloak_db = _active_value(existing.read_text(encoding="utf-8").splitlines(), key)
-            if keycloak_db:
-                break
-    keycloak_db = keycloak_db or _new_secret(_GEN_URL)
+    # Copy the Keycloak DB user and password verbatim (raw text with its quoting) from an
+    # existing Keycloak env file, so Compose reads the same values from both files.
+    shared = _existing_keycloak_db_values(directory)
+    keycloak_db = shared.get(1) or _new_secret(_GEN_URL)
     for name, template, generated in _INIT_FILES:
         path = directory / name
         if path.exists():
@@ -659,6 +672,10 @@ def cmd_init_env(args: argparse.Namespace) -> int:
             elif key == "VALKEY_PASSWORD":
                 lines = _replace_url_credentials(lines, "VALKEY_URL", value)
             keys.append(key)
+        if name in _KEYCLOAK_FILES and 0 in shared:
+            user_key = _KEYCLOAK_DB_PAIRS[0][_KEYCLOAK_FILES.index(name)]
+            lines = set_env_value(lines, user_key, shared[0])
+            keys.append(user_key)
         if name == ".env":
             for key, value in settings.items():
                 if value:

@@ -888,6 +888,15 @@ class SetupTest(NakctlCase):
         text = (self.deploy / ".env.keycloak").read_text()
         self.assertIn(f"KC_DB_PASSWORD={raw}\n", text)
 
+    def test_copied_keycloak_user_matches(self) -> None:
+        (self.deploy / ".env.keycloak-db").write_text(
+            "POSTGRES_USER=custom_keycloak\nPOSTGRES_PASSWORD=kept-db-password\n"
+        )
+        self.assertEqual(self.nakctl("setup", "init").returncode, 0)
+        keycloak = self.values(".env.keycloak")
+        self.assertEqual(keycloak["KC_DB_USERNAME"], "custom_keycloak")
+        self.assertEqual(keycloak["KC_DB_PASSWORD"], "kept-db-password")
+
     def test_dry_run_creates_nothing(self) -> None:
         result = self.nakctl("setup", "init", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
