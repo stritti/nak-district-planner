@@ -1,7 +1,8 @@
-# shellcheck shell=bash
-# shellcheck disable=SC2034 # constants and flags are used by nakctl, which sources this file
 # SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 # SPDX-License-Identifier: AGPL-3.0-only
+
+# shellcheck shell=bash
+# shellcheck disable=SC2034 # constants and flags are used by nakctl, which sources this file
 
 # Shared helpers for scripts/ops/nakctl. Sourced, never executed directly.
 #
