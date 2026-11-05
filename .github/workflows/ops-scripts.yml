@@ -3,7 +3,7 @@
 
 name: ops-scripts
 
-# Lint and test the operator tooling in scripts/ops/ (nakctl, nakops.py).
+# Lint and test the operator tooling in scripts/ops/ (nakctl, nakops.py, install bundle).
 on:
   pull_request:
     branches: [main, develop]
@@ -11,6 +11,9 @@ on:
       - 'scripts/ops/**'
       - 'scripts/backup.sh'
       - 'scripts/restore.sh'
+      - 'docker-compose.prod.yml'
+      - '.env*'
+      - 'deploy/**'
       - '.github/workflows/ops-scripts.yml'
   push:
     branches: [main]
@@ -18,6 +21,9 @@ on:
       - 'scripts/ops/**'
       - 'scripts/backup.sh'
       - 'scripts/restore.sh'
+      - 'docker-compose.prod.yml'
+      - '.env*'
+      - 'deploy/**'
       - '.github/workflows/ops-scripts.yml'
   workflow_dispatch:
 
@@ -50,7 +56,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: ShellCheck
-        run: shellcheck -x scripts/ops/nakctl scripts/ops/lib.sh scripts/ops/examples/*.sh
+        run: shellcheck -x scripts/ops/nakctl scripts/ops/lib.sh scripts/ops/install.sh scripts/ops/build-bundle.sh scripts/ops/examples/*.sh
 
       - name: Install Valkey/Redis server and PostgreSQL client
         run: |
