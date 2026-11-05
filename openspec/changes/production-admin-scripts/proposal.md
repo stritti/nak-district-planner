@@ -28,8 +28,8 @@ Der produktive Betrieb verlangt heute viele einzelne, von Hand zusammengesetzte 
 
 ## Impact
 
-- Neue Dateien: `scripts/ops/nakctl`, `scripts/ops/lib.sh`, `scripts/ops/analyze_logs.py` (nur Python-Standardbibliothek), Tests `scripts/ops/test_analyze_logs.py` und Shell-Tests für `nakctl`.
-- CI: ShellCheck für `scripts/ops/` und die Python-Tests im bestehenden Skript-Testlauf.
+- Neue Dateien: `scripts/ops/nakctl`, `scripts/ops/lib.sh`, `scripts/ops/nakops.py` (nur Python-Standardbibliothek), `scripts/ops/examples/backup-post-hook-rsync.sh`, Tests `scripts/ops/test_nakops.py` und `scripts/ops/test_nakctl.py`.
+- CI: neuer Workflow `ops-scripts` mit ShellCheck und den Tests gegen Valkey/Redis und PostgreSQL.
 - Keine Änderung an Backend, Frontend, Datenbankschema oder Compose-Dateien.
 - Dokumentation (VitePress): neue Seite `docs/operations/admin-scripts.md`; Verweise in `docs/operations/production-runbook.md` (Abschnitte Superadmin-Bootstrap, Deployment, Rollback, Backup/Restore, Monitoring, Celery-Diagnose) und `docs/operations/production-compose.md` (Backup); Navigation in `docs/.vitepress/config.*`. Der Demo-Bezirk ist nicht betroffen.
 

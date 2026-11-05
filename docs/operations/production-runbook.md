@@ -169,6 +169,8 @@ docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 
 Gibt es noch einen anderen Superadmin, ist das nicht nötig: Er ernennt das neue Konto in der Benutzerverwaltung.
 
+Beide Schritte erledigt auch `scripts/ops/nakctl superadmin list` und `scripts/ops/nakctl superadmin set-sub <SUB>`; der Befehl prüft vorher, dass ein Benutzer mit dieser `sub` existiert ([Admin-Skripte](/operations/admin-scripts#superadmin-wiederherstellen)).
+
 Danach abmelden und neu anmelden; beim nächsten Login setzt das Backend `is_superadmin` für diesen Subject einmalig. Andere Superadmins behalten ihre Berechtigung; entziehen kann sie ein Superadmin in der Benutzerverwaltung. Mitgliedschaften und Zuordnungen des alten Kontos hängen an der alten `sub` und gehen nicht automatisch über, der Superadmin kann sie neu vergeben.
 
 ## 3. Standard-Deployment
@@ -253,6 +255,8 @@ Die detaillierten Recovery-Schritte stehen unter [Release-Recovery](/operations/
 4. Health- und Smoke-Tests wiederholen.
 5. Ursache und Folgemassnahmen dokumentieren.
 
+Im Produktiv-Stack wechselt `scripts/ops/nakctl deploy update <version>` die Version mit vorherigem Backup, und `scripts/ops/nakctl deploy rollback` kehrt zur Vorversion zurück, wenn deren Alembic-Head zum Datenbankstand passt ([Admin-Skripte](/operations/admin-scripts#versionswechsel)).
+
 ## 5. Backup und Restore
 
 Zielwerte: RPO maximal 24 Stunden, RTO maximal 4 Stunden.
@@ -265,7 +269,8 @@ BACKUP_ENCRYPT_KEY=<gpg-recipient> ./scripts/backup.sh
 
 - `pg_dump -Fc` wird verschluesselt abgelegt.
 - Standard-Retention: 30 Tage (`BACKUP_RETENTION_DAYS`).
-- `BACKUP_DIR` muss zusaetzlich extern gesichert werden.
+- `BACKUP_DIR` muss zusaetzlich extern gesichert werden, z. B. ueber `BACKUP_POST_HOOK`.
+- `scripts/ops/nakctl backup create|list|verify|restore` kapselt beide Skripte, prueft das Alter des letzten vollstaendigen Backups und ruft den Off-Site-Hook auf ([Admin-Skripte](/operations/admin-scripts#backups)).
 
 ### 5.2 Restore
 
@@ -290,6 +295,8 @@ Mindestens ueberwachen:
 - Audit- und Autorisierungsfehler
 - Rate-Limiter-Fallbacks
 - Backup-/Restore-Fehler
+
+`scripts/ops/nakctl check all` prueft Zustand, Zertifikate, Platz, Secrets und Backup-Alter in einem Lauf, `scripts/ops/nakctl logs analyze --fail-on-errors` wertet die Logs redigiert aus; beide eignen sich fuer Cron ([Admin-Skripte](/operations/admin-scripts#cron-beispiel)).
 
 ### 6.1 Rate-Limiter-Fallback
 
@@ -382,6 +389,10 @@ failed attempt. Running integrations are protected by a transaction-scoped
 `pg_try_advisory_xact_lock`; a busy lock causes an immediate logged skip.
 Manual triggers still use the lock but bypass Beat's cooldown. Check logs for
 `Calendar sync skipped` and `Calendar sync failed` when investigating errors.
+
+`scripts/ops/nakctl queue status` shows the queue length and unacknowledged
+messages; `queue inspect` counts task names, and `queue purge` empties only the
+Celery queue after confirmation (see [Admin-Skripte](/operations/admin-scripts#celery-warteschlange)).
 
 
 ## Upgrade: SQL-Celery-Broker auf Valkey umstellen (#470)

@@ -10,7 +10,7 @@ Die Dokumentation folgt Aufgaben und besitzt pro Thema eine **maßgebliche Quell
 | Implementierter Vertrag | [Use Cases](/features/use-cases) | [OpenSpec-Baseline](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs) |
 | Architektur | [Architekturstatus](/architecture/status) | [Architekturüberblick](https://github.com/stritti/nak-district-planner/blob/main/docs/architecture/overview.md) |
 | Entwicklung | [Einstieg](/guide/getting-started) | [README](https://github.com/stritti/nak-district-planner#entwicklung), [Standards](/development/engineering-standards), [Tests](/development/coverage-strategy) |
-| Betrieb | [Produktiv-Stack](/operations/production-compose) | [Runbook](/operations/production-runbook), [Release-Prozess](/operations/release-process) |
+| Betrieb | [Produktiv-Stack](/operations/production-compose) | [Runbook](/operations/production-runbook), [Admin-Skripte](/operations/admin-scripts), [Release-Prozess](/operations/release-process) |
 | Sicherheit | [Security Baseline](/security/baseline) | [OpenSpec-Security-Specs](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs) |
 
 ## Status und Historie

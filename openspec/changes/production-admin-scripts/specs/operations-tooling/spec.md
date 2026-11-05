@@ -8,6 +8,14 @@ Das Repository SHALL `scripts/ops/nakctl` mit den Bereichen `queue`, `backup`, `
 - **WHEN** der Betreiber `scripts/ops/nakctl status` ausführt
 - **THEN** alle Compose-Aufrufe beziehen sich auf den Produktions-Stack
 
+#### Scenario: Hilfe zu einem Bereich
+- **WHEN** der Betreiber `nakctl queue --help`, `nakctl queue purge -h` oder `nakctl help queue` aufruft
+- **THEN** das Werkzeug zeigt Befehle, Optionen und Beispiele des Bereichs, ändert nichts und endet mit Exit-Code 0
+
+#### Scenario: Aufruf ohne Argumente
+- **WHEN** der Betreiber `nakctl` ohne Argumente aufruft
+- **THEN** das Werkzeug zeigt die Übersicht aller Bereiche, gemeinsamen Optionen und Exit-Codes
+
 #### Scenario: Unbekannter Befehl
 - **WHEN** der Betreiber einen unbekannten Unterbefehl aufruft
 - **THEN** das Werkzeug zeigt die Hilfe und endet mit Exit-Code 2

@@ -17,7 +17,7 @@
 
 ### 1. Ein Einstiegspunkt, gemeinsame Bibliothek
 
-`scripts/ops/nakctl <bereich> <befehl> [optionen]` dispatcht auf Funktionen in `scripts/ops/lib.sh`. `lib.sh` übernimmt: Wechsel ins Repo-Verzeichnis (oder `NAK_DEPLOY_DIR`), Lesen einzelner Schlüssel aus `.env` per `grep` ohne `source` (keine Ausführung von `.env`-Inhalt), `docker compose`-Aufrufe mit dem konfigurierten `COMPOSE_FILE`, Bestätigungsabfrage, `--dry-run`, `--yes`, farbige Ausgabe nur auf einem TTY.
+`scripts/ops/nakctl <bereich> <befehl> [optionen]` dispatcht auf Funktionen; gemeinsame Helfer liegen in `scripts/ops/lib.sh`. Ohne Argumente zeigt `nakctl` die Übersicht, `nakctl <bereich> --help`, `-h` und `nakctl help <bereich>` zeigen Befehle, Optionen und Beispiele des Bereichs. `lib.sh` übernimmt: Wechsel ins Repo-Verzeichnis (oder `NAK_DEPLOY_DIR`), Lesen einzelner Schlüssel aus `.env` per `grep` ohne `source` (keine Ausführung von `.env`-Inhalt), `docker compose`-Aufrufe mit dem konfigurierten `COMPOSE_FILE`, Bestätigungsabfrage, `--dry-run`, `--yes`, farbige Ausgabe nur auf einem TTY.
 
 *Alternative:* ein Python-CLI im Backend-Image (`python -m app.ops`). Verworfen, weil Backup und Log-Analyse auf dem Host laufen müssen und das Werkzeug auch bei nicht startendem Backend funktionieren soll. Die bestehenden Skripte bleiben unverändert und werden nur aufgerufen.
 
@@ -25,9 +25,9 @@
 
 Alle Valkey-Befehle laufen per `docker compose exec -T valkey sh -c 'REDISCLI_AUTH="$VALKEY_PASSWORD" valkey-cli …'`, damit das Passwort weder auf der Host-Kommandozeile noch in `ps` erscheint.
 
-- `queue status`: `LLEN celery`, `HLEN unacked`, Anzahl `celery-task-meta-*` per `SCAN` (kein `KEYS`), Zahl aktiver Worker per `celery inspect ping` im `worker`-Container.
+- `queue status`: `LLEN celery`, `HLEN unacked`, Anzahl `celery-task-meta-*` per `SCAN` (kein `KEYS`), ob der `worker`-Container läuft (`docker compose ps`).
 - `queue inspect [--limit N]`: liest höchstens N Nachrichten per `LRANGE`, dekodiert im Skript nur den Header `task` und zählt je Task-Name. Argumente und `kwargs` werden nie ausgegeben.
-- `queue purge`: zeigt zuerst das Histogramm, warnt bei Mail-Tasks (`event_mail_hook_*`, Erinnerungen) ausdrücklich, verlangt die Eingabe des Wortes `LEEREN` oder `--yes`, und führt dann `celery -A app.celery_app purge -f` im `worker`-Container aus. `unacked` wird nur mit `--include-unacked` und nur bei gestoppten Workern geleert; sonst bricht der Befehl ab. Empfehlung im Hilfetext: vorher `beat` stoppen.
+- `queue purge`: zeigt zuerst das Histogramm, warnt bei Mail-Tasks (`event_mail_hook_*`, Erinnerungen) ausdrücklich, verlangt die Eingabe des Wortes `LEEREN` oder `--yes` und löscht dann den Listen-Schlüssel `celery` per `UNLINK`. Das entspricht dem, was Kombus Redis-Transport bei einem Purge tut, funktioniert aber auch bei gestopptem Worker und ist ohne Celery-Container testbar. `unacked` wird nur mit `--include-unacked` und nur bei gestoppten Workern geleert; sonst bricht der Befehl ab. Empfehlung im Hilfetext: vorher `beat` stoppen.
 - `queue purge-results`: `SCAN MATCH celery-task-meta-*` plus `UNLINK` in Blöcken.
 - `FLUSHALL`/`FLUSHDB` werden nie verwendet, damit Rate-Limit-Zähler und andere Schlüssel erhalten bleiben.
 - Jeder ändernde Queue-Befehl schreibt eine Zeile (Zeit, Befehl, Anzahl, Betriebssystem-Benutzer) nach `logs/nakctl.log` im Deploy-Verzeichnis.
@@ -40,7 +40,7 @@ Alle Valkey-Befehle laufen per `docker compose exec -T valkey sh -c 'REDISCLI_AU
 
 ### 4. Log-Analyse
 
-`logs analyze` holt `docker compose logs --no-color --since <dauer> [dienste]` und gibt den Strom an `scripts/ops/analyze_logs.py` (stdin, nur Standardbibliothek). Das Python-Skript
+`logs analyze` holt `docker compose logs --no-color --since <dauer> [dienste]` und gibt den Strom an `scripts/ops/nakops.py` (stdin, nur Standardbibliothek). Das Python-Skript
 
 - ordnet Zeilen dem Compose-Dienst zu und parst Level und Logger, sofern das Backend-Format vorliegt;
 - zählt ERROR/WARNING/CRITICAL je Dienst und die häufigsten normalisierten Meldungen (Zahlen, UUIDs und Zeitstempel durch Platzhalter ersetzt);
@@ -54,7 +54,7 @@ Alle Valkey-Befehle laufen per `docker compose exec -T valkey sh -c 'REDISCLI_AU
 
 ### 5. Status
 
-`status` kombiniert `docker compose ps --format json`, `curl` auf `/health` im `backend`-Container, `alembic current` gegen `alembic heads` im Backend-Image (nur lesend, Laufzeit-Credentials), `docker system df -v` für die Volumes und das Backup-Alter. Er ändert nichts und ist für Cron geeignet.
+`status` kombiniert `docker compose ps`, `curl` auf `/health` im `backend`-Container, die Zeilen von `alembic_version` (lesend im `db`-Container) gegen `alembic heads` im Backend-Image, `check disk` und das Backup-Alter. Er ändert nichts und ist für Cron geeignet.
 
 ### 6. Prüfungen
 
@@ -87,7 +87,7 @@ Alle Valkey-Befehle laufen per `docker compose exec -T valkey sh -c 'REDISCLI_AU
 
 - **Purge verwirft Arbeit unwiderruflich** → Histogramm vorab, ausdrückliche Bestätigung, Mail-Warnung, Protokollzeile; die fachlichen Jobs (Sync, Entwürfe, Lückenscan) laufen über Beat ohnehin erneut.
 - **Celery-Interna (Schlüsselnamen) können sich mit Kombu-Versionen ändern** → Schlüsselnamen zentral in `lib.sh`, ein Integrationstest gegen einen Valkey-Container in CI prüft `queue status` und `queue purge`.
-- **Log-Muster veralten** → Musterliste in `analyze_logs.py` mit Unit-Tests auf echten Beispielzeilen; unbekannte Fehler erscheinen trotzdem in der Fehlerzählung.
+- **Log-Muster veralten** → Musterliste in `nakops.py` mit Unit-Tests auf echten Beispielzeilen; unbekannte Fehler erscheinen trotzdem in der Fehlerzählung.
 - **`deploy update` auf falschem Checkout** → Hilfetext und Warnung, wenn das ausgecheckte Git-Tag nicht zur Zielversion passt.
 - **Off-Site-Hook führt fremden Code aus** → nur Datei des Betreibers, Rechteprüfung, kein Shell-Aufruf.
 - **Redaktion übersieht ein Format** → Tests mit Negativbeispielen; `logs export` weist im Kopf darauf hin, den Auszug vor dem Teilen zu prüfen.
