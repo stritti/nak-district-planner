@@ -337,6 +337,21 @@ class DeployTest(NakctlCase):
         self.assertIn("POSTGRES_DB=nak_planner", lines)
         self.assertIn("PREVIOUS_VERSION=1.6.0", (self.deploy / "logs" / "nakctl.state").read_text())
 
+    def test_relative_deploy_dir_is_resolved(self) -> None:
+        result = subprocess.run(
+            [str(NAKCTL), "deploy", "update", "1.7.0", "--yes", "--skip-backup"],
+            env={**self.env, "NAK_DEPLOY_DIR": "deploy", "STUB_MANIFESTS": "1.7.0"},
+            cwd=self.root,
+            input="",
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("APP_VERSION=1.7.0", self.env_file.read_text())
+        self.assertIn("PREVIOUS_VERSION=1.6.0", (self.deploy / "logs" / "nakctl.state").read_text())
+
     def test_update_without_confirmation_is_aborted(self) -> None:
         result = self.nakctl("deploy", "update", "1.7.0", "--skip-backup", STUB_MANIFESTS="1.7.0")
         self.assertEqual(result.returncode, 4)
@@ -684,6 +699,17 @@ class DatabaseTest(NakctlCase):
         result = self.nakctl("superadmin", "list")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("old-sub", result.stdout)
+        self.assertIn("Kandidaten", result.stdout)
+        self.assertIn("new-sub", result.stdout)
+
+    def test_superadmin_list_filters_candidates_by_email(self) -> None:
+        result = self.nakctl("superadmin", "list", "--email", "NEU@")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("new-sub", result.stdout)
+        result = self.nakctl("superadmin", "list", "--email", "x'; DROP TABLE users; --")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("new-sub", result.stdout)
+        self.assertEqual(self.psql("SELECT count(*) FROM users"), "2")
 
     def test_stats_hide_literals_of_long_queries(self) -> None:
         sleeper = subprocess.Popen(

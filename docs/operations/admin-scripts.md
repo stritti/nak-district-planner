@@ -132,7 +132,8 @@ scripts/ops/nakctl db vacuum --table planning_slots
 Wechseln Realm oder Identity Provider, hat dieselbe Person eine neue `sub` und ist nicht mehr Superadmin ([Runbook, Abschnitt 2.3](/operations/production-runbook#_2-3-neuer-benutzer-subject-realm-oder-keycloak-wechsel)). Gibt es noch einen anderen Superadmin, ernennt er das neue Konto in der Benutzerverwaltung. Sonst:
 
 ```bash
-scripts/ops/nakctl superadmin list                 # vorhandene Superadmins und Bootstrap-Subject
+scripts/ops/nakctl superadmin list                 # Superadmins, Bootstrap-Subject, zuletzt angelegte Benutzer
+scripts/ops/nakctl superadmin list --email anna@   # Kandidaten nach E-Mail-Teil filtern
 scripts/ops/nakctl superadmin set-sub <neue-sub>   # nur für eine vorhandene sub
 ```
 

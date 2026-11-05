@@ -21,6 +21,8 @@ readonly EXIT_ABORTED=4
 OPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$OPS_DIR/../.." && pwd)"
 DEPLOY_DIR="${NAK_DEPLOY_DIR:-$REPO_ROOT}"
+# Absolute, so paths stay valid after enter_deploy_dir changes into it.
+[[ "$DEPLOY_DIR" == /* ]] || DEPLOY_DIR="$PWD/$DEPLOY_DIR"
 NAKOPS="$OPS_DIR/nakops.py"
 
 YES=0

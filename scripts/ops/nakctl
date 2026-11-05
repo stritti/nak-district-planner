@@ -918,7 +918,8 @@ superadmin_usage() {
 Aufruf: nakctl superadmin <befehl>
 
 Befehle:
-  list                        Superadmins (sub, E-Mail) und konfigurierter Bootstrap-Subject
+  list [--email TEXT]         Superadmins, Bootstrap-Subject und die zuletzt angelegten Benutzer
+                              (Kandidaten für set-sub); --email filtert nach E-Mail-Teil
   set-sub <sub>               Bootstrap-Subject auf einen vorhandenen Benutzer setzen und die
                               einmalige Vergabe neu freischalten (Runbook Abschnitt 2.3)
 
@@ -932,17 +933,32 @@ ernennt er das neue Konto einfacher in der Benutzerverwaltung.
 
 Beispiele:
   nakctl superadmin list
+  nakctl superadmin list --email muster@example.org
   nakctl superadmin set-sub 3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b
 EOF
 }
 
 superadmin_list() {
-  (($# == 0)) || die "$EXIT_USAGE" "superadmin list kennt keine Optionen"
-  db_psql -P pager=off <<'SQL'
+  local email=""
+  while (($#)); do
+    case "$1" in
+      --email) require_value "$1" "${2:-}"; email="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für superadmin list: $1" ;;
+    esac
+  done
+  ((${#email} <= 254)) || die "$EXIT_USAGE" "--email ist zu lang"
+  # The new account after an IdP or realm change is an ordinary user, so list
+  # recent users as candidates; the filter is passed as a psql variable.
+  db_psql -P pager=off -v email="$email" <<'SQL'
 \echo '== Superadmins =='
 SELECT sub, email, created_at FROM users WHERE is_superadmin ORDER BY created_at;
 \echo '== Bootstrap-Konfiguration =='
 SELECT superadmin_sub, bootstrap_completed_at FROM app_superadmin_config WHERE id = 1;
+\echo '== Kandidaten für set-sub (zuletzt angelegte Benutzer) =='
+SELECT sub, email, created_at FROM users
+WHERE NOT is_superadmin
+  AND (:'email' = '' OR strpos(lower(coalesce(email, '')), lower(:'email')) > 0)
+ORDER BY created_at DESC LIMIT 10;
 SQL
 }
 
