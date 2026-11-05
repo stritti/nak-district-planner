@@ -13,7 +13,8 @@
 # make it executable and owned by the operator (chmod 700), and set in .env:
 #   BACKUP_POST_HOOK=/opt/nak/backup-offsite.sh
 #
-# Configuration (environment or edit below):
+# Configuration (.env of the deploy directory, the environment, or edit below;
+# nakctl passes OFFSITE_* values from .env to this hook):
 #   OFFSITE_TARGET   rsync target, e.g. backup@backup.example.org:/srv/nak/
 #   OFFSITE_SSH_KEY  SSH key for the transfer (default: ~/.ssh/id_ed25519)
 

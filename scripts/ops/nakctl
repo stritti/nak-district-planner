@@ -248,6 +248,8 @@ Umgebung:
   BACKUP_POST_HOOK            ausführbare Datei, die nach jedem vollständigen Backup mit den
                               Pfaden von Datenbank- und Rollenarchiv aufgerufen wird
                               (z. B. für rsync); nicht für andere schreibbar
+  OFFSITE_*                   Einstellungen für den Hook (z. B. OFFSITE_TARGET); werden aus
+                              .env an den Hook übergeben, gesetzte Umgebungswerte gehen vor
 
 Beispiele:
   nakctl backup create --keycloak
@@ -277,8 +279,15 @@ run_post_hook() {
   dir="$(backup_dir)"
   mapfile -t paths < <(nakops backups --dir "$dir" --db "$db" --latest-paths) || true
   ((${#paths[@]} == 2)) || { finding "kein vollständiges Backup von '$db' für den Hook gefunden"; return "$EXIT_FINDING"; }
+  # OFFSITE_* settings from .env reach the hook; values in the environment win.
+  local hook_env=() key
+  while IFS= read -r key; do
+    [[ -n "${!key+x}" ]] && continue
+    hook_env+=("$key=$(env_get "$key")")
+  done < <(grep -oE '^(export[[:space:]]+)?OFFSITE_[A-Z0-9_]+=' "$DEPLOY_DIR/.env" 2>/dev/null \
+    | sed -E 's/^export[[:space:]]+//; s/=$//' | sort -u)
   info "==> BACKUP_POST_HOOK für $db"
-  if ! "$hook" "${paths[0]}" "${paths[1]}"; then
+  if ! env "${hook_env[@]}" "$hook" "${paths[0]}" "${paths[1]}"; then
     finding "BACKUP_POST_HOOK ist fehlgeschlagen; das lokale Backup bleibt erhalten"
     return "$EXIT_FINDING"
   fi
@@ -827,7 +836,8 @@ db_stats() {
     esac
   done
   [[ "$long" =~ ^[0-9]+$ ]] || die "$EXIT_USAGE" "--long-seconds braucht eine Zahl"
-  # Literals are stripped in SQL; nakops redact masks anything that slips through.
+  # Query text is cut at the first comment, dollar quote or backslash (fail safe), then
+  # quoted strings and numbers become '?'; nakops redact masks anything that slips through.
   db_psql -P pager=off -v long="$long" <<'SQL' | nakops redact
 \echo '== Datenbank =='
 SELECT current_database() AS datenbank, pg_size_pretty(pg_database_size(current_database())) AS groesse;
@@ -843,7 +853,12 @@ SELECT coalesce(usename, '-') AS benutzer, coalesce(state, '-') AS zustand, coun
 FROM pg_stat_activity WHERE datname = current_database() GROUP BY 1, 2 ORDER BY 3 DESC;
 \echo '== Lange Abfragen =='
 SELECT pid, usename AS benutzer, date_trunc('second', now() - query_start) AS dauer, state AS zustand,
-       left(regexp_replace(regexp_replace(query, '''(?:[^'']|'''')*''', '?', 'g'), '\m\d+(\.\d+)?\M', '?', 'g'), 80) AS abfrage
+       left(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(query,
+         '\$\d+', '?', 'g'),
+         '(--|/\*|[$\\]).*', ' …'),
+         '''(?:[^'']|'''')*''', '?', 'g'),
+         '''.*', '? …'),
+         '\m\d+(\.\d+)?\M', '?', 'g'), 80) AS abfrage
 FROM pg_stat_activity
 WHERE datname = current_database() AND state <> 'idle' AND pid <> pg_backend_pid()
   AND now() - query_start > make_interval(secs => :long)

@@ -214,6 +214,27 @@ class BackupTest(NakctlCase):
         self.assertTrue(args[0].endswith(".dump") and args[1].endswith(".roles.sql"))
         self.assertTrue(any("backup create" in line for line in self.audit_lines()))
 
+    def test_hook_receives_offsite_settings_from_env_file(self) -> None:
+        marker = self.root / "hook-env"
+        self.hook(f'printf "%s|%s\\n" "$OFFSITE_TARGET" "${{OFFSITE_SSH_KEY:-}}" > {marker}\n')
+        self.env_file.write_text(
+            "OFFSITE_TARGET=backup@host:/srv/nak/\nexport OFFSITE_SSH_KEY='/keys/id'\nSECRET_KEY=x\n"
+        )
+        result = self.nakctl("backup", "create", BACKUP_POST_HOOK="hook.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(marker.read_text().strip(), "backup@host:/srv/nak/|/keys/id")
+        result = self.nakctl("backup", "create", BACKUP_POST_HOOK="hook.sh", OFFSITE_TARGET="env@host:/x/")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(marker.read_text().strip(), "env@host:/x/|/keys/id")
+
+    def test_hook_does_not_receive_other_env_file_values(self) -> None:
+        marker = self.root / "hook-secret"
+        self.hook(f'printf "%s\\n" "${{SECRET_KEY:-unset}}" > {marker}\n')
+        self.env_file.write_text("SECRET_KEY=very-secret\n")
+        result = self.nakctl("backup", "create", BACKUP_POST_HOOK="hook.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(marker.read_text().strip(), "unset")
+
     def test_failing_hook_keeps_backup_and_returns_finding(self) -> None:
         self.hook("exit 7\n")
         result = self.nakctl("backup", "create", BACKUP_POST_HOOK="hook.sh")
@@ -618,7 +639,13 @@ class DatabaseTest(NakctlCase):
 
     def test_stats_hide_literals_of_long_queries(self) -> None:
         sleeper = subprocess.Popen(
-            ["psql", PSQL_DSN, "-X", "-c", "SELECT pg_sleep(6), 'geheim@example.org' AS mail"],
+            [
+                "psql",
+                PSQL_DSN,
+                "-X",
+                "-c",
+                "SELECT pg_sleep(6), 'geheim@example.org' AS mail, $$private customer note$$ AS note",
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -631,6 +658,7 @@ class DatabaseTest(NakctlCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("pg_sleep", result.stdout)
         self.assertNotIn("geheim@example.org", result.stdout)
+        self.assertNotIn("private customer note", result.stdout)
         self.assertIn("users", result.stdout)
 
     def test_vacuum_table(self) -> None:

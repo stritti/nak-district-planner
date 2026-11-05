@@ -79,6 +79,8 @@ scripts/ops/nakctl backup restore backups/keycloak_20261105_020000.dump.gpg --ke
 
 Ist `BACKUP_POST_HOOK` in `.env` oder der Umgebung gesetzt, ruft `backup create` nach jedem vollständigen Backup diese Datei mit zwei Argumenten auf: Pfad des Datenbankarchivs und Pfad des Rollenarchivs. Die Datei wird direkt ausgeführt, nicht über eine Shell. Sie muss dem aktuellen Benutzer oder root gehören und darf nicht für Gruppe oder andere schreibbar sein. Schlägt der Hook fehl, bleibt das lokale Backup erhalten und `backup create` endet mit Exit-Code 1.
 
+Einstellungen für den Hook beginnen mit `OFFSITE_` (z. B. `OFFSITE_TARGET`, `OFFSITE_SSH_KEY`). `nakctl` übergibt sie aus `.env` an den Hook; ein in der Umgebung gesetzter Wert geht vor. Andere Werte aus `.env`, etwa Secrets, erhält der Hook nicht.
+
 Die Vorlage `scripts/ops/examples/backup-post-hook-rsync.sh` kopiert nur verschlüsselte Archive per `rsync` über SSH:
 
 ```bash
@@ -86,7 +88,7 @@ cp scripts/ops/examples/backup-post-hook-rsync.sh /opt/nak/backup-offsite.sh
 chmod 700 /opt/nak/backup-offsite.sh
 # in .env:
 #   BACKUP_POST_HOOK=/opt/nak/backup-offsite.sh
-#   OFFSITE_TARGET=backup@backup.example.org:/srv/nak/   (bzw. im Cron-Job setzen)
+#   OFFSITE_TARGET=backup@backup.example.org:/srv/nak/
 ```
 
 ## Logs
@@ -123,7 +125,7 @@ scripts/ops/nakctl db stats --long-seconds 5
 scripts/ops/nakctl db vacuum --table planning_slots
 ```
 
-`db stats` läuft als Datenbank-Owner im `db`-Container. Abfragetexte langer Abfragen werden auf 80 Zeichen gekürzt; Zeichenketten und Zahlen darin erscheinen als `?`. `db vacuum` führt `VACUUM (ANALYZE)` aus, nie `VACUUM FULL`.
+`db stats` läuft als Datenbank-Owner im `db`-Container. Abfragetexte langer Abfragen werden auf 80 Zeichen gekürzt; Zeichenketten, Zahlen und Parameter darin erscheinen als `?`. Ab dem ersten Kommentar, Dollar-Quoting (`$$…$$`) oder Backslash wird der Text abgeschnitten (`…`), damit auch diese Literalformen nicht erscheinen. `db vacuum` führt `VACUUM (ANALYZE)` aus, nie `VACUUM FULL`.
 
 ## Superadmin wiederherstellen
 

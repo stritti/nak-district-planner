@@ -36,7 +36,7 @@ Alle Valkey-Befehle laufen per `docker compose exec -T valkey sh -c 'REDISCLI_AU
 
 `backup create|verify|restore` rufen `scripts/backup.sh` bzw. `scripts/restore.sh` mit denselben Variablen auf; `--keycloak` setzt `DB_CONTAINER`, `POSTGRES_USER` und `POSTGRES_DB` für `keycloak-db`, wie in `production-compose.md` beschrieben. `backup list` zeigt je Zeitstempel Datenbankarchiv, Rollenarchiv, Größe und Alter und markiert unvollständige Paare. `status` und `backup list --max-age-hours H` liefern Exit-Code 1, wenn das jüngste vollständige Backup älter als H Stunden ist (Standard 26), damit Cron oder Monitoring alarmieren können.
 
-**Off-Site-Hook:** Ist `BACKUP_POST_HOOK` (Umgebung oder `.env`) gesetzt, führt `backup create` nach einem vollständigen Backup diese ausführbare Datei mit den Pfaden von Datenbank- und Rollenarchiv als Argumenten aus. Der Hook muss eine Datei im Deploy-Verzeichnis oder ein absoluter Pfad sein und darf nicht für andere schreibbar sein; er wird direkt ausgeführt, nicht über `sh -c`. Schlägt er fehl, bleibt das lokale Backup erhalten und `backup create` endet mit Exit-Code 1. `scripts/ops/examples/backup-post-hook-rsync.sh` zeigt eine Vorlage.
+**Off-Site-Hook:** Ist `BACKUP_POST_HOOK` (Umgebung oder `.env`) gesetzt, führt `backup create` nach einem vollständigen Backup diese ausführbare Datei mit den Pfaden von Datenbank- und Rollenarchiv als Argumenten aus. Der Hook muss eine Datei im Deploy-Verzeichnis oder ein absoluter Pfad sein und darf nicht für andere schreibbar sein; er wird direkt ausgeführt, nicht über `sh -c`. Werte mit dem Präfix `OFFSITE_` aus `.env` werden an den Hook übergeben (Umgebung geht vor); andere `.env`-Werte, insbesondere Secrets, nicht. Schlägt er fehl, bleibt das lokale Backup erhalten und `backup create` endet mit Exit-Code 1. `scripts/ops/examples/backup-post-hook-rsync.sh` zeigt eine Vorlage.
 
 ### 4. Log-Analyse
 
@@ -71,7 +71,7 @@ Alle Valkey-Befehle laufen per `docker compose exec -T valkey sh -c 'REDISCLI_AU
 
 ### 8. Datenbank und Superadmin
 
-`db stats` liest `pg_stat_user_tables`, `pg_stat_activity` und `pg_locks` als Owner im `db`-Container; Abfragetexte werden auf 80 Zeichen gekürzt und Literale durch `?` ersetzt, damit keine Personendaten erscheinen. `db vacuum [--table T]` führt `VACUUM (ANALYZE)` nach Bestätigung aus, nie `VACUUM FULL`.
+`db stats` liest `pg_stat_user_tables`, `pg_stat_activity` und `pg_locks` als Owner im `db`-Container; Abfragetexte werden auf 80 Zeichen gekürzt und Literale durch `?` ersetzt, damit keine Personendaten erscheinen; ab dem ersten Kommentar, Dollar-Quote oder Backslash wird der Text abgeschnitten, weil diese Formen sich per Regex nicht sicher ersetzen lassen. `db vacuum [--table T]` führt `VACUUM (ANALYZE)` nach Bestätigung aus, nie `VACUUM FULL`.
 
 `superadmin list` zeigt `sub`, E-Mail und `is_superadmin` aller Superadmins sowie den konfigurierten Bootstrap-Subject. `superadmin set-sub <sub>` prüft, dass ein Benutzer mit dieser `sub` existiert, zeigt die Änderung und setzt nach Bestätigung `app_superadmin_config.superadmin_sub` und `bootstrap_completed_at = NULL` wie in Runbook Abschnitt 2.3. Werte werden als psql-Variablen übergeben, nicht in SQL eingesetzt.
 

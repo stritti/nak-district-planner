@@ -93,7 +93,7 @@ Das Werkzeug SHALL Passwörter und Tokens weder ausgeben noch als Kommandozeilen
 - **THEN** die Abweichung wird gemeldet und der Exit-Code ist 1
 
 ### Requirement: Backup an Off-Site-Ziel übergeben
-Ist `BACKUP_POST_HOOK` gesetzt, SHALL `backup create` nach einem vollständigen Backup diese Datei direkt, ohne Shell, mit den Archivpfaden aufrufen. Eine für andere schreibbare Hook-Datei SHALL abgelehnt werden. Schlägt der Hook fehl, SHALL das lokale Backup erhalten bleiben und der Exit-Code 1 sein.
+Ist `BACKUP_POST_HOOK` gesetzt, SHALL `backup create` nach einem vollständigen Backup diese Datei direkt, ohne Shell, mit den Archivpfaden aufrufen. Eine für andere schreibbare Hook-Datei SHALL abgelehnt werden. `OFFSITE_*`-Werte aus `.env` SHALL der Hook erhalten, andere `.env`-Werte nicht. Schlägt der Hook fehl, SHALL das lokale Backup erhalten bleiben und der Exit-Code 1 sein.
 
 #### Scenario: Hook schlägt fehl
 - **GIVEN** `BACKUP_POST_HOOK` zeigt auf ein Skript, das mit Fehler endet
@@ -139,6 +139,11 @@ Ist `BACKUP_POST_HOOK` gesetzt, SHALL `backup create` nach einem vollständigen 
 - **GIVEN** eine laufende Abfrage enthält eine E-Mail-Adresse als Literal
 - **WHEN** der Betreiber `db stats` ausführt
 - **THEN** die Abfrage erscheint ohne die E-Mail-Adresse
+
+#### Scenario: Lange Abfrage mit Dollar-Quoting
+- **GIVEN** eine laufende Abfrage enthält `$$private Notiz$$`
+- **WHEN** der Betreiber `db stats` ausführt
+- **THEN** der Abfragetext ist vor dem Dollar-Quote abgeschnitten und die Notiz erscheint nicht
 
 ### Requirement: Superadmin nach Subject-Wechsel wiederherstellen
 `superadmin set-sub <sub>` SHALL nur einen vorhandenen Benutzer-Subject akzeptieren, die Änderung vor der Bestätigung zeigen und dann `app_superadmin_config.superadmin_sub` setzen sowie `bootstrap_completed_at` zurücksetzen. Der Wert SHALL als psql-Variable übergeben werden.
