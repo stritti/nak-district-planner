@@ -491,6 +491,8 @@ def check_env_file(path: Path, example: Path | None, *, runtime: bool) -> list[s
     return findings
 
 
+_REQUIRED_IN_PRODUCTION = frozenset({".env.db"})
+
 ENV_FILES = (
     (".env", ".env.example", True),
     (".env.db", ".env.db.example", False),
@@ -506,9 +508,14 @@ def cmd_env_check(args: argparse.Namespace) -> int:
         return EXIT_FINDING
     findings: list[str] = []
     checked: list[str] = []
+    production = parse_env(directory / ".env").get("APP_ENV") == "production"
     for name, example_name, runtime in ENV_FILES:
         path = directory / name
         if not path.is_file():
+            # db and migrate need .env.db in production (docker-compose.prod.yml); the
+            # Keycloak files stay optional because an external identity provider works too.
+            if production and name in _REQUIRED_IN_PRODUCTION:
+                findings.append(f"{name} fehlt (Pflicht in Produktion)")
             continue
         checked.append(name)
         findings.extend(check_env_file(path, directory / example_name, runtime=runtime))

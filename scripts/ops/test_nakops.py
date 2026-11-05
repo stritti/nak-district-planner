@@ -296,6 +296,21 @@ class EnvCheckTest(unittest.TestCase):
         _, out = run(["env-check", "--dir", str(self.dir)])
         self.assertNotIn("KC_BOOTSTRAP_ADMIN_PASSWORD", out)
 
+    def test_missing_env_db_is_a_finding_in_production(self) -> None:
+        self.write_env("APP_ENV=production\nBACKUP_ENCRYPT_KEY=ops@example.org\n")
+        code, out = run(["env-check", "--dir", str(self.dir)])
+        self.assertEqual(code, 1)
+        self.assertIn(".env.db fehlt", out)
+        self.assertNotIn(".env.keycloak fehlt", out)
+        self.write_env("POSTGRES_PASSWORD=" + "c" * 40 + "\n", name=".env.db")
+        code, out = run(["env-check", "--dir", str(self.dir)])
+        self.assertNotIn(".env.db fehlt", out)
+
+    def test_missing_env_db_is_fine_outside_production(self) -> None:
+        self.write_env("APP_ENV=development\n")
+        _, out = run(["env-check", "--dir", str(self.dir)])
+        self.assertNotIn(".env.db fehlt", out)
+
     def test_missing_env_is_a_finding(self) -> None:
         code, _ = run(["env-check", "--dir", str(self.dir)])
         self.assertEqual(code, 1)
