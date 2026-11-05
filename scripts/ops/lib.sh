@@ -182,9 +182,9 @@ image_registry() {
   printf '%s' "${IMAGE_REGISTRY:-${registry:-ghcr.io/stritti/nak-district-planner}}"
 }
 
-# Same default as scripts/backup.sh (which reads BACKUP_DIR only from the environment).
+# Backups of the deploy directory; passed to scripts/backup.sh explicitly.
 backup_dir() {
-  printf '%s' "${BACKUP_DIR:-$REPO_ROOT/backups}"
+  printf '%s' "${BACKUP_DIR:-$DEPLOY_DIR/backups}"
 }
 
 app_db_name() {

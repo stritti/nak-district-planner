@@ -47,6 +47,10 @@ class RedactTest(unittest.TestCase):
             self.assertNotIn(secret, redacted)
         self.assertIn("[EMAIL]", redacted)
 
+    def test_password_only_url_credentials(self) -> None:
+        redacted = nakops.redact("VALKEY_URL redis://:production-password@valkey:6379/0")
+        self.assertNotIn("production-password", redacted)
+
     def test_url_credentials_and_oauth_parameters(self) -> None:
         text = "redis://user:pw@valkey:6379/0 /callback?code=xyz&state=abc&x=1"
         redacted = nakops.redact(text)
@@ -248,6 +252,13 @@ class EnvCheckTest(unittest.TestCase):
         self.assertIn("POSTGRES_PASSWORD gehört in .env.db", out)
         self.assertIn("BACKUP_ENCRYPT_KEY fehlt", out)
         self.assertNotIn("owner\n", out)
+
+    def test_missing_required_secret_is_reported(self) -> None:
+        self.write_env("SMTP_PASSWORD=\nAPP_DB_PASSWORD=strong\n")
+        code, out = run(["env-check", "--dir", str(self.dir)])
+        self.assertEqual(code, 1)
+        self.assertIn("SECRET_KEY fehlt", out)
+        self.assertNotIn("SMTP_PASSWORD", out)
 
     def test_other_env_files_are_checked(self) -> None:
         self.write_env("SECRET_KEY=" + "a" * 40 + "\n")

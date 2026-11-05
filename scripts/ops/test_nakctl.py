@@ -47,7 +47,12 @@ fi
 if [[ "$1" == compose ]]; then
   shift
   case "$1" in
+    config) [[ "$2" == --services ]] && printf '%b' "${STUB_SERVICES:-}"; exit 0 ;;
     ps)
+      if [[ " $* " == *" --services "* ]]; then
+        for s in ${STUB_RUNNING:-}; do echo "$s"; done
+        exit 0
+      fi
       # ps --status running -q <service> | ps -q <service> | ps --format ...
       service="${*: -1}"
       if [[ " $* " == *" --status running "* ]]; then
@@ -225,10 +230,52 @@ class BackupTest(NakctlCase):
         self.assertFalse(marker.exists())
         self.assertIn("schreibbar", result.stdout)
 
+    def test_uses_database_and_key_of_the_deploy_directory(self) -> None:
+        self.env_file.write_text("POSTGRES_DB=external_prod\nPOSTGRES_USER=ext\n")
+        result = self.nakctl("backup", "create")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        names = sorted(p.name for p in self.backups.iterdir())
+        self.assertTrue(all(n.startswith("external_prod_") for n in names), names)
+        self.assertIn("exec cid-db pg_dump -U ext -d external_prod -Fc", self.docker_calls())
+
     def test_dry_run_creates_nothing(self) -> None:
         result = self.nakctl("backup", "create", "--dry-run")
         self.assertEqual(result.returncode, 0)
         self.assertFalse(self.backups.exists())
+
+
+class StatusTest(NakctlCase):
+    def test_stopped_service_is_a_finding(self) -> None:
+        self.write_fresh_backup()
+        result = self.nakctl(
+            "status",
+            NAKCTL_PSQL=str(self.bin / "fakepsql"),
+            STUB_DB_REVS="r1\n",
+            STUB_HEADS="r1 (head)\n",
+            STUB_SERVICES="backend\nworker\nbeat\ndb\nmigrate\n",
+            STUB_RUNNING="backend db",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Dienste laufen nicht: worker beat", result.stdout)
+        self.assertNotIn("migrate", result.stdout.split("Dienste laufen nicht:")[1].splitlines()[0])
+
+    def test_all_services_running(self) -> None:
+        self.write_fresh_backup()
+        result = self.nakctl(
+            "status",
+            NAKCTL_PSQL=str(self.bin / "fakepsql"),
+            STUB_DB_REVS="r1\n",
+            STUB_HEADS="r1 (head)\n",
+            STUB_SERVICES="backend\nworker\nmigrate\n",
+            STUB_RUNNING="backend worker",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def write_fresh_backup(self) -> None:
+        self.backups.mkdir(exist_ok=True)
+        ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        for suffix in (".dump.gpg", ".roles.sql.gpg"):
+            (self.backups / f"nak_planner_{ts}{suffix}").write_text("x")
 
 
 class DeployTest(NakctlCase):
@@ -473,6 +520,20 @@ class QueueTest(NakctlCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.cli("HLEN", "unacked"), "0")
         self.assertEqual(self.cli("GET", "LIMITER/203.0.113.9/oidc"), "3")
+
+    def test_include_unacked_shows_mail_tasks_of_unacked(self) -> None:
+        self.cli("DEL", "celery")
+        mail = json.dumps([{"headers": {"task": "dispatch_event_mail_hooks"}}, "", "celery"])
+        self.cli("HSET", "unacked", "tag2", mail)
+        result = self.nakctl("queue", "purge", "--include-unacked", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("dispatch_event_mail_hooks", result.stdout)
+        self.assertIn("lösen Mails aus", result.stdout)
+        self.assertEqual(self.cli("HLEN", "unacked"), "2")
+
+    def test_scan_failure_is_an_environment_error(self) -> None:
+        result = self.nakctl("queue", "purge-results", "--yes", NAKCTL_VALKEY_CLI="false")
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
 
     def test_purge_results_only_touches_results(self) -> None:
         result = self.nakctl("queue", "purge-results", "--yes")

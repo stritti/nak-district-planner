@@ -36,7 +36,7 @@ scripts/ops/nakctl help backup      # dasselbe
 ## Zustand und Prüfungen
 
 ```bash
-scripts/ops/nakctl status          # Container, /health, Alembic-Stand, Backup-Alter, Platz
+scripts/ops/nakctl status          # Dienste laufen, /health, Alembic-Stand, Backup-Alter, Platz
 scripts/ops/nakctl check certs     # TLS-Zertifikate von APP_HOST und AUTH_HOST (Befund unter 21 Tagen)
 scripts/ops/nakctl check disk      # freier Platz (Befund unter 15 %)
 scripts/ops/nakctl check secrets   # .env-Dateien: Rechte 0600, Beispiel- und Standardwerte
@@ -73,7 +73,7 @@ scripts/ops/nakctl backup restore backups/nak_planner_20261105_020000.dump.gpg
 scripts/ops/nakctl backup restore backups/keycloak_20261105_020000.dump.gpg --keycloak
 ```
 
-`backup create` ruft `scripts/backup.sh` auf; ein vollständiges Backup besteht aus Datenbank- und Rollenarchiv (siehe [Runbook, Abschnitt 5](/operations/production-runbook#_5-backup-und-restore)). `backup list` markiert unvollständige Paare und unverschlüsselte Archive. Die Zeitstempel im Dateinamen sind UTC.
+`backup create` ruft `scripts/backup.sh` mit Datenbank, Container, `BACKUP_ENCRYPT_KEY` und `BACKUP_DIR` (Standard: `backups/` im Deploy-Verzeichnis) aus dem Deploy-Verzeichnis auf; ein vollständiges Backup besteht aus Datenbank- und Rollenarchiv (siehe [Runbook, Abschnitt 5](/operations/production-runbook#_5-backup-und-restore)). `backup list` markiert unvollständige Paare und unverschlüsselte Archive. Die Zeitstempel im Dateinamen sind UTC.
 
 ### Off-Site-Kopie mit `BACKUP_POST_HOOK`
 

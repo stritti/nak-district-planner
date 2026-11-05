@@ -92,8 +92,18 @@ Beispiele:
 EOF
 }
 
+# scan_keys <pattern> — all matching keys; fails (exit 3) when Valkey cannot be scanned.
+scan_keys() {
+  local out
+  out="$(valkey_cli --scan --pattern "$1")" || die "$EXIT_ENV" "Valkey-Scan fehlgeschlagen (Valkey nicht erreichbar?)"
+  [[ -n "$out" ]] && printf '%s\n' "$out"
+  return 0
+}
+
 count_keys() {
-  valkey_cli --scan --pattern "$1" | grep -c . || true
+  local keys
+  keys="$(scan_keys "$1")" || exit "$EXIT_ENV"
+  if [[ -z "$keys" ]]; then echo 0; else grep -c . <<<"$keys"; fi
 }
 
 queue_status() {
@@ -151,7 +161,11 @@ queue_purge() {
   unacked=0
   ((include_unacked)) && unacked="$(valkey_cli HLEN "$CELERY_UNACKED_KEY")"
   info "Betroffen: $length Nachricht(en) in '$CELERY_QUEUE_KEY'$( ((include_unacked)) && printf ', %s unbestätigt' "$unacked")"
-  queue_messages 100000 | nakops queue-histogram || true
+  {
+    queue_messages 100000
+    ((include_unacked)) && valkey_cli HVALS "$CELERY_UNACKED_KEY"
+    true
+  } | nakops queue-histogram || true
   if ((length == 0 && unacked == 0)); then
     info "Nichts zu leeren."
     return 0
@@ -171,10 +185,11 @@ queue_purge() {
 
 queue_purge_results() {
   (($# == 0)) || die "$EXIT_USAGE" "queue purge-results kennt keine Optionen außer --dry-run/--yes"
-  local keys=() key total
+  local keys=() key total scanned
+  scanned="$(scan_keys "$CELERY_RESULT_PATTERN")" || exit "$EXIT_ENV"
   while IFS= read -r key; do
     [[ -n "$key" ]] && keys+=("$key")
-  done < <(valkey_cli --scan --pattern "$CELERY_RESULT_PATTERN")
+  done <<<"$scanned"
   total="${#keys[@]}"
   info "Betroffen: $total Ergebnis-Schlüssel ($CELERY_RESULT_PATTERN)"
   ((total > 0)) || return 0
@@ -228,7 +243,7 @@ Optionen:
   -y, --yes                   Rückfrage von restore beantworten
 
 Umgebung:
-  BACKUP_DIR                  Zielverzeichnis (Standard: backups/ im Repository)
+  BACKUP_DIR                  Zielverzeichnis (Standard: backups/ im Deploy-Verzeichnis)
   BACKUP_ENCRYPT_KEY          GPG-Empfänger (Pflicht in Produktion, auch aus .env)
   BACKUP_POST_HOOK            ausführbare Datei, die nach jedem vollständigen Backup mit den
                               Pfaden von Datenbank- und Rollenarchiv aufgerufen wird
@@ -282,14 +297,16 @@ backup_create() {
     info "--dry-run: würde scripts/backup.sh ausführen$( ((keycloak)) && printf ' und die Keycloak-Datenbank sichern')."
     return 0
   fi
-  local rc=0
-  "$REPO_ROOT/scripts/backup.sh" || die "$EXIT_ENV" "scripts/backup.sh ist fehlgeschlagen"
+  local rc=0 envs=()
+  mapfile -t envs < <(db_script_env app)
+  ((${#envs[@]} == 5)) || exit "$EXIT_ENV"
+  env "${envs[@]}" "$REPO_ROOT/scripts/backup.sh" || die "$EXIT_ENV" "scripts/backup.sh ist fehlgeschlagen"
   audit_log "backup create db=$(app_db_name)"
   run_post_hook "$(app_db_name)" || rc=$?
   if ((keycloak)); then
-    local envs=() kc_db
-    mapfile -t envs < <(keycloak_db_env)
-    ((${#envs[@]} == 3)) || exit "$EXIT_ENV"
+    local kc_db
+    mapfile -t envs < <(db_script_env keycloak)
+    ((${#envs[@]} == 5)) || exit "$EXIT_ENV"
     kc_db="${envs[2]#POSTGRES_DB=}"
     env "${envs[@]}" "$REPO_ROOT/scripts/backup.sh" || die "$EXIT_ENV" "Keycloak-Backup ist fehlgeschlagen"
     audit_log "backup create db=$kc_db"
@@ -311,14 +328,26 @@ backup_list() {
   nakops "${args[@]}"
 }
 
-# keycloak_db_env — print DB_CONTAINER/POSTGRES_USER/POSTGRES_DB for keycloak-db.
-keycloak_db_env() {
-  local container kc_user kc_db
-  container="$(compose ps -q keycloak-db 2>/dev/null || true)"
-  [[ -n "$container" ]] || die "$EXIT_ENV" "Container keycloak-db läuft nicht"
-  kc_user="$(env_get POSTGRES_USER "$DEPLOY_DIR/.env.keycloak-db")"
-  kc_db="$(env_get POSTGRES_DB "$DEPLOY_DIR/.env.keycloak-db")"
-  printf 'DB_CONTAINER=%s\nPOSTGRES_USER=%s\nPOSTGRES_DB=%s\n' "$container" "${kc_user:-keycloak}" "${kc_db:-keycloak}"
+# db_script_env app|keycloak — the environment for scripts/backup.sh and restore.sh,
+# taken from the deploy directory (those scripts would otherwise read the .env and
+# container of their own checkout). One NAME=value per line, in a fixed order.
+db_script_env() {
+  local service user db file
+  if [[ "$1" == keycloak ]]; then
+    service=keycloak-db file="$DEPLOY_DIR/.env.keycloak-db"
+    user="$(env_get POSTGRES_USER "$file")" db="$(env_get POSTGRES_DB "$file")"
+    user="${user:-keycloak}" db="${db:-keycloak}"
+  else
+    service=db
+    user="$(env_get POSTGRES_USER)"
+    user="${POSTGRES_USER:-${user:-nak}}" db="$(app_db_name)"
+  fi
+  local container key
+  container="$(compose ps -q "$service" 2>/dev/null || true)"
+  [[ -n "$container" ]] || die "$EXIT_ENV" "Container $service läuft nicht"
+  key="${BACKUP_ENCRYPT_KEY:-$(env_get BACKUP_ENCRYPT_KEY)}"
+  printf 'DB_CONTAINER=%s\nPOSTGRES_USER=%s\nPOSTGRES_DB=%s\nBACKUP_ENCRYPT_KEY=%s\nBACKUP_DIR=%s\n' \
+    "$container" "$user" "$db" "$key" "$(backup_dir)"
 }
 
 backup_restore_cmd() {
@@ -334,10 +363,8 @@ backup_restore_cmd() {
   [[ -n "$file" ]] || die "$EXIT_USAGE" "backup $mode braucht eine Backup-Datei"
   [[ -f "$file" ]] || die "$EXIT_USAGE" "Datei $file nicht gefunden"
   local envs=()
-  if ((keycloak)); then
-    mapfile -t envs < <(keycloak_db_env)
-    ((${#envs[@]} == 3)) || exit "$EXIT_ENV"
-  fi
+  mapfile -t envs < <(db_script_env "$( ((keycloak)) && echo keycloak || echo app)")
+  ((${#envs[@]} == 5)) || exit "$EXIT_ENV"
   if [[ "$mode" == verify ]] || ((DRY_RUN)); then
     env "${envs[@]}" "$REPO_ROOT/scripts/restore.sh" "$file" --dry-run
     return
@@ -550,7 +577,7 @@ status_usage() {
   cat <<'EOF'
 Aufruf: nakctl status
 
-Zeigt ohne Änderungen: Container-Zustand, Antwort von /health, Alembic-Stand der
+Zeigt ohne Änderungen: Container-Zustand (jeder Dienst außer migrate muss laufen), Antwort von /health, Alembic-Stand der
 Datenbank gegenüber dem Image-Head, Alter des letzten vollständigen Backups
 (Befund ab 26 Stunden) und freien Plattenplatz.
 
@@ -568,9 +595,22 @@ status_cmd() {
   local rc=0 unhealthy
   heading "Container"
   compose ps --format 'table {{.Service}}\t{{.Status}}' || die "$EXIT_ENV" "docker compose ps fehlgeschlagen"
-  unhealthy="$(compose ps --format '{{.Service}} {{.Status}}' | grep -E 'unhealthy|Restarting|Exited \([1-9]' || true)"
+  unhealthy="$(compose ps --format '{{.Service}} {{.Status}}' | grep -E 'unhealthy|Restarting' || true)"
   if [[ -n "$unhealthy" ]]; then
     finding "Dienste nicht gesund: $(tr '\n' ' ' <<<"$unhealthy")"
+    rc=1
+  fi
+  # Every long-running service of the active Compose file must run; the one-shot
+  # migrate service is expected to have exited.
+  local expected running missing=() svc
+  expected="$(compose config --services 2>/dev/null || true)"
+  running=" $(compose ps --status running --services 2>/dev/null | tr '\n' ' ') "
+  for svc in $expected; do
+    [[ "$svc" == migrate ]] && continue
+    [[ "$running" == *" $svc "* ]] || missing+=("$svc")
+  done
+  if ((${#missing[@]})); then
+    finding "Dienste laufen nicht: ${missing[*]}"
     rc=1
   fi
 

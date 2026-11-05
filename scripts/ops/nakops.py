@@ -45,7 +45,7 @@ _REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(/export/)[^/?#\s\"']+"), rf"\1{REDACTED}"),
     (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+"), rf"\1 {REDACTED}"),
     # Credentials embedded in URLs: scheme://user:password@host
-    (re.compile(r"(://)[^/\s:@]+:[^/\s@]+@"), rf"\1{REDACTED}@"),
+    (re.compile(r"(://)[^/\s:@]*:[^/\s@]+@"), rf"\1{REDACTED}@"),
     # key=value / key: value / "key": "value" for secret-looking keys
     (
         re.compile(
@@ -456,6 +456,11 @@ def check_env_file(path: Path, example: Path | None, *, runtime: bool) -> list[s
             findings.append(f"{path.name}: {key} hat einen Standardwert")
         elif not value and example_value:
             findings.append(f"{path.name}: {key} ist leer")
+    # Secrets the example sets (e.g. SECRET_KEY, VALKEY_PASSWORD) must exist;
+    # those with an empty example value (e.g. SMTP_PASSWORD) are optional.
+    for key, example_value in sorted(examples.items()):
+        if _SECRET_KEY_NAME.search(key) and example_value and key not in values:
+            findings.append(f"{path.name}: {key} fehlt")
     if runtime:
         for key in _OWNER_ONLY:
             if values.get(key):
