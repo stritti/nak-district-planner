@@ -1,8 +1,8 @@
 # Admin-Skripte (`nakctl`)
 
-`scripts/ops/nakctl` bündelt die wiederkehrenden Handgriffe im Produktivbetrieb: Zustand prüfen, Celery-Warteschlange leeren, Backups, Log-Auswertung, Versionswechsel, Datenbankwartung und die Wiederherstellung des Superadmins. Das Werkzeug läuft auf dem Docker-Host im Release-Checkout, in dem auch `.env` liegt (siehe [Produktiv-Stack](/operations/production-compose)).
+`scripts/ops/nakctl` bündelt die wiederkehrenden Handgriffe im Produktivbetrieb: Erstinstallation vorbereiten, Installation diagnostizieren, Zustand prüfen, Celery-Warteschlange leeren, Backups, Log-Auswertung, Versionswechsel, Datenbankwartung und die Wiederherstellung des Superadmins. Das Werkzeug läuft auf dem Docker-Host im Release-Checkout, in dem auch `.env` liegt (siehe [Produktiv-Stack](/operations/production-compose)).
 
-Voraussetzungen auf dem Host sind nur Docker Compose, Bash, Python 3.11 oder neuer und für `check certs` `openssl`. PostgreSQL- und Valkey-Clients laufen in den Containern.
+Voraussetzungen auf dem Host sind nur Docker Compose, Bash, Python 3.11 oder neuer, für `check certs` `openssl` und für verschlüsselte Backups `gpg`. PostgreSQL- und Valkey-Clients laufen in den Containern.
 
 ```bash
 cd /opt/nak-district-planner        # Release-Checkout mit .env
@@ -32,6 +32,37 @@ scripts/ops/nakctl help backup      # dasselbe
 | 2 | Bedienfehler, z. B. unbekannte Option, unbekannte Version, unbekannte `sub` |
 | 3 | Umgebung nicht nutzbar, z. B. Docker fehlt, Container läuft nicht, Valkey nicht erreichbar |
 | 4 | abgebrochen, keine Bestätigung |
+
+## Erstinstallation (`setup init`)
+
+```bash
+scripts/ops/nakctl setup init --app-host planer.example.org --auth-host auth.example.org \
+  --version 1.7.0 --backup-key backup@example.org
+scripts/ops/nakctl setup init --dry-run      # zeigt nur, welche Dateien und Schlüssel entstehen
+```
+
+`setup init` legt fehlende `.env`, `.env.db`, `.env.keycloak` und `.env.keycloak-db` aus den `*.example`-Vorlagen mit Rechten 0600 an. Es erzeugt zufällige, URL-sichere Werte für `SECRET_KEY`, `APP_DB_PASSWORD`, `VALKEY_PASSWORD`, beide `POSTGRES_PASSWORD`, `KC_BOOTSTRAP_ADMIN_PASSWORD` und `KC_DB_PASSWORD` (gleich dem `POSTGRES_PASSWORD` in `.env.keycloak-db`) und passt `DATABASE_URL` und `VALKEY_URL` an. Dazu setzt es `APP_ENV=production`, `COMPOSE_FILE=docker-compose.prod.yml` und die angegebenen Werte. Die Ausgabe nennt nur Schlüsselnamen, nie Werte.
+
+Eine vorhandene Datei bleibt unverändert, `setup init` lässt sich also gefahrlos wiederholen. Gibt es schon eine der beiden Keycloak-Dateien, übernimmt die neue deren Datenbankpasswort. SMTP, `SUPERADMIN_SUB`, Keycloak-Realm und OIDC-Werte bleiben Handarbeit; `setup init` listet diese Schritte am Ende auf.
+
+## Diagnose (`doctor`)
+
+```bash
+scripts/ops/nakctl doctor                 # alles, inklusive check all
+scripts/ops/nakctl doctor --skip-checks   # vor dem ersten Start: nur Werkzeuge, Konfiguration, Netz
+scripts/ops/nakctl doctor --offline       # ohne DNS- und Zertifikatsprüfung
+```
+
+`doctor` ändert nichts. Zu jedem eigenen Befund schreibt es darunter einen Hinweis zur Behebung (`→ …`). Geprüft werden:
+
+| Bereich | Prüfung |
+| --- | --- |
+| Werkzeuge | bash, Docker-Daemon erreichbar, `docker compose` ab 2.20, Python ab 3.11, `openssl`, `gpg` mit dem Schlüssel aus `BACKUP_ENCRYPT_KEY` |
+| Konfiguration | `.env` vorhanden, `COMPOSE_FILE` gesetzt und `docker compose config` fehlerfrei, `APP_ENV=production`, `APP_VERSION` ist ein Release-Tag |
+| Netz | `APP_HOST` und `AUTH_HOST` lösen auf; Ports 80/443 sind nicht fremd belegt, wenn der Stack Traefik mitbringt und Traefik nicht läuft |
+| Betrieb | `check all` (Container, `/health`, Migrationen, Backup-Alter, Platz, Zertifikate, Secrets) |
+
+Ist Docker nicht nutzbar, endet `doctor` nach Werkzeugen und Konfiguration mit Exit-Code 3.
 
 ## Zustand und Prüfungen
 

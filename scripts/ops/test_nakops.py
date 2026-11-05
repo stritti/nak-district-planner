@@ -316,6 +316,18 @@ class EnvCheckTest(unittest.TestCase):
         self.assertEqual(code, 1)
 
 
+class SetEnvValueTest(unittest.TestCase):
+    def test_replaces_active_line_and_drops_duplicates(self) -> None:
+        lines = ["A=1", "# B=old", "A=2", "C=3"]
+        self.assertEqual(nakops.set_env_value(lines, "A", "x"), ["A=x", "# B=old", "C=3"])
+
+    def test_uncomments_example_line_in_place(self) -> None:
+        self.assertEqual(nakops.set_env_value(["# B=old", "C=3"], "B", "y"), ["B=y", "C=3"])
+
+    def test_appends_unknown_key(self) -> None:
+        self.assertEqual(nakops.set_env_value(["C=3"], "D", "z"), ["C=3", "D=z"])
+
+
 class ParserTest(unittest.TestCase):
     def test_usage_errors_do_not_echo_values(self) -> None:
         err = io.StringIO()

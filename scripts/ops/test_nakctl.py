@@ -29,8 +29,9 @@ NAKCTL = OPS_DIR / "nakctl"
 DOCKER_STUB = r"""#!/usr/bin/env bash
 # Minimal docker stand-in: logs every call, answers from STUB_* variables.
 printf '%s\n' "$*" >>"$STUB_LOG"
+[[ "$1" == info && -n "${STUB_DOCKER_DOWN:-}" ]] && exit 1
 case "$1 $2" in
-  "compose version") exit 0 ;;
+  "compose version") [[ "$3" == --short ]] && echo "${STUB_COMPOSE_VERSION:-2.29.1}"; exit 0 ;;
   "info --format") echo "${STUB_DOCKER_ROOT:-/}"; exit 0 ;;
   "manifest inspect") [[ " ${STUB_MANIFESTS:-} " == *" ${3##*:} "* ]]; exit ;;
   "image ls") printf '%b' "${STUB_IMAGES:-}"; exit 0 ;;
@@ -739,6 +740,165 @@ class DatabaseTest(NakctlCase):
         result = self.nakctl("db", "vacuum", "--table", "users", "--yes")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.nakctl("db", "vacuum", "--table", "users;drop").returncode, 2)
+
+
+REPO = Path(__file__).resolve().parents[2]
+TEMPLATES = (".env.example", ".env.db.example", ".env.keycloak.example", ".env.keycloak-db.example")
+
+
+class DoctorTest(NakctlCase):
+    def setUp(self) -> None:
+        super().setUp()
+        for name, body in (
+            ("gpg", 'exit "${STUB_GPG_RC:-0}"\n'),
+            ("ss", 'printf "%b" "${STUB_SS:-}"\n'),
+        ):
+            path = self.bin / name
+            path.write_text("#!/usr/bin/env bash\n" + body)
+            path.chmod(0o755)
+        (self.deploy / "docker-compose.prod.yml").write_text("services: {}\n")
+        self.env_file.write_text(
+            "COMPOSE_FILE=docker-compose.prod.yml\nAPP_ENV=production\nAPP_VERSION=1.7.0\n"
+            "APP_HOST=localhost\nAUTH_HOST=localhost\nBACKUP_ENCRYPT_KEY=backup@example.org\n"
+        )
+
+    def test_healthy_installation_has_no_findings(self) -> None:
+        result = self.nakctl("doctor", "--skip-checks")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("keine Befunde", result.stdout)
+        self.assertIn("löst auf", result.stdout)
+
+    def test_unreachable_docker_is_an_environment_error_with_hint(self) -> None:
+        result = self.nakctl("doctor", STUB_DOCKER_DOWN="1")
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertIn("Docker-Daemon nicht erreichbar", result.stdout)
+        self.assertIn("→", result.stdout)
+        self.assertNotIn("== Netz ==", result.stdout)
+
+    def test_config_findings_come_with_hints(self) -> None:
+        self.env_file.write_text("APP_ENV=development\n")
+        result = self.nakctl("doctor", "--skip-checks", "--offline", STUB_GPG_RC="2")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        for text in (
+            "COMPOSE_FILE ist nicht gesetzt",
+            "APP_ENV ist nicht production",
+            "APP_VERSION fehlt",
+            "APP_HOST ist nicht gesetzt",
+            "BACKUP_ENCRYPT_KEY ist nicht gesetzt",
+        ):
+            self.assertIn(text, result.stdout)
+        self.assertIn("→ in .env: APP_ENV=production", result.stdout)
+
+    def test_missing_gpg_key_and_old_compose_are_findings(self) -> None:
+        result = self.nakctl(
+            "doctor", "--skip-checks", "--offline", STUB_GPG_RC="2", STUB_COMPOSE_VERSION="2.12.0"
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("GPG-Schlüssel für BACKUP_ENCRYPT_KEY fehlt", result.stdout)
+        self.assertIn("docker compose 2.12.0 ist zu alt", result.stdout)
+
+    def test_port_taken_while_traefik_is_down(self) -> None:
+        result = self.nakctl(
+            "doctor",
+            "--skip-checks",
+            "--offline",
+            STUB_SERVICES="traefik\\nbackend\\n",
+            STUB_SS="LISTEN 0 511 0.0.0.0:80 0.0.0.0:*\\n",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Port 80 ist belegt", result.stdout)
+
+    def test_doctor_runs_check_all_by_default(self) -> None:
+        result = self.nakctl("doctor", "--offline")
+        self.assertIn("== Betrieb (check all) ==", result.stdout)
+        self.assertIn("== Health ==", result.stdout)
+
+
+class SetupTest(NakctlCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.env_file.unlink()
+        for name in TEMPLATES:
+            shutil.copy(REPO / name, self.deploy / name)
+
+    def values(self, name: str) -> dict[str, str]:
+        out = {}
+        for line in (self.deploy / name).read_text().splitlines():
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                out[key] = value
+        return out
+
+    def test_init_creates_private_files_with_fresh_secrets(self) -> None:
+        result = self.nakctl(
+            "setup",
+            "init",
+            "--app-host",
+            "planer.example.org",
+            "--auth-host",
+            "auth.example.org",
+            "--version",
+            "v1.7.0",
+            "--backup-key",
+            "backup@example.org",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for name in (".env", ".env.db", ".env.keycloak", ".env.keycloak-db"):
+            self.assertEqual(stat.S_IMODE((self.deploy / name).stat().st_mode), 0o600, name)
+        env = self.values(".env")
+        self.assertEqual(env["APP_ENV"], "production")
+        self.assertEqual(env["COMPOSE_FILE"], "docker-compose.prod.yml")
+        self.assertEqual(env["APP_VERSION"], "1.7.0")
+        self.assertEqual(env["APP_HOST"], "planer.example.org")
+        self.assertEqual(len(env["SECRET_KEY"]), 64)
+        self.assertNotEqual(env["APP_DB_PASSWORD"], "changeme")
+        self.assertIn(f":{env['APP_DB_PASSWORD']}@", env["DATABASE_URL"])
+        self.assertIn(f":{env['VALKEY_PASSWORD']}@", env["VALKEY_URL"])
+        keycloak = self.values(".env.keycloak")
+        self.assertEqual(
+            keycloak["KC_DB_PASSWORD"], self.values(".env.keycloak-db")["POSTGRES_PASSWORD"]
+        )
+        secrets = [
+            env["SECRET_KEY"],
+            env["APP_DB_PASSWORD"],
+            env["VALKEY_PASSWORD"],
+            self.values(".env.db")["POSTGRES_PASSWORD"],
+            keycloak["KC_DB_PASSWORD"],
+            keycloak["KC_BOOTSTRAP_ADMIN_PASSWORD"],
+        ]
+        self.assertEqual(len(set(secrets)), len(secrets))
+        for secret in secrets:
+            self.assertNotIn(secret, result.stdout + result.stderr)
+        self.assertTrue(any("setup init" in line for line in self.audit_lines()))
+
+    def test_existing_files_are_never_changed(self) -> None:
+        (self.deploy / ".env.keycloak-db").write_text("POSTGRES_PASSWORD=kept-db-password\n")
+        self.assertEqual(self.nakctl("setup", "init").returncode, 0)
+        self.assertEqual(self.values(".env.keycloak")["KC_DB_PASSWORD"], "kept-db-password")
+        before = {n: (self.deploy / n).read_text() for n in (".env", ".env.db")}
+        result = self.nakctl("setup", "init", "--app-host", "other.example.org")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bleibt unverändert", result.stdout)
+        self.assertEqual({n: (self.deploy / n).read_text() for n in before}, before)
+
+    def test_dry_run_creates_nothing(self) -> None:
+        result = self.nakctl("setup", "init", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("würde", result.stdout)
+        self.assertFalse(self.env_file.exists())
+
+    def test_invalid_input_is_a_usage_error(self) -> None:
+        self.assertEqual(self.nakctl("setup", "init", "--app-host", "https://x/").returncode, 2)
+        self.assertEqual(self.nakctl("setup", "init", "--version", "latest").returncode, 2)
+        self.assertEqual(self.nakctl("setup", "init", "--backup-key", "a b").returncode, 2)
+        self.assertEqual(self.nakctl("setup", "init", "--compose-file", "../x.yml").returncode, 2)
+        self.assertFalse(self.env_file.exists())
+
+    def test_missing_templates_are_an_environment_error(self) -> None:
+        (self.deploy / ".env.db.example").unlink()
+        result = self.nakctl("setup", "init")
+        self.assertEqual(result.returncode, 3)
+        self.assertFalse(self.env_file.exists())
 
 
 if __name__ == "__main__":
