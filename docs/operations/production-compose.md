@@ -59,6 +59,8 @@ cp .env.keycloak-db.example .env.keycloak-db
 chmod 600 .env .env.db .env.keycloak .env.keycloak-db
 ```
 
+Ohne git: Ab dieser Version hängt jedes Release ein geprüftes Deploy-Paket mit genau diesen Dateien an. `install.sh` aus dem Release laden, mit `SHA256SUMS` prüfen und ausführen. Es installiert nach `/opt/nak-district-planner`, danach geht es dort wie oben weiter, am einfachsten mit `setup init` ([Admin-Skripte](/operations/admin-scripts#installation-ohne-git-release-paket)).
+
 Kürzer: `scripts/ops/nakctl setup init --app-host <APP_HOST> --auth-host <AUTH_HOST> --version <Version> --backup-key <GPG-Empfänger>` legt die vier Dateien mit Rechten 0600 an, erzeugt alle Passwörter aus Abschnitt 2 und `SECRET_KEY` und setzt `COMPOSE_FILE` und `APP_ENV=production` ([Admin-Skripte](/operations/admin-scripts#erstinstallation-setup-init)). Vorhandene Dateien bleiben unverändert. SMTP, `SUPERADMIN_SUB` und die OIDC-Werte bleiben Handarbeit. Vor dem ersten Start zeigt `scripts/ops/nakctl doctor --skip-checks`, was noch fehlt.
 
 ### 1. `.env`

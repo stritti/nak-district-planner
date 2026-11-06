@@ -703,11 +703,14 @@ Optionen:
   --dry-run                   nur prüfen und anzeigen
   -y, --yes                   ohne Rückfrage
 
-Vorher das passende Release-Tag auschecken (git checkout v<version>), damit
-Compose-Datei und Skripte zur Version passen. Die Vorversion steht in logs/nakctl.state.
+Vorher Compose-Datei und Skripte der Version holen, damit sie zur Version passen:
+im git-Checkout mit git checkout v<version>, bei einer Installation aus dem
+Release-Paket mit scripts/ops/install.sh --version <version>. Die Vorversion
+steht in logs/nakctl.state.
 
 Beispiele:
   git fetch --tags && git checkout v1.7.0
+  sudo scripts/ops/install.sh --version 1.7.0
   nakctl deploy update 1.7.0 --dry-run
   nakctl deploy update 1.7.0
   nakctl deploy rollback
@@ -751,8 +754,13 @@ deploy_update() {
       die "$EXIT_USAGE" "Image $registry/$image:$version ist nicht veröffentlicht"
   done
   local tag
-  tag="$(git -C "$DEPLOY_DIR" describe --tags --exact-match 2>/dev/null || true)"
-  [[ "$tag" == "v$version" ]] || warn "ausgecheckt ist '${tag:-kein Tag}', nicht v$version: Compose-Datei und Skripte passen evtl. nicht"
+  if [[ -f "$DEPLOY_DIR/VERSION" && ! -e "$DEPLOY_DIR/.git" ]]; then
+    tag="v$(head -n1 "$DEPLOY_DIR/VERSION")"
+    [[ "$tag" == "v$version" ]] || warn "installiert ist das Paket $tag, nicht v$version: erst 'scripts/ops/install.sh --version $version'"
+  else
+    tag="$(git -C "$DEPLOY_DIR" describe --tags --exact-match 2>/dev/null || true)"
+    [[ "$tag" == "v$version" ]] || warn "ausgecheckt ist '${tag:-kein Tag}', nicht v$version: Compose-Datei und Skripte passen evtl. nicht"
+  fi
   info "Update ${current:-?} → $version"
   if ((DRY_RUN)); then
     info "--dry-run: würde Backup erstellen, APP_VERSION setzen, pull, migrate, up -d und auf /health warten."
