@@ -24,6 +24,8 @@ Hilfsskripte für den Betrieb des NAK-Bezirksplaners. Läuft im Deploy-Verzeichn
 COMPOSE_FILE aus .env.
 
 Bereiche:
+  doctor                          Installation diagnostizieren, mit Hinweisen zur Behebung
+  setup init                      Erstinstallation: .env-Dateien mit Secrets anlegen
   status                          Zustand des Stacks anzeigen (nur lesend)
   check certs|disk|secrets|all    Betriebsprüfungen mit Schwellwerten (für Cron)
   queue status|inspect|purge|purge-results
@@ -48,6 +50,7 @@ Exit-Codes:
   2  Bedienfehler
 
 Beispiele:
+  nakctl doctor
   nakctl status
   nakctl check all
   nakctl queue purge --dry-run
@@ -1072,10 +1075,270 @@ cmd_cleanup() {
 
 # ---------------------------------------------------------------------------- main
 
+# -------------------------------------------------------------------- doctor/setup
+
+doctor_usage() {
+  cat <<'EOF'
+Aufruf: nakctl doctor [optionen]
+
+Diagnose der Installation, nur lesend. Prüft, was status und check voraussetzen,
+und nennt zu jedem Befund einen Hinweis zur Behebung (Zeilen mit "→"):
+
+  Werkzeuge         bash, docker (Daemon erreichbar), docker compose v2, python3 ≥ 3.11,
+                    openssl, gpg mit dem Schlüssel aus BACKUP_ENCRYPT_KEY
+  Konfiguration     .env vorhanden, COMPOSE_FILE gesetzt und gültig, APP_ENV, APP_VERSION
+  Netz              DNS von APP_HOST und AUTH_HOST, Ports 80/443 nicht fremd belegt
+  Betrieb           danach `check all` (Container, Health, Migrationen, Backup, Platz,
+                    Zertifikate, Secrets), sofern Docker nutzbar ist
+
+Optionen:
+  --offline                   DNS- und Zertifikatsprüfungen auslassen
+  --skip-checks               nur Werkzeuge, Konfiguration und Netz, kein `check all`
+
+Exit-Code 1 bei Befunden, 3 wenn Docker nicht nutzbar ist.
+
+Beispiele:
+  nakctl doctor
+  nakctl doctor --skip-checks          # vor dem ersten Start
+EOF
+}
+
+# hint <text> — how to fix the finding printed just before.
+hint() { printf '  → %s\n' "$*"; }
+
+# version_at_least <have> <want> — numeric dotted comparison.
+version_at_least() {
+  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
+}
+
+doctor_tools() {
+  local rc=0 v
+  if ((BASH_VERSINFO[0] >= 4)); then ok "bash $BASH_VERSION"; else finding "bash $BASH_VERSION ist zu alt"; hint "bash 4 oder neuer installieren"; rc=1; fi
+  if ! command -v docker >/dev/null 2>&1; then
+    finding "docker fehlt"; hint "Docker Engine installieren: https://docs.docker.com/engine/install/"; return "$EXIT_ENV"
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    finding "Docker-Daemon nicht erreichbar"
+    hint "Daemon starten (systemctl start docker) oder Benutzer in die Gruppe docker aufnehmen"
+    return "$EXIT_ENV"
+  fi
+  ok "Docker-Daemon erreichbar"
+  v="$(docker compose version --short 2>/dev/null || true)"
+  v="${v#v}"
+  if [[ -z "$v" ]]; then
+    finding "docker compose (v2) fehlt"; hint "Paket docker-compose-plugin installieren"; return "$EXIT_ENV"
+  elif version_at_least "$v" 2.20; then ok "docker compose $v"
+  else finding "docker compose $v ist zu alt"; hint "docker-compose-plugin auf 2.20 oder neuer aktualisieren"; rc=1; fi
+  if command -v python3 >/dev/null 2>&1; then
+    v="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+    if version_at_least "$v" 3.11; then ok "python3 $v"; else finding "python3 $v ist zu alt"; hint "Python 3.11 oder neuer installieren"; rc=1; fi
+  else
+    finding "python3 fehlt"; hint "Python 3.11 oder neuer installieren (nur Standardbibliothek nötig)"; rc=1
+  fi
+  if command -v openssl >/dev/null 2>&1; then ok "openssl vorhanden"; else finding "openssl fehlt (für check certs)"; hint "Paket openssl installieren"; rc=1; fi
+  local key
+  key="$(env_get BACKUP_ENCRYPT_KEY)"
+  key="${BACKUP_ENCRYPT_KEY:-$key}"
+  if ! command -v gpg >/dev/null 2>&1; then
+    finding "gpg fehlt (backup create verschlüsselt auf dem Host)"; hint "Paket gnupg installieren"; rc=1
+  elif [[ -z "$key" ]]; then
+    finding "BACKUP_ENCRYPT_KEY ist nicht gesetzt"; hint "GPG-Empfänger in .env eintragen (Pflicht in Produktion)"; rc=1
+  elif gpg --batch --list-keys -- "$key" >/dev/null 2>&1; then
+    ok "GPG-Schlüssel für BACKUP_ENCRYPT_KEY vorhanden"
+  else
+    finding "GPG-Schlüssel für BACKUP_ENCRYPT_KEY fehlt im Schlüsselbund"
+    hint "öffentlichen Schlüssel importieren: gpg --import backup-pub.asc"
+    rc=1
+  fi
+  return "$rc"
+}
+
+doctor_config() {
+  local rc=0 cf f
+  if [[ ! -f "$DEPLOY_DIR/.env" ]]; then
+    finding ".env fehlt in $DEPLOY_DIR"; hint "nakctl setup init"; return 1
+  fi
+  ok ".env vorhanden"
+  cf="$(env_get COMPOSE_FILE)"
+  if [[ -z "$cf" ]]; then
+    finding "COMPOSE_FILE ist nicht gesetzt"; hint "in .env: COMPOSE_FILE=docker-compose.prod.yml"; rc=1
+  else
+    local IFS=:
+    for f in $cf; do
+      if [[ -f "$DEPLOY_DIR/$f" || -f "$f" ]]; then ok "Compose-Datei $f"; else finding "Compose-Datei $f fehlt"; hint "Release-Checkout prüfen oder COMPOSE_FILE korrigieren"; rc=1; fi
+    done
+    unset IFS
+    if ((rc == 0 && docker_ok)); then
+      if compose config -q >/dev/null 2>&1; then ok "Compose-Konfiguration gültig"
+      else finding "docker compose config meldet Fehler"; hint "docker compose config ausführen und die genannte Zeile korrigieren"; rc=1; fi
+    fi
+  fi
+  if [[ "$(env_get APP_ENV)" == production ]]; then ok "APP_ENV=production"
+  else finding "APP_ENV ist nicht production"; hint "in .env: APP_ENV=production (schaltet den production_guard ein)"; rc=1; fi
+  local version
+  version="$(env_get APP_VERSION)"
+  if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then ok "APP_VERSION=$version"
+  else finding "APP_VERSION fehlt oder ist kein Release-Tag"; hint "in .env eine veröffentlichte Version setzen, z. B. APP_VERSION=1.7.0 (nie latest)"; rc=1; fi
+  return "$rc"
+}
+
+doctor_network() {
+  local rc=0 h name
+  for name in APP_HOST AUTH_HOST; do
+    h="$(env_get "$name")"
+    if [[ -z "$h" ]]; then
+      finding "$name ist nicht gesetzt"; hint "in .env den öffentlichen Hostnamen eintragen"; rc=1
+    elif [[ ! "$h" =~ ^[A-Za-z0-9.-]+$ ]]; then
+      finding "$name ist kein gültiger Hostname"; hint "nur den Namen eintragen, ohne https:// und Pfad"; rc=1
+    elif ((offline)); then
+      info "$name=$h (DNS nicht geprüft, --offline)"
+    elif getent ahosts "$h" >/dev/null 2>&1; then
+      ok "$name=$h löst auf ($(getent ahosts "$h" | awk 'NR==1{print $1}'))"
+    else
+      finding "$name=$h löst nicht auf"; hint "A/AAAA-Eintrag für $h auf diesen Server setzen"; rc=1
+    fi
+  done
+  # Ports 80/443 matter only when this stack brings its own Traefik.
+  if command -v ss >/dev/null 2>&1 && compose config --services 2>/dev/null | grep -qx traefik; then
+    if service_running traefik; then
+      ok "Ports 80/443 gehören zu traefik"
+    else
+      local port
+      for port in 80 443; do
+        if ss -Hltn "sport = :$port" 2>/dev/null | grep -q .; then
+          finding "Port $port ist belegt, traefik läuft aber nicht"
+          hint "anderen Dienst auf Port $port stoppen oder deploy/compose/existing-traefik.yml nutzen"
+          rc=1
+        fi
+      done
+    fi
+  fi
+  return "$rc"
+}
+
+doctor_cmd() {
+  local offline=0 skip_checks=0
+  while (($#)); do
+    case "$1" in
+      --offline) offline=1; shift ;;
+      --skip-checks) skip_checks=1; shift ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für doctor: $1" ;;
+    esac
+  done
+  local trc=0 docker_ok=1
+  heading "Werkzeuge"
+  doctor_tools || trc=$?
+  record "$trc"
+  ((trc != EXIT_ENV)) || docker_ok=0
+  heading "Konfiguration"
+  doctor_config || record $?
+  if ((trc == EXIT_ENV)); then
+    info "Docker nicht nutzbar: Netz- und Betriebsprüfungen übersprungen."
+    return "$WORST"
+  fi
+  heading "Netz"
+  doctor_network || record $?
+  if ((!skip_checks)); then
+    heading "Betrieb (check all)"
+    if ((offline)); then
+      status_cmd || record $?
+      heading "Secrets"
+      check_secrets || record $?
+    else
+      cmd_check all || record $?
+    fi
+  fi
+  heading "Ergebnis"
+  if ((WORST == 0)); then ok "keine Befunde"; else info "Befunde oben mit → Hinweis beheben, dann nakctl doctor erneut ausführen."; fi
+  return "$WORST"
+}
+
+setup_usage() {
+  cat <<'EOF'
+Aufruf: nakctl setup init [optionen]
+
+Erstinstallation vorbereiten: legt fehlende .env, .env.db, .env.keycloak und
+.env.keycloak-db aus den *.example-Vorlagen an (Rechte 0600), erzeugt zufällige
+Secrets (SECRET_KEY, APP_DB_PASSWORD, VALKEY_PASSWORD, beide POSTGRES_PASSWORD,
+KC_BOOTSTRAP_ADMIN_PASSWORD, KC_DB_PASSWORD passend zur Keycloak-Datenbank) und setzt
+APP_ENV=production und COMPOSE_FILE. Vorhandene Dateien bleiben unverändert; Secrets
+werden nie angezeigt. Keycloak-Realm, SMTP und Start bleiben manuelle Schritte, die
+am Ende aufgelistet werden.
+
+Optionen:
+  --app-host NAME             öffentlicher Hostname der App (APP_HOST)
+  --auth-host NAME            öffentlicher Hostname von Keycloak (AUTH_HOST)
+  --version X.Y.Z             Release-Version (APP_VERSION)
+  --backup-key EMPFÄNGER      GPG-Empfänger für Backups (BACKUP_ENCRYPT_KEY)
+  --compose-file DATEI        Standard: docker-compose.prod.yml
+  --dry-run                   nur anzeigen, welche Dateien und Schlüssel gesetzt würden
+
+Beispiele:
+  nakctl setup init --app-host planer.example.org --auth-host auth.example.org \
+    --version 1.7.0 --backup-key backup@example.org
+  nakctl setup init --dry-run
+EOF
+}
+
+setup_init() {
+  local app_host="" auth_host="" version="" backup_key="" compose_file="docker-compose.prod.yml"
+  while (($#)); do
+    case "$1" in
+      --app-host) require_value "$1" "${2:-}"; app_host="$2"; shift 2 ;;
+      --auth-host) require_value "$1" "${2:-}"; auth_host="$2"; shift 2 ;;
+      --version) require_value "$1" "${2:-}"; version="${2#v}"; shift 2 ;;
+      --backup-key) require_value "$1" "${2:-}"; backup_key="$2"; shift 2 ;;
+      --compose-file) require_value "$1" "${2:-}"; compose_file="$2"; shift 2 ;;
+      *) die "$EXIT_USAGE" "unbekannte Option für setup init: $1" ;;
+    esac
+  done
+  local h
+  for h in "$app_host" "$auth_host"; do
+    [[ -z "$h" || "$h" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] \
+      || die "$EXIT_USAGE" "ungültiger Hostname: $h"
+  done
+  [[ -z "$version" || "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
+    || die "$EXIT_USAGE" "ungültige Version: $version (erwartet z. B. 1.7.0)"
+  [[ -z "$backup_key" || "$backup_key" =~ ^[A-Za-z0-9@._+-]{1,254}$ ]] \
+    || die "$EXIT_USAGE" "ungültiger GPG-Empfänger"
+  [[ "$compose_file" =~ ^[A-Za-z0-9._/-]+$ && "$compose_file" != *..* ]] \
+    || die "$EXIT_USAGE" "ungültige Compose-Datei: $compose_file"
+  require_python
+  local args=(--dir "$DEPLOY_DIR" --compose-file "$compose_file" --app-version "$version"
+    --app-host "$app_host" --auth-host "$auth_host" --backup-key "$backup_key")
+  ((DRY_RUN)) && args+=(--dry-run)
+  local rc=0
+  nakops init-env "${args[@]}" || rc=$?
+  ((rc == 0)) || exit "$rc"
+  ((DRY_RUN)) && return 0
+  audit_log "setup init"
+  cat <<'EOF'
+
+Nächste Schritte (docs/operations/production-compose.md, Abschnitt Einrichtung):
+  1. In .env ergänzen: SMTP_* und EMAIL_FROM_ADDRESS, fehlende Werte von APP_HOST,
+     AUTH_HOST, APP_VERSION, BACKUP_ENCRYPT_KEY; SUPERADMIN_SUB vor der ersten Migration.
+  2. docker compose pull && docker compose up -d traefik keycloak
+  3. Keycloak einrichten (Realm, Client, Audience-Mapper); OIDC_DISCOVERY_URL, OIDC_CLIENT_ID
+     und OIDC_CLIENT_SECRET in .env eintragen, danach KC_BOOTSTRAP_ADMIN_* entfernen.
+  4. nakctl doctor --skip-checks
+  5. docker compose up -d, dann nakctl doctor
+EOF
+}
+
+cmd_setup() {
+  local action="${1:-}"
+  shift || true
+  case "$action" in
+    init) setup_init "$@" ;;
+    "" | -h | --help) setup_usage ;;
+    *) setup_usage >&2; exit "$EXIT_USAGE" ;;
+  esac
+}
+
 # area_help <area> — print the help of one area; false for unknown areas.
 area_help() {
   case "$1" in
-    status | queue | backup | logs | check | deploy | db | superadmin | cleanup) "${1}_usage" ;;
+    status | queue | backup | logs | check | deploy | db | superadmin | cleanup | doctor | setup) "${1}_usage" ;;
     *) return 1 ;;
   esac
 }
@@ -1118,6 +1381,8 @@ main() {
     db) cmd_db "$@" ;;
     superadmin) cmd_superadmin "$@" ;;
     cleanup) cmd_cleanup "$@" ;;
+    doctor) doctor_cmd "$@" ;;
+    setup) cmd_setup "$@" ;;
     *) usage >&2; exit "$EXIT_USAGE" ;;
   esac
 }

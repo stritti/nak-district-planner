@@ -12,6 +12,7 @@ Subcommands:
   queue-histogram  count Celery task names in raw queue messages from stdin
   backups          list backup archives, pair database/role archives, check age
   env-check        check .env files: permissions, placeholders, owner credentials
+  init-env         create missing .env files from their templates with fresh secrets
 
 Exit codes follow nakctl: 0 ok, 1 finding, 2 usage error, 3 environment unusable.
 No subcommand ever prints a secret value.
@@ -23,12 +24,14 @@ import argparse
 import json
 import os
 import re
+import secrets
 import stat
 import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 EXIT_OK = 0
 EXIT_FINDING = 1
@@ -527,6 +530,165 @@ def cmd_env_check(args: argparse.Namespace) -> int:
     return EXIT_FINDING if findings else EXIT_OK
 
 
+# ---------------------------------------------------------------------- init-env
+
+# How each generated value is made; names, not values, so secret scanners stay quiet.
+_GEN_HEX = "hex"  # SECRET_KEY: 64 hex characters
+_GEN_URL = "url"  # URL-safe random value (passwords end up inside connection URLs)
+_GEN_KEYCLOAK_DB = "shared"  # one value for both Keycloak database settings
+
+# (file, template, {key: generator}) — generated only in files created now.
+_INIT_FILES: tuple[tuple[str, str, dict[str, str]], ...] = (
+    (
+        ".env",
+        ".env.example",
+        {"SECRET_KEY": _GEN_HEX, "APP_DB_PASSWORD": _GEN_URL, "VALKEY_PASSWORD": _GEN_URL},
+    ),
+    (".env.db", ".env.db.example", {"POSTGRES_PASSWORD": _GEN_URL}),
+    (
+        ".env.keycloak",
+        ".env.keycloak.example",
+        {"KC_BOOTSTRAP_ADMIN_PASSWORD": _GEN_URL, "KC_DB_PASSWORD": _GEN_KEYCLOAK_DB},
+    ),
+    (".env.keycloak-db", ".env.keycloak-db.example", {"POSTGRES_PASSWORD": _GEN_KEYCLOAK_DB}),
+)
+
+
+# Settings both Keycloak env files must agree on: (.env.keycloak key, .env.keycloak-db key).
+_KEYCLOAK_DB_PAIRS = (("KC_DB_USERNAME", "POSTGRES_USER"), ("KC_DB_PASSWORD", "POSTGRES_PASSWORD"))
+_KEYCLOAK_FILES = (".env.keycloak", ".env.keycloak-db")
+
+
+def _existing_keycloak_db_values(directory: Path) -> dict[int, str]:
+    """Raw values (quoting kept) of the shared Keycloak DB settings from an existing file."""
+    found: dict[int, str] = {}
+    for side, name in enumerate(_KEYCLOAK_FILES):
+        path = directory / name
+        if not path.is_file():
+            continue
+        parsed = parse_env(path)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, pair in enumerate(_KEYCLOAK_DB_PAIRS):
+            if index not in found and parsed.get(pair[side]):
+                raw = _active_value(lines, pair[side])
+                if raw:
+                    found[index] = raw
+    return found
+
+
+def _new_secret(kind: str) -> str:
+    # URL-safe: VALKEY_PASSWORD and APP_DB_PASSWORD end up inside connection URLs.
+    return secrets.token_hex(32) if kind == _GEN_HEX else secrets.token_urlsafe(32)
+
+
+def set_env_value(lines: list[str], key: str, value: str) -> list[str]:
+    """Set KEY in place: replace the active line, else uncomment `# KEY=`, else append."""
+    active = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}=")
+    commented = re.compile(rf"^\s*#\s*{re.escape(key)}=")
+    out: list[str] = []
+    done = False
+    for line in lines:
+        if active.match(line):
+            if not done:
+                out.append(f"{key}={value}")
+                done = True
+            continue  # drop later duplicates: the last definition would win
+        out.append(line)
+    if not done:
+        for i, line in enumerate(out):
+            if commented.match(line):
+                out[i] = f"{key}={value}"
+                done = True
+                break
+    if not done:
+        out.append(f"{key}={value}")
+    return out
+
+
+def _replace_url_credentials(
+    lines: list[str], key: str, password: str, user: str | None = None
+) -> list[str]:
+    """Keep the host-execution URL (DATABASE_URL, VALKEY_URL) in step with the credentials.
+
+    With ``user`` the URL's username is replaced too, so user and password name the same role.
+    """
+    pattern = re.compile(rf"^({re.escape(key)}=[^:/]+://)([^:/@]*)(:)([^@]*)(@.*)$")
+
+    def repl(m: re.Match[str]) -> str:
+        name = quote(user, safe="") if user is not None else m.group(2)
+        return m.group(1) + name + m.group(3) + quote(password, safe="") + m.group(5)
+
+    return [pattern.sub(repl, line) for line in lines]
+
+
+def _active_value(lines: list[str], key: str) -> str | None:
+    """Return the raw right-hand side of the last active KEY= line (quoting kept)."""
+    active = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}=(.*)$")
+    found = None
+    for line in lines:
+        match = active.match(line)
+        if match:
+            found = match.group(1).strip()
+    return found
+
+
+def _write_private(path: Path, lines: list[str]) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+def cmd_init_env(args: argparse.Namespace) -> int:
+    directory = Path(args.dir)
+    missing = [t for _, t, _ in _INIT_FILES if not (directory / t).is_file()]
+    if missing:
+        print(f"Vorlagen fehlen in {directory}: {', '.join(missing)}", file=sys.stderr)
+        return EXIT_ENV
+    settings = {
+        "APP_ENV": "production",
+        "COMPOSE_FILE": args.compose_file,
+        "APP_VERSION": args.app_version,
+        "APP_HOST": args.app_host,
+        "AUTH_HOST": args.auth_host,
+        "BACKUP_ENCRYPT_KEY": args.backup_key,
+    }
+    # Copy the Keycloak DB user and password verbatim (raw text with its quoting) from an
+    # existing Keycloak env file, so Compose reads the same values from both files.
+    shared = _existing_keycloak_db_values(directory)
+    keycloak_db = shared.get(1) or _new_secret(_GEN_URL)
+    for name, template, generated in _INIT_FILES:
+        path = directory / name
+        if path.exists():
+            print(f"{name}: vorhanden, bleibt unverändert")
+            continue
+        lines = (directory / template).read_text(encoding="utf-8").splitlines()
+        keys: list[str] = []
+        for key, kind in generated.items():
+            value = keycloak_db if kind == _GEN_KEYCLOAK_DB else _new_secret(kind)
+            lines = set_env_value(lines, key, value)
+            if key == "APP_DB_PASSWORD":
+                app_user = _active_value(lines, "APP_DB_USER")
+                lines = _replace_url_credentials(lines, "DATABASE_URL", value, app_user or None)
+            elif key == "VALKEY_PASSWORD":
+                lines = _replace_url_credentials(lines, "VALKEY_URL", value)
+            keys.append(key)
+        if name in _KEYCLOAK_FILES and 0 in shared:
+            user_key = _KEYCLOAK_DB_PAIRS[0][_KEYCLOAK_FILES.index(name)]
+            lines = set_env_value(lines, user_key, shared[0])
+            keys.append(user_key)
+        if name == ".env":
+            for key, value in settings.items():
+                if value:
+                    lines = set_env_value(lines, key, value)
+                    keys.append(key)
+        if args.dry_run:
+            print(f"{name}: würde aus {template} angelegt (0600), gesetzt: {', '.join(keys)}")
+            continue
+        _write_private(path, lines)
+        print(f"{name}: angelegt aus {template} (0600), gesetzt: {', '.join(keys)}")
+    return EXIT_OK
+
+
 # ------------------------------------------------------------------------- main
 
 
@@ -565,6 +727,16 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("env-check")
     p.add_argument("--dir", required=True)
     p.set_defaults(func=cmd_env_check)
+
+    p = sub.add_parser("init-env")
+    p.add_argument("--dir", required=True)
+    p.add_argument("--compose-file", default="docker-compose.prod.yml")
+    p.add_argument("--app-version", default="")
+    p.add_argument("--app-host", default="")
+    p.add_argument("--auth-host", default="")
+    p.add_argument("--backup-key", default="")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_init_env)
     return parser
 
 
