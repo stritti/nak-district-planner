@@ -24,7 +24,7 @@
     "@playwright/test": "^1.64",
     "@tailwindcss/vite": "^4.3.4",
     "@vitejs/plugin-vue": "^6.0",
-    "@vitest/coverage-v8": "^5.0.5",
+    "@vitest/coverage-v8": "^5.1.0",
     "@vue/test-utils": "^2.5",
     "@vue/tsconfig": "^0.9",
     "eslint": "^10",
@@ -37,7 +37,7 @@
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0",
     "vue-eslint-parser": "^10.0.0",
-    "vue-tsc": "^3.3.13"
+    "vue-tsc": "^3.3.14"
   },
   "overrides": {
     "glob": "^14.0.3",
