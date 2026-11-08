@@ -11,6 +11,9 @@
 5. **Betreiberdaten sind nie Teil des Pakets.** `MANIFEST` darf `.env`, `.env.db`, `.env.keycloak`, `.env.keycloak-db`, `logs/` und `backups/` nicht nennen. `install.sh` lehnt ein solches Paket ab. Ein Update ersetzt nur die Dateien aus `MANIFEST`.
 6. **Wrapper statt Symlink.** `nakctl` findet `lib.sh` über seinen eigenen Pfad. Ein Symlink in `/usr/local/bin` würde das brechen, deshalb legt `install.sh` dort ein zweizeiliges Shell-Skript mit `exec` an. Eine vorhandene fremde Datei `nakctl` bleibt unverändert.
 
+7. **Besitzer ist der Betreiber, nicht root.** `install.sh` braucht root für `/opt` und `/usr/local/bin`. Unter `sudo` übergibt es Verzeichnis und Paketdateien an `SUDO_USER` (oder `--owner`), damit `setup init` dort `.env` anlegen kann und `nakctl` ohne root läuft.
+8. **Nur kanonische Pfade im `MANIFEST`.** `./.env`, `a//b` oder `x/../.env` würden die Ausschlussliste für Betreiberdaten umgehen. Solche Einträge führen zum Abbruch.
+
 ## Risks / Trade-offs
 
 - Dateien, die in einer neuen Version wegfallen, bleiben bei einem Update liegen. Das ist harmlos, solange `COMPOSE_FILE` auf die aktuelle Datei zeigt.

@@ -24,6 +24,8 @@ dir="/opt/nak-district-planner"
 bin_dir="/usr/local/bin"
 link=1
 pin=""
+# Under sudo the files belong to the invoking user, so nakctl runs without root afterwards.
+owner="${SUDO_USER:-}"
 yes=0
 dry_run=0
 
@@ -52,6 +54,8 @@ Optionen:
   --sha256 <prüfsumme>        erwartete SHA-256 des Pakets zusätzlich prüfen
   --bin-dir <pfad>            hier den Befehl nakctl anlegen (Standard: /usr/local/bin)
   --no-link                   keinen nakctl-Befehl anlegen
+  --owner <benutzer>          Besitzer der installierten Dateien (Standard: der Benutzer
+                              hinter sudo); nakctl läuft danach als dieser Benutzer
   --dry-run                   nur herunterladen, prüfen und anzeigen
   -y, --yes                   Update ohne Rückfrage
   -h, --help                  diese Hilfe
@@ -77,6 +81,7 @@ while (($#)); do
     --sha256) require_value "$1" "${2:-}"; pin="${2,,}"; shift 2 ;;
     --bin-dir) require_value "$1" "${2:-}"; bin_dir="${2%/}"; shift 2 ;;
     --no-link) link=0; shift ;;
+    --owner) require_value "$1" "${2:-}"; owner="$2"; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
     -y | --yes) yes=1; shift ;;
     -h | --help) usage; exit "$EXIT_OK" ;;
@@ -93,6 +98,12 @@ for path in "$dir" "$bin_dir"; do
   [[ "$path" =~ $safe_path && "/$path/" != *"/../"* && "$path" != "/" ]] ||
     die "$EXIT_USAGE" "ungültiger Pfad: $path (absolut, ohne Leerzeichen und ..)"
 done
+if [[ -n "$owner" ]]; then
+  [[ "$owner" =~ ^[a-z_][a-z0-9_.-]*$ ]] || die "$EXIT_USAGE" "ungültiger Benutzername: $owner"
+  id -u "$owner" >/dev/null 2>&1 || die "$EXIT_USAGE" "Benutzer $owner existiert nicht"
+  [[ "$owner" == "$(id -un)" ]] && owner=""
+  [[ -z "$owner" || "$(id -u)" == 0 ]] || die "$EXIT_USAGE" "--owner braucht root (sudo)"
+fi
 case "$BASE_URL" in
   https://* | file://*) ;;
   *) die "$EXIT_USAGE" "NAK_INSTALL_BASE_URL muss mit https:// beginnen" ;;
@@ -157,7 +168,10 @@ src="$tmp/x/$prefix"
 files=()
 while IFS= read -r file; do
   [[ -n "$file" ]] || continue
-  [[ "$file" =~ ^[A-Za-z0-9._][A-Za-z0-9._/-]*$ && "/$file/" != *"/../"* ]] || die "$EXIT_ENV" "MANIFEST enthält einen ungültigen Pfad"
+  # Canonical relative paths only: no "./", "..", "//" or trailing "/", so the operator-data
+  # check below cannot be bypassed with an alias such as ./.env.
+  [[ "$file" =~ ^[A-Za-z0-9._][A-Za-z0-9._/-]*$ && "/$file/" != *"/../"* && "/$file/" != *"/./"* &&
+    "$file" != *"//"* && "$file" != */ ]] || die "$EXIT_ENV" "MANIFEST enthält einen ungültigen Pfad"
   # Operator data is never part of the bundle.
   [[ ! "$file" =~ ^(\.env|\.env\.db|\.env\.keycloak|\.env\.keycloak-db)$ && ! "$file" =~ ^(logs|backups)/ ]] ||
     die "$EXIT_ENV" "MANIFEST nennt Betreiberdaten ($file)"
@@ -201,7 +215,22 @@ for file in "${files[@]}"; do
   install -m "$perm" "$src/$file" "$target.new.$$"
   mv -f "$target.new.$$" "$target"
 done
-ok "${#files[@]} Dateien in $dir"
+if [[ -n "$owner" ]]; then
+  # The directory itself (setup init writes .env there) and every installed file and folder.
+  group="$(id -gn "$owner")"
+  chown "$owner:$group" "$dir"
+  for file in "${files[@]}"; do
+    path="$file"
+    while [[ "$path" == */* ]]; do
+      path="${path%/*}"
+      chown "$owner:$group" "$dir/$path"
+    done
+    chown "$owner:$group" "$dir/$file"
+  done
+  ok "${#files[@]} Dateien in $dir (Besitzer $owner)"
+else
+  ok "${#files[@]} Dateien in $dir"
+fi
 
 if ((link)); then
   wrapper="$bin_dir/nakctl"
@@ -220,7 +249,7 @@ fi
 if [[ "$mode" == "install" ]]; then
   cat <<EOF
 
-Nächste Schritte:
+Nächste Schritte${owner:+ (als $owner, ohne sudo)}:
   cd $dir
   scripts/ops/nakctl setup init --app-host <APP_HOST> --auth-host <AUTH_HOST> --version $version
   scripts/ops/nakctl doctor --skip-checks
@@ -228,7 +257,7 @@ EOF
 else
   cat <<EOF
 
-Nächster Schritt (Backup, Images, Migration, Neustart):
+Nächster Schritt${owner:+ (als $owner, ohne sudo)} (Backup, Images, Migration, Neustart):
   cd $dir && scripts/ops/nakctl deploy update $version
 EOF
 fi

@@ -30,6 +30,8 @@ sudo bash install.sh --version "$VERSION"
 
 `install.sh` lädt das Paket desselben Releases und prüft seine Prüfsumme gegen `SHA256SUMS`. Mit `--sha256 <prüfsumme>` prüft es zusätzlich gegen einen Wert, den der Betreiber über einen anderen Weg kennt. Links, absolute Pfade und `..` im Archiv führen zum Abbruch. Erst danach schreibt es nach `/opt/nak-district-planner` (`--dir`) und legt den Befehl `nakctl` in `/usr/local/bin` an (`--bin-dir`, `--no-link`). Eine vorhandene fremde Datei `nakctl` bleibt unverändert. `--dry-run` lädt und prüft nur.
 
+Unter `sudo` gehören Verzeichnis und Dateien danach dem aufrufenden Benutzer (`--owner <benutzer>` wählt einen anderen). `setup init`, `doctor` und alle weiteren `nakctl`-Befehle laufen dann als dieser Benutzer ohne `sudo`, er braucht nur Zugriff auf Docker (Gruppe `docker`). So gehören auch die `.env`-Dateien diesem Benutzer und nicht root.
+
 Die Prüfsumme schützt vor beschädigten oder vertauschten Downloads. Sie kommt aber aus demselben Release wie das Paket, die Vertrauensbasis bleibt also HTTPS zu GitHub und das feste Release-Tag.
 
 Ein Update lädt die Paketdateien der neuen Version und ersetzt nur Dateien aus dem `MANIFEST` des Pakets. `.env`, `.env.db`, `.env.keycloak`, `.env.keycloak-db`, `logs/` und `backups/` bleiben unberührt. Ohne Terminal braucht das Update `--yes`. Ein git-Checkout oder ein fremdes, nicht leeres Verzeichnis wird abgelehnt.

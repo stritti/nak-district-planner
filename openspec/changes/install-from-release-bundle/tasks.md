@@ -9,6 +9,7 @@
 - [x] 2.2 Prüfsumme, Archiv-Einträge und `MANIFEST` werden vor jedem Schreibzugriff geprüft
 - [x] 2.3 Update ersetzt nur Paketdateien, verlangt Bestätigung und lehnt git-Checkouts und fremde Verzeichnisse ab
 - [x] 2.4 `nakctl deploy update` erkennt Paket-Installationen an `VERSION`
+- [x] 2.5 Unter `sudo` gehört die Installation dem aufrufenden Benutzer (`--owner`), `MANIFEST` erlaubt nur kanonische Pfade
 
 ## 3. Tests und CI
 

@@ -143,6 +143,44 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(self.install().returncode, 3)
         self.assertFalse(self.target.exists())
 
+    def rebuild_with_manifest(self, extra: str) -> None:
+        """Repack the bundle with an extra MANIFEST line and a matching SHA256SUMS."""
+        prefix = f"nak-district-planner-{VERSION}"
+        stage = self.tmp / "stage"
+        with tarfile.open(self.release / BUNDLE) as archive:
+            archive.extractall(stage, filter="data")
+        manifest = stage / prefix / "MANIFEST"
+        manifest.write_text(manifest.read_text() + extra + "\n")
+        (stage / prefix / ".env").write_text("SECRET_KEY=from-bundle\n")
+        with tarfile.open(self.release / BUNDLE, "w:gz") as archive:
+            archive.add(stage / prefix, arcname=prefix)
+        digest = self.sha(self.release / BUNDLE)
+        (self.release / "SHA256SUMS").write_text(f"{digest}  {BUNDLE}\n")
+
+    def test_rejects_aliased_operator_paths(self) -> None:
+        self.assertEqual(self.install().returncode, 0)
+        (self.target / ".env").write_text("SECRET_KEY=keep\n")
+        for alias in ("./.env", ".//.env", "scripts/../.env"):
+            with self.subTest(alias=alias):
+                self.rebuild_with_manifest(alias)
+                result = self.install("--yes")
+                self.assertEqual(result.returncode, 3, result.stdout)
+                self.assertIn("MANIFEST", result.stderr)
+                self.assertEqual((self.target / ".env").read_text(), "SECRET_KEY=keep\n")
+                shutil.rmtree(self.tmp / "stage")
+                self.build(self.release)
+
+    @unittest.skipUnless(os.geteuid() == 0, "chown needs root")
+    def test_owner_gets_the_installation(self) -> None:
+        import pwd
+
+        nobody = pwd.getpwnam("nobody")
+        result = self.install("--owner", "nobody")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for path in (self.target, self.target / "scripts/ops", self.target / "scripts/ops/nakctl"):
+            self.assertEqual(path.stat().st_uid, nobody.pw_uid, path)
+        self.assertIn("als nobody", result.stdout)
+
     def test_refuses_git_checkouts_and_foreign_directories(self) -> None:
         (self.target / ".git").mkdir(parents=True)
         result = self.install()
@@ -167,7 +205,13 @@ class InstallTest(unittest.TestCase):
         self.assertIn("bleibt unverändert", result.stderr)
 
     def test_invalid_input_is_a_usage_error(self) -> None:
-        for args in (("--version", "latest"), ("--sha256", "xyz"), ("--dir", "relative/path")):
+        for args in (
+            ("--version", "latest"),
+            ("--sha256", "xyz"),
+            ("--dir", "relative/path"),
+            ("--owner", "no such user"),
+            ("--owner", "nak-missing-user"),
+        ):
             result = subprocess.run(
                 ["bash", str(INSTALL), "--version", VERSION, *args],
                 capture_output=True, text=True, check=False,
