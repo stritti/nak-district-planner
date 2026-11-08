@@ -32,7 +32,7 @@ jobs:
         # Yamllint and Hadolint, but its image is substantially smaller than
         # the all-in-one MegaLinter image. Frontend ESLint runs in ci.yml using
         # the project's own nested ESLint configuration and installed deps.
-        uses: oxsecurity/megalinter/flavors/python@9949bad031045f366be2467e00e8371a7328a2e2 # v10.1.0
+        uses: oxsecurity/megalinter/flavors/python@f2fe8c1cba37091848df3e524066c8c23ef353ed # v10.2.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # PRs only need to validate changed files because main/develop are
