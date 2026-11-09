@@ -3,6 +3,8 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
+# New groups collect routine version updates only; major and security updates
+# keep their existing handling. CodeQL stays coupled across all version levels.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -14,18 +16,121 @@ updates:
       codeql-action:
         patterns:
           - "github/codeql-action/*"
+      github-actions:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "github/codeql-action/*"
+        update-types: ["minor", "patch"]
   - package-ecosystem: "bun" # See documentation for possible values
     directory: "/services/frontend" # Location of package manifests
     schedule:
       interval: "weekly"
+    groups:
+      frontend-runtime:
+        applies-to: "version-updates"
+        patterns:
+          - "vue"
+          - "vue-router"
+          - "pinia"
+          - "pinia-plugin-*"
+          - "@vueuse/*"
+          - "@heroicons/*"
+        update-types: ["minor", "patch"]
+      frontend-build:
+        applies-to: "version-updates"
+        patterns:
+          - "vite"
+          - "vite-*"
+          - "@vitejs/*"
+          - "typescript"
+          - "vue-tsc"
+          - "@vue/tsconfig"
+          - "tailwindcss"
+          - "@tailwindcss/*"
+        update-types: ["minor", "patch"]
+      frontend-testing:
+        applies-to: "version-updates"
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@playwright/test"
+          - "@vue/test-utils"
+          - "@pinia/testing"
+          - "happy-dom"
+        update-types: ["minor", "patch"]
+      frontend-lint:
+        applies-to: "version-updates"
+        patterns:
+          - "eslint"
+          - "eslint-*"
+          - "typescript-eslint"
+          - "vue-eslint-parser"
+        update-types: ["minor", "patch"]
   - package-ecosystem: "bun"
     directory: "/" # Root package.json: VitePress docs toolchain
     schedule:
       interval: "weekly"
+    groups:
+      documentation:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
   - package-ecosystem: "uv" # See documentation for possible values
     directory: "/services/backend" # Location of package manifests
     schedule:
       interval: "weekly"
+    groups:
+      backend-api:
+        applies-to: "version-updates"
+        patterns:
+          - "fastapi"
+          - "starlette"
+          - "uvicorn"
+          - "pydantic"
+          - "pydantic-*"
+        update-types: ["minor", "patch"]
+      backend-database:
+        applies-to: "version-updates"
+        patterns:
+          - "sqlalchemy"
+          - "alembic"
+          - "asyncpg"
+          - "psycopg*"
+        update-types: ["minor", "patch"]
+      backend-telemetry:
+        applies-to: "version-updates"
+        patterns:
+          - "opentelemetry-*"
+        update-types: ["minor", "patch"]
+      backend-tooling:
+        applies-to: "version-updates"
+        patterns:
+          - "pytest"
+          - "pytest-*"
+          - "ruff"
+        update-types: ["minor", "patch"]
+      backend-runtime:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "fastapi"
+          - "starlette"
+          - "uvicorn"
+          - "pydantic"
+          - "pydantic-*"
+          - "sqlalchemy"
+          - "alembic"
+          - "asyncpg"
+          - "psycopg*"
+          - "opentelemetry-*"
+          - "pytest"
+          - "pytest-*"
+          - "ruff"
+        update-types: ["minor", "patch"]
   - package-ecosystem: "docker"
     directory: "/services/backend"
     schedule:
