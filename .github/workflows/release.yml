@@ -171,6 +171,15 @@ jobs:
             --frontend-digest "$FRONTEND_DIGEST" \
             --output "$GITHUB_OUTPUT"
 
+      # Reproducible, so a re-run uploads identical bytes; attached before the draft is published.
+      - name: Attach deploy bundle, install.sh and SHA256SUMS to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish-upgrade-notes.outputs.tag_name }}
+        run: |
+          scripts/ops/build-bundle.sh "$RELEASE_TAG" dist/deploy
+          gh release upload "$RELEASE_TAG" dist/deploy/* --clobber
+
       - name: Verify both digests, promote tags and publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

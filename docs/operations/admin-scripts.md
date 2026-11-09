@@ -13,6 +13,41 @@ scripts/ops/nakctl help backup      # dasselbe
 
 `COMPOSE_FILE` aus `.env` gilt wie bei `docker compose`; mit `NAK_DEPLOY_DIR=/pfad` arbeitet `nakctl` in einem anderen Verzeichnis.
 
+## Installation ohne git (Release-Paket)
+
+Jedes Release ab dieser Version hängt drei Dateien an: `nak-district-planner-deploy-<version>.tar.gz`, `install.sh` und `SHA256SUMS`. Das Paket enthält nur, was der Server braucht: Compose-Datei, `.env`-Vorlagen, `deploy/`, `scripts/backup.sh`, `scripts/restore.sh` und `scripts/ops/`. Quellcode und Tests sind nicht enthalten. Der Server braucht dafür `curl`, `tar` und `sha256sum`, aber kein `git`.
+
+Bitte kein `curl … | sh`. Das Skript wird als Datei geladen, geprüft und gelesen, bevor es läuft:
+
+```bash
+VERSION=1.8.0
+BASE=https://github.com/stritti/nak-district-planner/releases/download/v$VERSION
+curl -fsSLO "$BASE/install.sh" -O "$BASE/SHA256SUMS"
+sha256sum -c --ignore-missing SHA256SUMS   # install.sh: OK
+less install.sh
+sudo bash install.sh --version "$VERSION"
+```
+
+`install.sh` lädt das Paket desselben Releases und prüft seine Prüfsumme gegen `SHA256SUMS`. Mit `--sha256 <prüfsumme>` prüft es zusätzlich gegen einen Wert, den der Betreiber über einen anderen Weg kennt. Links, absolute Pfade und `..` im Archiv führen zum Abbruch. Erst danach schreibt es nach `/opt/nak-district-planner` (`--dir`) und legt den Befehl `nakctl` in `/usr/local/bin` an (`--bin-dir`, `--no-link`). Eine vorhandene fremde Datei `nakctl` bleibt unverändert. `--dry-run` lädt und prüft nur.
+
+Unter `sudo` gehören Verzeichnis und Dateien danach dem aufrufenden Benutzer (`--owner <benutzer>` wählt einen anderen). `setup init`, `doctor` und alle weiteren `nakctl`-Befehle laufen dann als dieser Benutzer ohne `sudo`, er braucht nur Zugriff auf Docker (Gruppe `docker`). So gehören auch die `.env`-Dateien diesem Benutzer und nicht root.
+
+Die Prüfsumme schützt vor beschädigten oder vertauschten Downloads. Sie kommt aber aus demselben Release wie das Paket, die Vertrauensbasis bleibt also HTTPS zu GitHub und das feste Release-Tag.
+
+Ein Update lädt die Paketdateien der neuen Version und ersetzt nur Dateien aus dem `MANIFEST` des Pakets. `.env`, `.env.db`, `.env.keycloak`, `.env.keycloak-db`, `logs/` und `backups/` bleiben unberührt. Ohne Terminal braucht das Update `--yes`. Ein git-Checkout oder ein fremdes, nicht leeres Verzeichnis wird abgelehnt.
+
+```bash
+sudo /opt/nak-district-planner/scripts/ops/install.sh --version 1.9.0
+nakctl deploy update 1.9.0
+```
+
+| Code | Bedeutung bei `install.sh` |
+| --- | --- |
+| 0 | installiert bzw. aktualisiert |
+| 2 | Bedienfehler, z. B. ungültige Version oder Pfad |
+| 3 | Download, Prüfsumme oder Paket fehlerhaft, Ziel ist ein git-Checkout oder fremd; nichts geschrieben |
+| 4 | Update nicht bestätigt |
+
 ## Gemeinsame Regeln
 
 | Regel | Bedeutung |
@@ -138,13 +173,14 @@ Vor jeder Ausgabe werden Export-Tokens (`/api/v1/export/…`), Bearer- und Basic
 ## Versionswechsel
 
 ```bash
-git fetch --tags && git checkout v1.7.0
+git fetch --tags && git checkout v1.7.0          # git-Checkout
+sudo scripts/ops/install.sh --version 1.7.0      # oder: Installation aus dem Release-Paket
 scripts/ops/nakctl deploy update 1.7.0 --dry-run
 scripts/ops/nakctl deploy update 1.7.0
 scripts/ops/nakctl deploy rollback
 ```
 
-`deploy update` prüft, dass Backend- und Frontend-Image zur Version veröffentlicht sind, erstellt ein Backup, merkt die laufende Version in `logs/nakctl.state`, setzt `APP_VERSION` in `.env`, zieht die Images, führt den `migrate`-Dienst aus, startet den Stack und wartet bis zu zwei Minuten auf `/health`. Schlägt ein Schritt nach der Migration fehl, rollt `nakctl` nicht automatisch zurück, sondern nennt den nächsten Schritt.
+`deploy update` prüft, dass Backend- und Frontend-Image zur Version veröffentlicht sind, erstellt ein Backup, merkt die laufende Version in `logs/nakctl.state`, setzt `APP_VERSION` in `.env`, zieht die Images, führt den `migrate`-Dienst aus, startet den Stack und wartet bis zu zwei Minuten auf `/health`. Schlägt ein Schritt nach der Migration fehl, rollt `nakctl` nicht automatisch zurück, sondern nennt den nächsten Schritt. Passen ausgecheckter Tag oder installiertes Paket (`VERSION`) nicht zur Zielversion, warnt der Befehl.
 
 `deploy rollback` setzt die gemerkte Vorversion nur, wenn deren Alembic-Head genau dem Datenbankstand entspricht. Hat die neue Version die Datenbank schon weiter migriert, bricht der Befehl ohne Änderung ab. Dann zuerst ein Backup einspielen oder mit dem neueren Image `alembic downgrade <revision>` ausführen (siehe [Runbook, Abschnitt 4](/operations/production-runbook#_4-rollback)).
 
