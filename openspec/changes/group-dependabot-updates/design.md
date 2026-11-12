@@ -1,6 +1,6 @@
 ## Context
 
-See [proposal.md](proposal.md) for motivation and [the spec delta](specs/ci-supply-chain/spec.md) for the behavior contract. The current configuration has seven update entries and one CodeQL group. Bun and uv both need package-name matching; using explicit patterns also makes family boundaries visible.
+See [proposal.md](proposal.md) for motivation and [the ci-supply-chain spec](/openspec/specs/ci-supply-chain/) for the behavior contract. The current configuration has seven update entries and one CodeQL group. Bun and uv both need package-name matching; using explicit patterns also makes family boundaries visible.
 
 ## Decisions
 
