@@ -1,6 +1,6 @@
 ## Context
 
-See [proposal.md](proposal.md) for motivation and [the spec delta](https://github.com/stritti/nak-district-planner/blob/main/openspec/changes/group-dependabot-updates/specs/ci-supply-chain/spec.md) for the behavior contract. The delta file is not published as a docs page (the OpenSpec VitePress plugin only renders proposal/design/tasks per change), so the link points to the file on GitHub. The current configuration has seven update entries and one CodeQL group. Bun and uv both need package-name matching; using explicit patterns also makes family boundaries visible.
+See [proposal.md](proposal.md) for motivation and [the ci-supply-chain spec](/openspec/specs/ci-supply-chain/) for the behavior contract. The current configuration has seven update entries and one CodeQL group. Bun and uv both need package-name matching; using explicit patterns also makes family boundaries visible.
 
 ## Decisions
 
