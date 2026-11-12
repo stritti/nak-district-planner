@@ -1,0 +1,55 @@
+name: KICS Weekly IaC Scan
+
+on:
+  schedule:
+    # Every Sunday at 06:00 UTC (in addition to the weekly run of
+    # security.yml on Mondays at 08:00 UTC)
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: kics-weekly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  kics:
+    name: IaC Scan (KICS, weekly)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same scan scope as the PR job in security.yml: secrets live in .env
+      # files, and .github/workflows is CI configuration, not deployment IaC.
+      - name: Run KICS scan on IaC files
+        uses: checkmarx/kics-github-action@4a16c2130b02104dc2624c133d5224080e7cc49b # v2.2.1
+        with:
+          path: .
+          exclude_paths: ".github/**"
+          disable_secrets: true
+          fail_on: high
+          output_formats: json,sarif
+          output_path: kics-results
+          output_name: kics-report
+
+      # Separate category so the weekly upload does not replace the
+      # PR-scan alerts uploaded under the "kics" category.
+      - name: Upload KICS results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: kics-results/kics-report.sarif
+          category: kics-weekly
+
+      - name: Archive KICS report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kics-weekly-report
+          path: kics-results/
+          retention-days: 30
