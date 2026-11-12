@@ -126,6 +126,7 @@ Verpflichtende Sicherheits-/Qualitaetskontrollen im aktiven `main`-Ruleset:
 - bun audit
 - CodeQL Python
 - CodeQL JavaScript/TypeScript
+- KICS (IaC-Scan: Dockerfiles, Docker Compose)
 - Backend-/Frontend-Image-Build
 - Dokumentations-Build
 

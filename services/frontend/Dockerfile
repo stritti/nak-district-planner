@@ -16,4 +16,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --chmod=0755 15-real-ip-from.sh /docker-entrypoint.d/15-real-ip-from.sh
 
+# nginx-unprivileged already runs as the nginx user; make it explicit.
+USER nginx
+
 EXPOSE 8080
