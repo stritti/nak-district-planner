@@ -437,6 +437,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EmptyState from '../components/EmptyState.vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
 import InlineEditableCell from '../components/InlineEditableCell.vue'
+import { useCrudDelete } from '../composables/useCrudDelete'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import {
   createCongregation,
@@ -824,32 +825,26 @@ async function saveInlineGroupName(
   if (idx !== -1) list[idx] = updated
 }
 
-const pendingDeleteGroup = ref<{ districtId: string; group: CongregationGroupResponse } | null>(
-  null,
+const groupDelete = useCrudDelete<{ districtId: string; group: CongregationGroupResponse }>(
+  {
+    deleteItem: ({ districtId, group }) => deleteGroup(districtId, group.id),
+    onDeleted: ({ districtId, group }) => {
+      groupsByDistrict[districtId] = (groupsByDistrict[districtId] || []).filter((g) => g.id !== group.id)
+      // Local state: clear group_id for congregations that were in this group
+      congregationsByDistrict[districtId]?.forEach((c) => {
+        if (c.group_id === group.id) c.group_id = null
+      })
+    },
+    label: ({ group }) => group.name,
+    successMessage: 'Gruppe gelöscht',
+  },
+  saving,
 )
+const pendingDeleteGroup = groupDelete.deleteTarget
+const executeDeleteGroup = groupDelete.executeDelete
 
 function confirmDeleteGroup(districtId: string, group: CongregationGroupResponse) {
-  pendingDeleteGroup.value = { districtId, group }
-}
-
-async function executeDeleteGroup() {
-  if (!pendingDeleteGroup.value) return
-  const { districtId, group } = pendingDeleteGroup.value
-  saving.value = true
-  try {
-    await deleteGroup(districtId, group.id)
-    groupsByDistrict[districtId] = (groupsByDistrict[districtId] || []).filter((g) => g.id !== group.id)
-    // Local state: clear group_id for congregations that were in this group
-    congregationsByDistrict[districtId]?.forEach((c) => {
-      if (c.group_id === group.id) c.group_id = null
-    })
-    pendingDeleteGroup.value = null
-    toastStore.success('Gruppe gelöscht', group.name)
-  } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
-  } finally {
-    saving.value = false
-  }
+  groupDelete.confirmDelete({ districtId, group })
 }
 
 </script>
