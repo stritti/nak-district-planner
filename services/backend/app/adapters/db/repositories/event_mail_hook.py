@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import ClassVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.orm_models.event_mail_hook import EventMailHookORM
 from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.user import UserORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.events import EventType
 from app.domain.models.event_mail_hook import EventMailHook
 from app.domain.models.role import Role
@@ -34,9 +36,20 @@ def _to_domain(row: EventMailHookORM) -> EventMailHook:
     )
 
 
-class SqlEventMailHookRepository(EventMailHookRepository):
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+class SqlEventMailHookRepository(SqlRepository[EventMailHookORM, EventMailHook], EventMailHookRepository):
+    orm_type = EventMailHookORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "district_id": "district_id",
+        "event_type": "event_type",
+        "recipient_role": "recipient_role",
+        "subject_template": "subject_template",
+        "body_template": "body_template",
+        "is_active": "is_active",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
 
     async def get(self, district_id: uuid.UUID, hook_id: uuid.UUID) -> EventMailHook | None:
         row = await self._session.scalar(
@@ -80,19 +93,6 @@ class SqlEventMailHookRepository(EventMailHookRepository):
         )
         return [_to_domain(row) for row in rows]
 
-    async def save(self, hook: EventMailHook) -> None:
-        row = await self._session.get(EventMailHookORM, hook.id)
-        if row is None:
-            row = EventMailHookORM(id=hook.id, district_id=hook.district_id)
-            self._session.add(row)
-        row.event_type = hook.event_type.value
-        row.recipient_role = hook.recipient_role.value
-        row.subject_template = hook.subject_template
-        row.body_template = hook.body_template
-        row.is_active = hook.is_active
-        row.created_at = hook.created_at
-        row.updated_at = hook.updated_at
-        await self._session.flush()
 
 
 class SqlRecipientDirectory(RecipientDirectory):

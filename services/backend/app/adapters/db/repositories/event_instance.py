@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import uuid
+from typing import ClassVar
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
 from app.domain.ports.repositories import EventInstanceRepository
 
@@ -35,9 +36,28 @@ def _orm_to_domain(row: EventInstanceORM) -> EventInstance:
     )
 
 
-class SqlEventInstanceRepository(EventInstanceRepository):
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+class SqlEventInstanceRepository(SqlRepository[EventInstanceORM, EventInstance], EventInstanceRepository):
+    orm_type = EventInstanceORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "planning_slot_id": "planning_slot_id",
+        "title": "title",
+        "description": "description",
+        "actual_start_at": "actual_start_at",
+        "actual_end_at": "actual_end_at",
+        "source": "source",
+        "visibility": "visibility",
+        "deviation_flag": "deviation_flag",
+        "sync_state": "sync_state",
+        "external_uid": "external_uid",
+        "content_hash": "content_hash",
+        "calendar_integration_id": "calendar_integration_id",
+        "last_external_modified_at": "last_external_modified_at",
+        "last_internal_modified_at": "last_internal_modified_at",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
 
     async def get(self, instance_id: uuid.UUID) -> EventInstance | None:
         row = await self._session.get(EventInstanceORM, instance_id)
@@ -94,29 +114,6 @@ class SqlEventInstanceRepository(EventInstanceRepository):
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
 
-    async def save(self, instance: EventInstance) -> None:
-        existing = await self._session.get(EventInstanceORM, instance.id)
-        row = existing or EventInstanceORM()
-        row.id = instance.id
-        row.planning_slot_id = instance.planning_slot_id
-        row.title = instance.title
-        row.description = instance.description
-        row.actual_start_at = instance.actual_start_at
-        row.actual_end_at = instance.actual_end_at
-        row.source = instance.source
-        row.visibility = instance.visibility
-        row.deviation_flag = instance.deviation_flag
-        row.sync_state = instance.sync_state
-        row.external_uid = instance.external_uid
-        row.content_hash = instance.content_hash
-        row.calendar_integration_id = instance.calendar_integration_id
-        row.last_external_modified_at = instance.last_external_modified_at
-        row.last_internal_modified_at = instance.last_internal_modified_at
-        row.created_at = instance.created_at
-        row.updated_at = instance.updated_at
-        if existing is None:
-            self._session.add(row)
-        await self._session.flush()
 
     async def delete(self, instance_id: uuid.UUID) -> None:
         row = await self._session.get(EventInstanceORM, instance_id)

@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from typing import ClassVar
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.planning_series import PlanningSeriesORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.ports.repositories import PlanningSeriesRepository
 
@@ -30,9 +31,22 @@ def _orm_to_domain(row: PlanningSeriesORM) -> PlanningSeries:
     )
 
 
-class SqlPlanningSeriesRepository(PlanningSeriesRepository):
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+class SqlPlanningSeriesRepository(SqlRepository[PlanningSeriesORM, PlanningSeries], PlanningSeriesRepository):
+    orm_type = PlanningSeriesORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "district_id": "district_id",
+        "congregation_id": "congregation_id",
+        "category": "category",
+        "default_planning_time": "default_planning_time",
+        "recurrence_pattern": "recurrence_pattern",
+        "active_from": "active_from",
+        "active_until": "active_until",
+        "is_active": "is_active",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
 
     async def get(self, series_id: uuid.UUID) -> PlanningSeries | None:
         row = await self._session.get(PlanningSeriesORM, series_id)
@@ -81,20 +95,3 @@ class SqlPlanningSeriesRepository(PlanningSeriesRepository):
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
 
-    async def save(self, series: PlanningSeries) -> None:
-        existing = await self._session.get(PlanningSeriesORM, series.id)
-        row = existing or PlanningSeriesORM()
-        row.id = series.id
-        row.district_id = series.district_id
-        row.congregation_id = series.congregation_id
-        row.category = series.category
-        row.default_planning_time = series.default_planning_time
-        row.recurrence_pattern = series.recurrence_pattern
-        row.active_from = series.active_from
-        row.active_until = series.active_until
-        row.is_active = series.is_active
-        row.created_at = series.created_at
-        row.updated_at = series.updated_at
-        if existing is None:
-            self._session.add(row)
-        await self._session.flush()

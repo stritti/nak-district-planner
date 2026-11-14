@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import uuid
+from typing import ClassVar
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.congregation import CongregationORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.congregation import Congregation
 from app.domain.models.invitation import InvitationTargetType
 from app.domain.ports.repositories import CongregationRepository
@@ -33,11 +34,24 @@ def _orm_to_domain(row: CongregationORM) -> Congregation:
     )
 
 
-class SqlCongregationRepository(CongregationRepository):
+class SqlCongregationRepository(SqlRepository[CongregationORM, Congregation], CongregationRepository):
     """SQLAlchemy repository for Congregation."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    orm_type = CongregationORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "name": "name",
+        "district_id": "district_id",
+        "group_id": "group_id",
+        "service_times": "service_times",
+        "invitation_target_type": "invitation_target_type",
+        "invitation_target_congregation_id": "invitation_target_congregation_id",
+        "invitation_external_note": "invitation_external_note",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
+
 
     async def get(self, congregation_id: uuid.UUID) -> Congregation | None:
         row = await self._session.get(CongregationORM, congregation_id)
@@ -67,21 +81,3 @@ class SqlCongregationRepository(CongregationRepository):
         result = await self._session.execute(stmt)
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
-    async def save(self, congregation: Congregation) -> None:
-        existing = await self._session.get(CongregationORM, congregation.id)
-        if existing is None:
-            row = CongregationORM()
-            self._session.add(row)
-        else:
-            row = existing
-        row.id = congregation.id
-        row.name = congregation.name
-        row.district_id = congregation.district_id
-        row.group_id = congregation.group_id
-        row.service_times = congregation.service_times
-        row.invitation_target_type = congregation.invitation_target_type
-        row.invitation_target_congregation_id = congregation.invitation_target_congregation_id
-        row.invitation_external_note = congregation.invitation_external_note
-        row.created_at = congregation.created_at
-        row.updated_at = congregation.updated_at
-        await self._session.flush()

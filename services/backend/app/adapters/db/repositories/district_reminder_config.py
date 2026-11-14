@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import uuid
+from typing import ClassVar
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.district_reminder_config import DistrictReminderConfigORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.district_reminder_config import DistrictReminderConfig
 from app.domain.models.role import Role
 
@@ -30,9 +31,21 @@ def _to_domain(row: DistrictReminderConfigORM) -> DistrictReminderConfig:
     )
 
 
-class SqlDistrictReminderConfigRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+class SqlDistrictReminderConfigRepository(SqlRepository[DistrictReminderConfigORM, DistrictReminderConfig]):
+    orm_type = DistrictReminderConfigORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "district_id": "district_id",
+        "day_of_month": "day_of_month",
+        "time_of_day": "time_of_day",
+        "subject_template": "subject_template",
+        "body_template": "body_template",
+        "recipient_role": "recipient_role",
+        "is_active": "is_active",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
 
     async def get(self, district_id: uuid.UUID, config_id: uuid.UUID) -> DistrictReminderConfig | None:
         result = await self._session.execute(
@@ -76,18 +89,3 @@ class SqlDistrictReminderConfigRepository:
         )
         return [_to_domain(row) for row in result.scalars().all()]
 
-    async def save(self, config: DistrictReminderConfig) -> None:
-        row = await self._session.get(DistrictReminderConfigORM, config.id)
-        if row is None:
-            row = DistrictReminderConfigORM(id=config.id)
-            self._session.add(row)
-        row.district_id = config.district_id
-        row.day_of_month = config.day_of_month
-        row.time_of_day = config.time_of_day
-        row.subject_template = config.subject_template
-        row.body_template = config.body_template
-        row.recipient_role = config.recipient_role.value
-        row.is_active = config.is_active
-        row.created_at = config.created_at
-        row.updated_at = config.updated_at
-        await self._session.flush()
