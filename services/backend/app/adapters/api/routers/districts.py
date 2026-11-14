@@ -50,6 +50,7 @@ from app.adapters.api.schemas.district import (
     ServiceTime,
 )
 from app.adapters.api.schemas.matrix import (
+    MatrixQuery,
     MatrixResponse,
 )
 from app.adapters.api.tenant_references import ensure_congregation_in_district
@@ -466,9 +467,7 @@ async def get_matrix(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    from_dt: datetime | None = Query(None),
-    to_dt: datetime | None = Query(None),
-    group_id: uuid.UUID | None = Query(None),
+    query: Annotated[MatrixQuery, Query()],
     district_repo: SqlDistrictRepository = Depends(get_district_repository),
     cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
     group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
@@ -496,9 +495,9 @@ async def get_matrix(
     try:
         return await build_matrix(
             district_id,
-            from_dt=from_dt,
-            to_dt=to_dt,
-            group_id=group_id,
+            from_dt=query.from_dt,
+            to_dt=query.to_dt,
+            group_id=query.group_id,
             cong_repo=cong_repo,
             group_repo=group_repo,
             slot_repo=slot_repo,

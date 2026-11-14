@@ -33,6 +33,7 @@ from app.adapters.api.deps import (
 )
 from app.adapters.api.revisions import aware_timestamp, slot_revision
 from app.adapters.api.schemas.events import (
+    MAX_LIST_WINDOW_DAYS,
     BulkApprovalStatusRequest,
     BulkApprovalStatusResponse,
     EventChangeImpact,
@@ -40,6 +41,7 @@ from app.adapters.api.schemas.events import (
     EventChangeImpactRequest,
     EventCreate,
     EventInlineUpdate,
+    EventListQuery,
     EventListResponse,
     EventResponse,
     EventResponsible,
@@ -86,10 +88,6 @@ from app.domain.services.sync_policy import internal_state, resolve_conflict
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
 SERVICE_CATEGORY = "Gottesdienst"
-# Longest accepted from/to span for listings (default window is 3 years).
-MAX_LIST_WINDOW_DAYS = 1100
-# Deep OFFSET pages make PostgreSQL skip every earlier row; refine filters instead.
-MAX_LIST_OFFSET = 10_000
 
 
 def _slot_start_at(slot: PlanningSlot) -> datetime:
@@ -173,23 +171,24 @@ async def _load_responsible(
 async def list_events(
     auth: CurrentUserWithMemberships,
     session: DbSession,
-    district_id: uuid.UUID | None = Query(None),
-    congregation_id: uuid.UUID | None = Query(None),
-    group_id: uuid.UUID | None = Query(None),
-    only_district_level: bool = Query(False),
-    status_filter: PlanningSlotStatus | None = Query(None, alias="status"),
-    approval_status: EventApprovalStatus | None = Query(None),
-    is_service: bool | None = Query(None),
-    from_dt: datetime | None = Query(None),
-    to_dt: datetime | None = Query(None),
-    limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0, le=MAX_LIST_OFFSET),
+    query: Annotated[EventListQuery, Query()],
     slot_repo: PlanningSlotRepository = Depends(get_planning_slot_repository),
     cong_repo: CongregationRepository = Depends(get_congregation_repository),
     inst_repo: EventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: ServiceAssignmentRepository = Depends(get_service_assignment_repository),
     leaders_repo: LeaderRepository = Depends(get_leader_repository),
 ) -> EventListResponse:
+    district_id = query.district_id
+    congregation_id = query.congregation_id
+    group_id = query.group_id
+    only_district_level = query.only_district_level
+    status_filter = query.status_filter
+    approval_status = query.approval_status
+    is_service = query.is_service
+    from_dt = query.from_dt
+    to_dt = query.to_dt
+    limit = query.limit
+    offset = query.offset
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
