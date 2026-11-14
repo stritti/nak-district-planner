@@ -72,10 +72,6 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
         "app.adapters.db.repositories.planning_slot",
         "sqlalchemy.ext.asyncio",
     ),
-    "init.py": _debt(
-        "legacy role seeding still receives a SQLAlchemy session directly",
-        "sqlalchemy.ext.asyncio",
-    ),
     "invitation_service.py": _debt(
         "legacy invitation orchestration still reaches persistence adapters",
         "app.adapters.db.repositories.congregation",

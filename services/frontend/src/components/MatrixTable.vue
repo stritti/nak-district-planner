@@ -309,7 +309,7 @@ import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinato
 import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import InlineEditableCell from './InlineEditableCell.vue'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
-import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
+import { filterMatrixRows, sortMatrixRows, type MatrixSortMode } from '../utils/matrixRows'
 
 function hasBlockingConflict(cell: MatrixCell): boolean {
   return (cell.conflicts ?? []).some((conflict) => conflict.severity === 'BLOCK')
@@ -327,7 +327,7 @@ import EventApprovalStatusBadge from './EventApprovalStatusBadge.vue'
 
 const props = defineProps<{
   compactMode: boolean
-  matrixSortMode: 'default' | 'grouped'
+  matrixSortMode: MatrixSortMode
 }>()
 
 const emit = defineEmits<{

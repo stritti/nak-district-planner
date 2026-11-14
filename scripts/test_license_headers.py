@@ -23,7 +23,6 @@ class SourceSelectionTests(unittest.TestCase):
             "services/frontend/index.html",
             "idp-deploy/keycloak/setup_keycloak_realm.py",
             "scripts/cleanup-container-images.cjs",
-            "verify-phase4b-compatibility.sh",
         ):
             with self.subTest(path=path):
                 self.assertTrue(mod.is_first_party_source(path))

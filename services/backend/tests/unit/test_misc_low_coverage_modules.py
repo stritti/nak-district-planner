@@ -17,7 +17,6 @@ from app.adapters.auth.claims_validation import (
 from app.adapters.auth.notifications import can_act_on_notification, can_view_notification
 from app.adapters.idp.base import IdpProvisioningError
 from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
-from app.application.init import seed_canonical_roles
 from app.celery_app import celery
 from app.config import Settings
 from app.domain.models.invitation import (
@@ -104,11 +103,6 @@ def test_notification_helpers_delegate_to_permissions() -> None:
     with patch("app.adapters.auth.permissions.has_role_in_district", return_value=True):
         assert can_view_notification(auth, did) is True
         assert can_act_on_notification(auth, did) is True
-
-
-@pytest.mark.asyncio
-async def test_seed_canonical_roles_noop() -> None:
-    await seed_canonical_roles(AsyncMock())
 
 
 @pytest.mark.asyncio
