@@ -19,6 +19,7 @@ from app.adapters.api.schemas.district import (
     DistrictUpdate,
     FeiertageImportRequest,
 )
+from app.adapters.api.schemas.matrix import MatrixQuery
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
@@ -581,9 +582,11 @@ async def test_get_matrix_success() -> None:
         district_id,
         _superadmin_auth(),
         AsyncMock(),
-        from_dt=now - timedelta(days=2),
-        to_dt=now + timedelta(days=2),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=now - timedelta(days=2),
+            to_dt=now + timedelta(days=2),
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -623,8 +626,11 @@ async def _matrix_for(
     if repos_out is not None:
         repos_out.update(repos)
     return await r.get_matrix(
-        district_id, _superadmin_auth(), AsyncMock(), from_dt=day - timedelta(days=1),
-        to_dt=day + timedelta(days=1), group_id=None, **repos,
+        district_id, _superadmin_auth(), AsyncMock(),
+        query=MatrixQuery(
+            from_dt=day - timedelta(days=1), to_dt=day + timedelta(days=1), group_id=None
+        ),
+        **repos,
     )
 
 
@@ -794,8 +800,11 @@ async def test_matrix_skips_duty_and_absence_lookups_without_leader_assignments(
     repos = _matrix_repos(district=District.create(name="D"), congregations=[nord], slots=[slot])
 
     result = await r.get_matrix(
-        district_id, _superadmin_auth(), AsyncMock(), from_dt=start - timedelta(days=1),
-        to_dt=start + timedelta(days=1), group_id=None, **repos,
+        district_id, _superadmin_auth(), AsyncMock(),
+        query=MatrixQuery(
+            from_dt=start - timedelta(days=1), to_dt=start + timedelta(days=1), group_id=None
+        ),
+        **repos,
     )
 
     assert result.rows[0].cells[start.date().isoformat()].is_gap is True
@@ -832,9 +841,11 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
             district_id,
             _superadmin_auth(),
             db,
-            from_dt=None,
-            to_dt=None,
-            group_id=None,
+            query=MatrixQuery(
+                from_dt=None,
+                to_dt=None,
+                group_id=None,
+            ),
             district_repo=district_repo,
             cong_repo=AsyncMock(),
             group_repo=AsyncMock(),
@@ -853,9 +864,31 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
             district_id,
             _superadmin_auth(),
             db,
-            from_dt=datetime(2030, 5, 2, tzinfo=UTC),
-            to_dt=datetime(2030, 5, 1, tzinfo=UTC),
-            group_id=None,
+            query=MatrixQuery(
+                from_dt=datetime(2030, 5, 2, tzinfo=UTC),
+                to_dt=datetime(2030, 5, 1, tzinfo=UTC),
+                group_id=None,
+            ),
+            **repos,
+        )
+    assert range_exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_rejects_same_day_inverted_datetime_bounds() -> None:
+    district_id = uuid.uuid4()
+    repos = _matrix_repos(district=District.create(name="D"))
+
+    with pytest.raises(HTTPException) as range_exc:
+        await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            AsyncMock(),
+            query=MatrixQuery(
+                from_dt=datetime(2030, 5, 1, 18, 0, tzinfo=UTC),
+                to_dt=datetime(2030, 5, 1, 9, 0, tzinfo=UTC),
+                group_id=None,
+            ),
             **repos,
         )
     assert range_exc.value.status_code == 422
@@ -885,9 +918,11 @@ async def test_get_matrix_marks_future_ineligible_leader_for_review() -> None:
         district_id,
         _superadmin_auth(),
         AsyncMock(),
-        from_dt=day - timedelta(days=1),
-        to_dt=day + timedelta(days=1),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=day - timedelta(days=1),
+            to_dt=day + timedelta(days=1),
+            group_id=None,
+        ),
         **_matrix_repos(
             district=District.create(name="D"),
             congregations=[congregation],
@@ -930,9 +965,11 @@ async def test_get_matrix_shows_slot_outside_regular_service_times() -> None:
         district_id,
         _superadmin_auth(),
         AsyncMock(),
-        from_dt=saturday - timedelta(days=1),
-        to_dt=saturday + timedelta(days=2),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=saturday - timedelta(days=1),
+            to_dt=saturday + timedelta(days=2),
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -992,9 +1029,11 @@ async def test_get_matrix_invited_congregation_shows_invitation_instead_of_gap()
         district_id,
         _superadmin_auth(),
         AsyncMock(),
-        from_dt=sunday - timedelta(days=1),
-        to_dt=sunday + timedelta(days=1),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=sunday - timedelta(days=1),
+            to_dt=sunday + timedelta(days=1),
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -1051,9 +1090,11 @@ async def test_get_matrix_invited_congregation_keeps_own_led_service() -> None:
         district_id,
         _superadmin_auth(),
         AsyncMock(),
-        from_dt=day - timedelta(days=1),
-        to_dt=day + timedelta(days=1),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=day - timedelta(days=1),
+            to_dt=day + timedelta(days=1),
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -1139,9 +1180,11 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         district_id,
         _superadmin_auth(),
         AsyncMock(),
-        from_dt=start - timedelta(days=1),
-        to_dt=start + timedelta(days=2),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=start - timedelta(days=1),
+            to_dt=start + timedelta(days=2),
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -1225,9 +1268,11 @@ async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
         district_id,
         _superadmin_auth(),
         db,
-        from_dt=None,
-        to_dt=None,
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=None,
+            to_dt=None,
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -1251,9 +1296,11 @@ async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
         district_id,
         _superadmin_auth(),
         db,
-        from_dt=None,
-        to_dt=to_dt,
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=None,
+            to_dt=to_dt,
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -1277,9 +1324,11 @@ async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
         district_id,
         _superadmin_auth(),
         db,
-        from_dt=from_dt,
-        to_dt=None,
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=from_dt,
+            to_dt=None,
+            group_id=None,
+        ),
         **repos,
     )
 
@@ -1302,9 +1351,11 @@ async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
         district_id,
         _superadmin_auth(),
         db,
-        from_dt=datetime(2030, 4, 1, 12, 0),
-        to_dt=datetime(2030, 4, 15, 18, 45),
-        group_id=None,
+        query=MatrixQuery(
+            from_dt=datetime(2030, 4, 1, 12, 0),
+            to_dt=datetime(2030, 4, 15, 18, 45),
+            group_id=None,
+        ),
         **repos,
     )
 

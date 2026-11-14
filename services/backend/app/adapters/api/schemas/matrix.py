@@ -12,6 +12,14 @@ from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus
 
 
+class MatrixQuery(BaseModel):
+    """Query parameters of ``GET /api/v1/districts/{district_id}/matrix``."""
+
+    from_dt: datetime | None = None
+    to_dt: datetime | None = None
+    group_id: uuid.UUID | None = None
+
+
 class MatrixCellConflict(BaseModel):
     """A planning conflict of the assignment shown in a matrix cell."""
 

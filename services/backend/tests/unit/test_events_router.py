@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.adapters.api.routers import events
+from app.adapters.api.schemas.events import MAX_LIST_OFFSET, EventListQuery
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -247,17 +248,19 @@ async def test_list_events_applies_filters_and_paginates() -> None:
         result = await events.list_events(
             _auth(),
             AsyncMock(),
-            district_id=district_id,
-            congregation_id=None,
-            group_id=group_id,
-            only_district_level=False,
-            status_filter=PlanningSlotStatus.ACTIVE,
-            approval_status=EventApprovalStatus.PLANNED,
-            is_service=None,
-            from_dt=None,
-            to_dt=None,
-            limit=1,
-            offset=0,
+            query=EventListQuery(
+                district_id=district_id,
+                congregation_id=None,
+                group_id=group_id,
+                only_district_level=False,
+                status_filter=PlanningSlotStatus.ACTIVE,
+                approval_status=EventApprovalStatus.PLANNED,
+                is_service=None,
+                from_dt=None,
+                to_dt=None,
+                limit=1,
+                offset=0,
+            ),
             slot_repo=slot_repo,
             cong_repo=congregation_repo,
             inst_repo=instance_repo,
@@ -292,17 +295,19 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
         result = await events.list_events(
             _auth(),
             AsyncMock(),
-            district_id=district_id,
-            congregation_id=congregation_id,
-            group_id=None,
-            only_district_level=False,
-            status_filter=None,
-            approval_status=None,
-            is_service=None,
-            from_dt=None,
-            to_dt=None,
-            limit=50,
-            offset=0,
+            query=EventListQuery(
+                district_id=district_id,
+                congregation_id=congregation_id,
+                group_id=None,
+                only_district_level=False,
+                status_filter=None,
+                approval_status=None,
+                is_service=None,
+                from_dt=None,
+                to_dt=None,
+                limit=50,
+                offset=0,
+            ),
             slot_repo=slot_repo,
             inst_repo=instance_repo,
         )
@@ -338,17 +343,19 @@ async def test_list_events_marks_and_filters_service_events() -> None:
             return await events.list_events(
                 _auth(),
                 AsyncMock(),
-                district_id=district_id,
-                congregation_id=None,
-                group_id=None,
-                only_district_level=False,
-                status_filter=None,
-                approval_status=None,
-                is_service=is_service,
-                from_dt=None,
-                to_dt=None,
-                limit=50,
-                offset=0,
+                query=EventListQuery(
+                    district_id=district_id,
+                    congregation_id=None,
+                    group_id=None,
+                    only_district_level=False,
+                    status_filter=None,
+                    approval_status=None,
+                    is_service=is_service,
+                    from_dt=None,
+                    to_dt=None,
+                    limit=50,
+                    offset=0,
+                ),
                 slot_repo=slot_repo,
                 inst_repo=instance_repo,
             )
@@ -377,17 +384,19 @@ async def test_list_events_accepts_datetime_range_filters() -> None:
         await events.list_events(
             _auth(),
             AsyncMock(),
-            district_id=district_id,
-            congregation_id=None,
-            group_id=None,
-            only_district_level=False,
-            status_filter=None,
-            approval_status=None,
-            is_service=None,
-            from_dt=datetime(2026, 9, 26, 22, 0, tzinfo=UTC),
-            to_dt=datetime(2026, 10, 3, 21, 59, 59, tzinfo=UTC),
-            limit=50,
-            offset=0,
+            query=EventListQuery(
+                district_id=district_id,
+                congregation_id=None,
+                group_id=None,
+                only_district_level=False,
+                status_filter=None,
+                approval_status=None,
+                is_service=None,
+                from_dt=datetime(2026, 9, 26, 22, 0, tzinfo=UTC),
+                to_dt=datetime(2026, 10, 3, 21, 59, 59, tzinfo=UTC),
+                limit=50,
+                offset=0,
+            ),
             slot_repo=slot_repo,
             inst_repo=instance_repo,
         )
@@ -407,17 +416,19 @@ async def _list_with_window(from_dt, to_dt, slot_repo=None):
         return await events.list_events(
             _auth(),
             AsyncMock(),
-            district_id=uuid.uuid4(),
-            congregation_id=None,
-            group_id=None,
-            only_district_level=False,
-            status_filter=None,
-            approval_status=None,
-            is_service=None,
-            from_dt=from_dt,
-            to_dt=to_dt,
-            limit=50,
-            offset=0,
+            query=EventListQuery(
+                district_id=uuid.uuid4(),
+                congregation_id=None,
+                group_id=None,
+                only_district_level=False,
+                status_filter=None,
+                approval_status=None,
+                is_service=None,
+                from_dt=from_dt,
+                to_dt=to_dt,
+                limit=50,
+                offset=0,
+            ),
             slot_repo=slot_repo,
             inst_repo=instance_repo,
         )
@@ -464,10 +475,14 @@ async def test_list_events_passes_filters_and_pagination_to_sql() -> None:
     cong_repo.list_by_district.return_value = [SimpleNamespace(id=congregation_id, group_id=group_id)]
     with patch("app.adapters.api.routers.events.require_role_in_district"):
         await events.list_events(
-            _auth(), AsyncMock(), district_id=district_id, congregation_id=congregation_id,
-            group_id=group_id, only_district_level=False, status_filter=PlanningSlotStatus.ACTIVE,
-            approval_status=EventApprovalStatus.CONFIRMED, is_service=True, from_dt=None,
-            to_dt=None, limit=7, offset=14, slot_repo=slot_repo, cong_repo=cong_repo,
+            _auth(), AsyncMock(),
+            query=EventListQuery(
+                district_id=district_id, congregation_id=congregation_id,
+                group_id=group_id, only_district_level=False, status_filter=PlanningSlotStatus.ACTIVE,
+                approval_status=EventApprovalStatus.CONFIRMED, is_service=True, from_dt=None,
+                to_dt=None, limit=7, offset=14,
+            ),
+            slot_repo=slot_repo, cong_repo=cong_repo,
             inst_repo=instance_repo,
         )
     kwargs = slot_repo.list_page.await_args.kwargs
@@ -483,8 +498,7 @@ async def test_list_events_passes_filters_and_pagination_to_sql() -> None:
 @pytest.mark.asyncio
 async def test_list_events_requires_district_for_non_superadmin() -> None:
     with pytest.raises(HTTPException) as error:
-        await events.list_events(_auth(), AsyncMock())
-
+        await events.list_events(_auth(), AsyncMock(), query=EventListQuery())
     assert error.value.status_code == 403
 
 
@@ -497,17 +511,19 @@ async def test_list_events_allows_superadmin_without_district() -> None:
     result = await events.list_events(
         _auth(is_superadmin=True),
         AsyncMock(),
-        district_id=None,
-        congregation_id=None,
-        group_id=None,
-        only_district_level=False,
-        status_filter=None,
-        approval_status=None,
-        is_service=None,
-        from_dt=None,
-        to_dt=None,
-        limit=50,
-        offset=0,
+        query=EventListQuery(
+            district_id=None,
+            congregation_id=None,
+            group_id=None,
+            only_district_level=False,
+            status_filter=None,
+            approval_status=None,
+            is_service=None,
+            from_dt=None,
+            to_dt=None,
+            limit=50,
+            offset=0,
+        ),
         slot_repo=slot_repo,
         inst_repo=instance_repo,
     )
@@ -985,17 +1001,19 @@ async def test_imported_holiday_distributed_to_congregation_appears_in_its_view(
         result = await events.list_events(
             _auth(),
             AsyncMock(),
-            district_id=district_id,
-            congregation_id=congregation_id,
-            group_id=None,
-            only_district_level=False,
-            status_filter=None,
-            approval_status=None,
-            is_service=None,
-            from_dt=datetime(2026, 1, 1, tzinfo=UTC),
-            to_dt=datetime(2026, 12, 31, tzinfo=UTC),
-            limit=500,
-            offset=0,
+            query=EventListQuery(
+                district_id=district_id,
+                congregation_id=congregation_id,
+                group_id=None,
+                only_district_level=False,
+                status_filter=None,
+                approval_status=None,
+                is_service=None,
+                from_dt=datetime(2026, 1, 1, tzinfo=UTC),
+                to_dt=datetime(2026, 12, 31, tzinfo=UTC),
+                limit=500,
+                offset=0,
+            ),
             slot_repo=slot_repo,
             inst_repo=instance_repo,
         )
@@ -1101,13 +1119,6 @@ async def test_external_event_full_editor_allowed_but_inline_forbidden() -> None
 
 def test_list_events_offset_has_an_upper_bound() -> None:
     """Deep OFFSET scans stay bounded (#604); the API rejects absurd values."""
-    from fastapi.routing import APIRoute
-
-    route = next(
-        r for r in events.router.routes if isinstance(r, APIRoute) and r.path == "/api/v1/events"
-        and "GET" in r.methods
-    )
-    offset = next(p for p in route.dependant.query_params if p.name == "offset")
-    constraints = {type(m).__name__: m for m in offset.field_info.metadata}
-    assert constraints["Le"].le == events.MAX_LIST_OFFSET
+    constraints = {type(m).__name__: m for m in EventListQuery.model_fields["offset"].metadata}
+    assert constraints["Le"].le == MAX_LIST_OFFSET
     assert constraints["Ge"].ge == 0

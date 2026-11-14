@@ -24,6 +24,29 @@ from app.domain.models.event_instance import (
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotStatus
 from app.domain.models.service_assignment import AssignmentStatus
 
+# Longest accepted from/to span for listings (default window is 3 years).
+MAX_LIST_WINDOW_DAYS = 1100
+# Deep OFFSET pages make PostgreSQL skip every earlier row; refine filters instead.
+MAX_LIST_OFFSET = 10_000
+
+
+class EventListQuery(BaseModel):
+    """Query parameters of ``GET /api/v1/events`` (filter, window, pagination)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    district_id: uuid.UUID | None = None
+    congregation_id: uuid.UUID | None = None
+    group_id: uuid.UUID | None = None
+    only_district_level: bool = False
+    status_filter: PlanningSlotStatus | None = Field(default=None, alias="status")
+    approval_status: EventApprovalStatus | None = None
+    is_service: bool | None = None
+    from_dt: datetime | None = None
+    to_dt: datetime | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0, le=MAX_LIST_OFFSET)
+
 
 class EventResponsible(BaseModel):
     """Person in charge of an event; for a Gottesdienst this is the Dienstleiter."""
