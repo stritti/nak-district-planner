@@ -747,10 +747,23 @@ function canInlineEditEvent(event: EventResponse): boolean {
     !!event.revision
 }
 
-async function reloadInlineTitle(event: EventResponse): Promise<{ value: string; revision: string }> {
+async function reloadInlineEventValue(
+  event: EventResponse,
+  extract: (latest: EventResponse) => string,
+): Promise<{ value: string; revision: string }> {
   const latest = await getEvent(event.id)
   eventsStore.updateCached(latest)
-  return { value: latest.title, revision: latest.revision ?? '' }
+  return { value: extract(latest), revision: latest.revision ?? '' }
+}
+
+function reloadInlineTitle(event: EventResponse): Promise<{ value: string; revision: string }> {
+  return reloadInlineEventValue(event, (latest) => latest.title)
+}
+
+function applySavedEvent(saved: EventResponse): void {
+  eventsStore.updateCached(saved)
+  // Re-fetch so filters and sorting reflect the change without remounting the edited row.
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
 const inlineLeaderChoices = computed(() => leadersStore.choices)
@@ -762,7 +775,7 @@ function canInlineAssignEvent(event: EventResponse): boolean {
 
 async function saveInlineResponsible(event: EventResponse, leaderId: string, revision: string): Promise<void> {
   const saved = await saveAssignment(event.id, leaderId, revision)
-  eventsStore.updateCached({
+  applySavedEvent({
     ...event,
     revision: saved.event_revision,
     responsible: {
@@ -772,7 +785,6 @@ async function saveInlineResponsible(event: EventResponse, leaderId: string, rev
       status: saved.status,
     },
   })
-  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
 /** Linked invitation copies follow their source event and are not rescheduled here. */
@@ -780,17 +792,12 @@ function canInlineEditSchedule(event: EventResponse): boolean {
   return canInlineEditEvent(event) && !event.invitation_source_event_id
 }
 
-async function reloadInlineStart(event: EventResponse): Promise<{ value: string; revision: string }> {
-  const latest = await getEvent(event.id)
-  eventsStore.updateCached(latest)
-  return { value: toLocalInputValue(latest.start_at), revision: latest.revision ?? '' }
+function reloadInlineStart(event: EventResponse): Promise<{ value: string; revision: string }> {
+  return reloadInlineEventValue(event, (latest) => toLocalInputValue(latest.start_at))
 }
 
 async function saveInlineStart(event: EventResponse, value: string, revision: string): Promise<void> {
-  const saved = await saveSchedule(event, value, revision)
-  eventsStore.updateCached(saved)
-  // Re-fetch so filters and sorting reflect the new date without remounting the edited row.
-  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+  applySavedEvent(await saveSchedule(event, value, revision))
 }
 
 /** Generated holiday slots keep their category and scope; nothing here may re-home them. */
@@ -817,31 +824,26 @@ function scopeLabel(event: EventResponse): string {
     : `${district} (Bezirk)`
 }
 
-async function reloadInlineScope(
+function reloadInlineScope(
   event: EventResponse,
   field: 'category' | 'congregation',
 ): Promise<{ value: string; revision: string }> {
-  const latest = await getEvent(event.id)
-  eventsStore.updateCached(latest)
-  const value = field === 'category' ? latest.category : latest.congregation_id
-  return { value: value ?? '', revision: latest.revision ?? '' }
+  return reloadInlineEventValue(event, (latest) =>
+    field === 'category' ? (latest.category ?? '') : (latest.congregation_id ?? ''),
+  )
 }
 
 async function saveInlineCategory(event: EventResponse, value: string, revision: string): Promise<void> {
-  eventsStore.updateCached(await scopeSave.saveCategory(event, value, revision))
-  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+  applySavedEvent(await scopeSave.saveCategory(event, value, revision))
 }
 
 async function saveInlineCongregation(event: EventResponse, value: string, revision: string): Promise<void> {
-  eventsStore.updateCached(await scopeSave.saveCongregation(event, value, revision))
-  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+  applySavedEvent(await scopeSave.saveCongregation(event, value, revision))
 }
 
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
-  const saved = await updateEventInline(event.id, { title: value }, revision)
-  eventsStore.updateCached(saved)
   // Keep the edited row mounted while the shared editor completes Tab navigation.
-  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+  applySavedEvent(await updateEventInline(event.id, { title: value }, revision))
 }
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────

@@ -749,9 +749,9 @@ async function saveInlineRole(
   await refreshLeaders(districtId)
 }
 
-async function reloadInlineRole(
+async function reloadInlineLeaderRecord(
   leader: LeaderResponse,
-  congregationId: string | null,
+  extract: (latest: LeaderResponse) => { value: string | null; revision: string },
 ): Promise<{ value: string | null; revision: string }> {
   const latest = (await listLeaders(leader.district_id, canIncludeInactiveLeaders(leader.district_id)))
     .find((entry) => entry.id === leader.id)
@@ -759,8 +759,17 @@ async function reloadInlineRole(
   if (selectedDistrictId.value === leader.district_id) {
     leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
   }
-  const assignment = assignmentFor(latest, congregationId)
-  return { value: assignment?.role ?? null, revision: assignment?.revision ?? '' }
+  return extract(latest)
+}
+
+async function reloadInlineRole(
+  leader: LeaderResponse,
+  congregationId: string | null,
+): Promise<{ value: string | null; revision: string }> {
+  return reloadInlineLeaderRecord(leader, (latest) => {
+    const assignment = assignmentFor(latest, congregationId)
+    return { value: assignment?.role ?? null, revision: assignment?.revision ?? '' }
+  })
 }
 
 /** Reload the list after a mutation; a failed refresh must not turn a persisted change into an error. */
@@ -781,13 +790,10 @@ async function reloadInlineLeader(
   if (cell === 'special_role') throw new Error('Die Beauftragung gehört zur Zuordnung.')
   const field: InlineLeaderField = cell
   // Same visibility as the admin list: inactive/hidden leaders must stay reloadable after a 412.
-  const latest = (await listLeaders(leader.district_id, canIncludeInactiveLeaders(leader.district_id)))
-    .find((entry) => entry.id === leader.id)
-  if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
-  if (selectedDistrictId.value === leader.district_id) {
-    leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
-  }
-  return { value: inlineLeaderValue(latest, field), revision: latest.revision ?? '' }
+  return reloadInlineLeaderRecord(leader, (latest) => ({
+    value: inlineLeaderValue(latest, field),
+    revision: latest.revision ?? '',
+  }))
 }
 
 async function saveInlineLeader(
