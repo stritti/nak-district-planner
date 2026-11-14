@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import ClassVar
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.invitation_overwrite_request import InvitationOverwriteRequestORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.invitation import InvitationOverwriteRequest, OverwriteDecisionStatus
 from app.domain.ports.repositories import InvitationOverwriteRequestRepository
 
@@ -36,11 +37,27 @@ def _orm_to_domain(row: InvitationOverwriteRequestORM) -> InvitationOverwriteReq
     )
 
 
-class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestRepository):
+class SqlInvitationOverwriteRequestRepository(SqlRepository[InvitationOverwriteRequestORM, InvitationOverwriteRequest], InvitationOverwriteRequestRepository):
     """SQLAlchemy repository for InvitationOverwriteRequest."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    orm_type = InvitationOverwriteRequestORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "invitation_id": "invitation_id",
+        "source_event_id": "source_event_id",
+        "target_event_id": "target_event_id",
+        "proposed_title": "proposed_title",
+        "proposed_start_at": "proposed_start_at",
+        "proposed_end_at": "proposed_end_at",
+        "proposed_description": "proposed_description",
+        "proposed_category": "proposed_category",
+        "status": "status",
+        "decided_at": "decided_at",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
+
 
     async def get(self, request_id: uuid.UUID) -> InvitationOverwriteRequest | None:
         row = await self._session.get(InvitationOverwriteRequestORM, request_id)
@@ -78,27 +95,6 @@ class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestReposito
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
-    async def save(self, request: InvitationOverwriteRequest) -> None:
-        existing = await self._session.get(InvitationOverwriteRequestORM, request.id)
-        if existing is None:
-            row = InvitationOverwriteRequestORM()
-            self._session.add(row)
-        else:
-            row = existing
-        row.id = request.id
-        row.invitation_id = request.invitation_id
-        row.source_event_id = request.source_event_id
-        row.target_event_id = request.target_event_id
-        row.proposed_title = request.proposed_title
-        row.proposed_start_at = request.proposed_start_at
-        row.proposed_end_at = request.proposed_end_at
-        row.proposed_description = request.proposed_description
-        row.proposed_category = request.proposed_category
-        row.status = request.status
-        row.decided_at = request.decided_at
-        row.created_at = request.created_at
-        row.updated_at = request.updated_at
-        await self._session.flush()
 
     async def set_status(
         self,

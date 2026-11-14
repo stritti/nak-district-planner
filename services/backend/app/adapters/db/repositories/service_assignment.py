@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import ClassVar
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.planning_slot import PlanningSlotStatus
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 from app.domain.planning.conflict_result import ScheduledService
@@ -33,11 +34,22 @@ def _orm_to_domain(row: ServiceAssignmentORM) -> ServiceAssignment:
     )
 
 
-class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
+class SqlServiceAssignmentRepository(SqlRepository[ServiceAssignmentORM, ServiceAssignment], ServiceAssignmentRepository):
     """SQLAlchemy repository for ServiceAssignment."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    orm_type = ServiceAssignmentORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "event_id": "event_id",
+        "planning_slot_id": "planning_slot_id",
+        "leader_id": "leader_id",
+        "leader_name": "leader_name",
+        "status": "status",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
+
 
     async def get(self, assignment_id: uuid.UUID) -> ServiceAssignment | None:
         row = await self._session.get(ServiceAssignmentORM, assignment_id)
@@ -125,22 +137,6 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
         result = await self._session.execute(query)
         return [ScheduledService(*row) for row in result.all()]
 
-    async def save(self, assignment: ServiceAssignment) -> None:
-        existing = await self._session.get(ServiceAssignmentORM, assignment.id)
-        if existing is None:
-            row = ServiceAssignmentORM()
-            self._session.add(row)
-        else:
-            row = existing
-        row.id = assignment.id
-        row.event_id = assignment.event_id
-        row.planning_slot_id = assignment.planning_slot_id
-        row.leader_id = assignment.leader_id
-        row.leader_name = assignment.leader_name
-        row.status = assignment.status
-        row.created_at = assignment.created_at
-        row.updated_at = assignment.updated_at
-        await self._session.flush()
 
     async def delete(self, assignment_id: uuid.UUID) -> None:
         row = await self._session.get(ServiceAssignmentORM, assignment_id)

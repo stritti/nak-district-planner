@@ -8,11 +8,12 @@ from __future__ import annotations
 import uuid
 from collections.abc import Collection
 from datetime import datetime
+from typing import ClassVar
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.leader_unavailability import LeaderUnavailabilityORM
+from app.adapters.db.repository_base import SqlRepository
 from app.domain.models.leader_unavailability import LeaderUnavailability, UnavailabilityReason
 from app.domain.ports.repositories import LeaderUnavailabilityRepository
 
@@ -30,11 +31,22 @@ def _orm_to_domain(row: LeaderUnavailabilityORM) -> LeaderUnavailability:
     )
 
 
-class SqlLeaderUnavailabilityRepository(LeaderUnavailabilityRepository):
+class SqlLeaderUnavailabilityRepository(SqlRepository[LeaderUnavailabilityORM, LeaderUnavailability], LeaderUnavailabilityRepository):
     """SQLAlchemy repository for leader unavailability periods."""
 
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    orm_type = LeaderUnavailabilityORM
+    _fields: ClassVar[dict[str, str]] = {
+        "id": "id",
+        "leader_id": "leader_id",
+        "start_at": "start_at",
+        "end_at": "end_at",
+        "reason": "reason",
+        "note": "note",
+        "created_at": "created_at",
+        "updated_at": "updated_at",
+    }
+
+
 
     async def get(self, unavailability_id: uuid.UUID) -> LeaderUnavailability | None:
         row = await self._session.get(LeaderUnavailabilityORM, unavailability_id)
@@ -86,20 +98,6 @@ class SqlLeaderUnavailabilityRepository(LeaderUnavailabilityRepository):
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
 
-    async def save(self, unavailability: LeaderUnavailability) -> None:
-        row = await self._session.get(LeaderUnavailabilityORM, unavailability.id)
-        if row is None:
-            row = LeaderUnavailabilityORM()
-            self._session.add(row)
-        row.id = unavailability.id
-        row.leader_id = unavailability.leader_id
-        row.start_at = unavailability.start_at
-        row.end_at = unavailability.end_at
-        row.reason = unavailability.reason.value
-        row.note = unavailability.note
-        row.created_at = unavailability.created_at
-        row.updated_at = unavailability.updated_at
-        await self._session.flush()
 
     async def delete(self, unavailability_id: uuid.UUID) -> None:
         row = await self._session.get(LeaderUnavailabilityORM, unavailability_id)
