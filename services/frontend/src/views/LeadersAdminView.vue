@@ -611,6 +611,7 @@ import type {
 import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
+import { useCrudDelete } from '../composables/useCrudDelete'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import { useLeaderUnavailabilityActions } from '../composables/useLeaderUnavailabilityActions'
 import {
@@ -999,27 +1000,23 @@ async function doReject() {
   }
 }
 
-const pendingDeleteReg = ref<RegistrationResponse | null>(null)
+const {
+  deleteTarget: pendingDeleteReg,
+  confirmDelete: confirmDeleteReg,
+  executeDelete: executeDeleteReg,
+} = useCrudDelete<RegistrationResponse>(
+  {
+    deleteItem: (reg) => deleteRegistration(selectedDistrictId.value, reg.id),
+    onDeleted: (reg) => {
+      registrations.value = registrations.value.filter((r) => r.id !== reg.id)
+    },
+    label: (reg) => reg.name,
+    successMessage: 'Registrierung gelöscht',
+  },
+  saving,
+)
 
-function confirmDeleteReg(reg: RegistrationResponse) {
-  pendingDeleteReg.value = reg
-}
 
-async function executeDeleteReg() {
-  if (!pendingDeleteReg.value) return
-  const reg = pendingDeleteReg.value
-  saving.value = true
-  try {
-    await deleteRegistration(selectedDistrictId.value, reg.id)
-    registrations.value = registrations.value.filter((r) => r.id !== reg.id)
-    pendingDeleteReg.value = null
-    toastStore.success('Registrierung gelöscht', reg.name)
-  } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
-  } finally {
-    saving.value = false
-  }
-}
 
 // ── Sections ──────────────────────────────────────────────────────────────────
 
@@ -1366,27 +1363,22 @@ function dropAssignment(assignment: LeaderAssignment) {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 
-const pendingDeleteLeader = ref<LeaderResponse | null>(null)
-
-function confirmDelete(leader: LeaderResponse) {
-  pendingDeleteLeader.value = leader
-}
-
-async function executeDeleteLeader() {
-  if (!pendingDeleteLeader.value) return
-  const leader = pendingDeleteLeader.value
-  saving.value = true
-  try {
-    await deleteLeader(selectedDistrictId.value, leader.id)
-    leaders.value = leaders.value.filter((l) => l.id !== leader.id)
-    pendingDeleteLeader.value = null
-    toastStore.success('Amtsträger:in ausgeblendet', leader.name)
-  } catch (e) {
-    toastStore.error('Ausblenden fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
-  } finally {
-    saving.value = false
-  }
-}
+const {
+  deleteTarget: pendingDeleteLeader,
+  confirmDelete,
+  executeDelete: executeDeleteLeader,
+} = useCrudDelete<LeaderResponse>(
+  {
+    deleteItem: (leader) => deleteLeader(selectedDistrictId.value, leader.id),
+    onDeleted: (leader) => {
+      leaders.value = leaders.value.filter((l) => l.id !== leader.id)
+    },
+    label: (leader) => leader.name,
+    successMessage: 'Amtsträger:in ausgeblendet',
+    errorMessage: 'Ausblenden fehlgeschlagen',
+  },
+  saving,
+)
 
 // ── ICS Export modal ──────────────────────────────────────────────────────────
 

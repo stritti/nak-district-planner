@@ -515,6 +515,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { useCrudDelete } from '../composables/useCrudDelete'
 import { useCalendarIntegrationsStore } from '../stores/calendarIntegrations'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
@@ -625,27 +626,11 @@ function typeBadge(type: CalendarType): string {
   return map[type]
 }
 
-const deleteTarget = ref<CalendarIntegrationResponse | null>(null)
-const deleting = ref(false)
-
-function confirmDelete(item: CalendarIntegrationResponse) {
-  deleteTarget.value = item
-}
-
-async function executeDelete() {
-  if (!deleteTarget.value) return
-  const { id, name } = deleteTarget.value
-  deleting.value = true
-  try {
-    await integrationsStore.remove(id)
-    deleteTarget.value = null
-    toastStore.success('Integration gelöscht', name)
-  } catch (error) {
-    toastStore.error('Löschen fehlgeschlagen', userMessage(error, 'Unbekannter Fehler'))
-  } finally {
-    deleting.value = false
-  }
-}
+const { deleteTarget, deleting, confirmDelete, executeDelete } = useCrudDelete<CalendarIntegrationResponse>({
+  deleteItem: (item) => integrationsStore.remove(item.id),
+  label: (item) => item.name,
+  successMessage: 'Integration gelöscht',
+})
 
 const editTarget = ref<CalendarIntegrationResponse | null>(null)
 const editSaving = ref(false)

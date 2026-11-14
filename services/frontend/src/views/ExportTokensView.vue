@@ -227,6 +227,7 @@ import {
   type ExportTokenResponse,
 } from '../api/exportTokens'
 import { listCongregations, type CongregationResponse } from '../api/districts'
+import { useCrudDelete } from '../composables/useCrudDelete'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
 import { userMessage } from '../api/errors'
@@ -237,8 +238,14 @@ const toastStore = useToastStore()
 const tokens = ref<ExportTokenResponse[]>([])
 const loading = ref(false)
 const error = ref('')
-const deleteTarget = ref<ExportTokenResponse | null>(null)
-const deleting = ref(false)
+const { deleteTarget, deleting, confirmDelete, executeDelete: doDelete } = useCrudDelete<ExportTokenResponse>({
+  deleteItem: (t) => deleteExportToken(t.id),
+  onDeleted: (t) => {
+    tokens.value = tokens.value.filter((item) => item.id !== t.id)
+  },
+  label: (t) => t.label,
+  successMessage: 'Export-Token gelöscht',
+})
 const formCongregations = ref<CongregationResponse[]>([])
 
 const form = reactive({
@@ -348,25 +355,7 @@ async function saveToken() {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 
-function confirmDelete(t: ExportTokenResponse) {
-  deleteTarget.value = t
-}
 
-async function doDelete() {
-  if (!deleteTarget.value) return
-  const label = deleteTarget.value.label
-  deleting.value = true
-  try {
-    await deleteExportToken(deleteTarget.value.id)
-    tokens.value = tokens.value.filter((t) => t.id !== deleteTarget.value!.id)
-    deleteTarget.value = null
-    toastStore.success('Export-Token gelöscht', label)
-  } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', userMessage(e, 'Unbekannter Fehler'))
-  } finally {
-    deleting.value = false
-  }
-}
 
 async function loadCongregationNames() {
   try {
