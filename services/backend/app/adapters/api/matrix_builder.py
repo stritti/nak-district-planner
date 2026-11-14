@@ -169,19 +169,24 @@ def _resolve_window(
 ) -> tuple[datetime, datetime]:
     """Effective [from, to] window in UTC; a missing bound spans ``default_days``.
 
-    Raises ValueError when to_dt lies before from_dt (the router maps that to 422).
+    Raises ValueError when both bounds are given and to_dt precedes from_dt.
+    The comparison happens on the datetimes, before date normalization: two
+    bounds on the same UTC day with inverted times are an invalid range even
+    though their dates match (the router maps that to 422).
     """
+    start = _ensure_utc(from_dt) if from_dt is not None else None
+    end = _ensure_utc(to_dt) if to_dt is not None else None
+    if start is not None and end is not None and end < start:
+        raise ValueError("to_dt muss groesser oder gleich from_dt sein")
     span = timedelta(days=default_days - 1)
-    start_date = _ensure_utc(from_dt).date() if from_dt is not None else None
-    end_date = _ensure_utc(to_dt).date() if to_dt is not None else None
+    start_date = start.date() if start is not None else None
+    end_date = end.date() if end is not None else None
     if start_date is None:
         start_date = end_date - span if end_date is not None else datetime.now(UTC).date()
     if end_date is None:
         end_date = start_date + span
     effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
     effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
-    if effective_to_dt < effective_from_dt:
-        raise ValueError("to_dt muss groesser oder gleich from_dt sein")
     return effective_from_dt, effective_to_dt
 
 

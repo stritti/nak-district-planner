@@ -875,6 +875,26 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_matrix_rejects_same_day_inverted_datetime_bounds() -> None:
+    district_id = uuid.uuid4()
+    repos = _matrix_repos(district=District.create(name="D"))
+
+    with pytest.raises(HTTPException) as range_exc:
+        await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            AsyncMock(),
+            query=MatrixQuery(
+                from_dt=datetime(2030, 5, 1, 18, 0, tzinfo=UTC),
+                to_dt=datetime(2030, 5, 1, 9, 0, tzinfo=UTC),
+                group_id=None,
+            ),
+            **repos,
+        )
+    assert range_exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_get_matrix_marks_future_ineligible_leader_for_review() -> None:
     district_id = uuid.uuid4()
     congregation = Congregation.create(name="G", district_id=district_id)
