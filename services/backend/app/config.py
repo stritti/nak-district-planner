@@ -12,8 +12,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.domain.models.calendar_integration import SyncDeleteMode
-
 _NAT64_PREFIX_LENGTHS = {32, 40, 48, 56, 64, 96}
 
 
@@ -102,10 +100,8 @@ class Settings(BaseSettings):
     idp_provisioning_endpoint: str | None = None
     idp_provisioning_api_key: str | None = None
     idp_provisioning_timeout_seconds: float = 10.0
-    startup_generate_draft_services: bool = False
     use_series_generation: bool = True
     conflict_check_enabled: bool = True
-    sync_delete_mode: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
     sync_expected_duration_minutes: int = Field(default=90, ge=1)
     # Provider sync window (#465): [now - past_days, now + future_months].
     sync_window_past_days: int = Field(default=62, ge=1)

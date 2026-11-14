@@ -52,6 +52,60 @@ class TenantValidationService:
         """
         self.session = session
 
+    async def _is_superadmin(self, user_sub: str) -> bool:
+        result = await self.session.execute(
+            select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
+        )
+        return bool(result.scalar_one_or_none())
+
+    async def _validate_user_in_scope(
+        self,
+        user_sub: str,
+        scope_type: ScopeType,
+        scope_id: uuid.UUID,
+        scope_kind: str,
+        required_role: Role | None,
+    ) -> bool:
+        if await self._is_superadmin(user_sub):
+            return True
+
+        # Check user's memberships in the scope
+        result = await self.session.execute(
+            select(MembershipORM).where(
+                and_(
+                    MembershipORM.user_sub == user_sub,
+                    MembershipORM.scope_type == scope_type.value,
+                    MembershipORM.scope_id == scope_id,
+                )
+            )
+        )
+        memberships = result.scalars().all()
+
+        if not memberships:
+            raise TenantValidationError(
+                f"User {user_sub} has no membership in {scope_kind} {scope_id}",
+                {"user_sub": user_sub, f"{scope_kind}_id": str(scope_id)},
+            )
+
+        # Check required role
+        if required_role:
+            for membership in memberships:
+                # membership.role is a plain DB string — wrap in Role for comparison
+                if Role(membership.role) >= required_role:
+                    return True
+
+            raise TenantValidationError(
+                f"User {user_sub} requires role {required_role.value} in {scope_kind} {scope_id}",
+                {
+                    "user_sub": user_sub,
+                    f"{scope_kind}_id": str(scope_id),
+                    "required_role": required_role.value,
+                    "actual_roles": [m.role for m in memberships],
+                },
+            )
+
+        return True
+
     async def validate_user_in_district(
         self,
         user_sub: str,
@@ -71,51 +125,9 @@ class TenantValidationService:
         Raises:
             TenantValidationError: If validation fails.
         """
-        # Check if user is superadmin
-        result = await self.session.execute(
-            select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
+        return await self._validate_user_in_scope(
+            user_sub, ScopeType.DISTRICT, district_id, "district", required_role
         )
-        is_superadmin = result.scalar_one_or_none()
-
-        if is_superadmin:
-            return True
-
-        # Check user's memberships in the district
-        result = await self.session.execute(
-            select(MembershipORM).where(
-                and_(
-                    MembershipORM.user_sub == user_sub,
-                    MembershipORM.scope_type == ScopeType.DISTRICT.value,
-                    MembershipORM.scope_id == district_id,
-                )
-            )
-        )
-        memberships = result.scalars().all()
-
-        if not memberships:
-            raise TenantValidationError(
-                f"User {user_sub} has no membership in district {district_id}",
-                {"user_sub": user_sub, "district_id": str(district_id)},
-            )
-
-        # Check required role
-        if required_role:
-            for membership in memberships:
-                # membership.role is a plain DB string — wrap in Role for comparison
-                if Role(membership.role) >= required_role:
-                    return True
-
-            raise TenantValidationError(
-                f"User {user_sub} requires role {required_role.value} in district {district_id}",
-                {
-                    "user_sub": user_sub,
-                    "district_id": str(district_id),
-                    "required_role": required_role.value,
-                    "actual_roles": [m.role for m in memberships],
-                },
-            )
-
-        return True
 
     async def validate_user_in_congregation(
         self,
@@ -136,51 +148,9 @@ class TenantValidationService:
         Raises:
             TenantValidationError: If validation fails.
         """
-        # Check if user is superadmin
-        result = await self.session.execute(
-            select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
+        return await self._validate_user_in_scope(
+            user_sub, ScopeType.CONGREGATION, congregation_id, "congregation", required_role
         )
-        is_superadmin = result.scalar_one_or_none()
-
-        if is_superadmin:
-            return True
-
-        # Check user's memberships in the congregation
-        result = await self.session.execute(
-            select(MembershipORM).where(
-                and_(
-                    MembershipORM.user_sub == user_sub,
-                    MembershipORM.scope_type == ScopeType.CONGREGATION.value,
-                    MembershipORM.scope_id == congregation_id,
-                )
-            )
-        )
-        memberships = result.scalars().all()
-
-        if not memberships:
-            raise TenantValidationError(
-                f"User {user_sub} has no membership in congregation {congregation_id}",
-                {"user_sub": user_sub, "congregation_id": str(congregation_id)},
-            )
-
-        # Check required role
-        if required_role:
-            for membership in memberships:
-                # membership.role is a plain DB string — wrap in Role for comparison
-                if Role(membership.role) >= required_role:
-                    return True
-
-            raise TenantValidationError(
-                f"User {user_sub} requires role {required_role.value} in congregation {congregation_id}",
-                {
-                    "user_sub": user_sub,
-                    "congregation_id": str(congregation_id),
-                    "required_role": required_role.value,
-                    "actual_roles": [m.role for m in memberships],
-                },
-            )
-
-        return True
 
     async def validate_user_in_tenant(
         self,
@@ -225,13 +195,7 @@ class TenantValidationService:
         Returns:
             List of district IDs.
         """
-        # Check if user is superadmin
-        result = await self.session.execute(
-            select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
-        )
-        is_superadmin = result.scalar_one_or_none()
-
-        if is_superadmin:
+        if await self._is_superadmin(user_sub):
             # Superadmin has access to all districts
             result = await self.session.execute(select(DistrictORM.id))
             return [row[0] for row in result.all()]
@@ -263,13 +227,7 @@ class TenantValidationService:
         Returns:
             List of congregation IDs.
         """
-        # Check if user is superadmin
-        result = await self.session.execute(
-            select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
-        )
-        is_superadmin = result.scalar_one_or_none()
-
-        if is_superadmin:
+        if await self._is_superadmin(user_sub):
             # Superadmin has access to all congregations
             query = select(CongregationORM.id)
             if district_id:

@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { parseConflictError } from '../api/errors'
 import { changeAssignmentInline, type InlineAssignmentResult } from '../api/serviceAssignments'
-import { useConfirm } from './useConfirm'
+import { useWarnConflictRetry } from './useWarnConflictRetry'
 
 /**
  * Acknowledge WARN only and retry once with the original snapshot.
@@ -11,26 +10,23 @@ import { useConfirm } from './useConfirm'
  * cell unchanged; it never opens another prompt or starts a retry loop.
  */
 export function useInlineAssignmentSave() {
-  const confirm = useConfirm()
+  const retryOnWarnings = useWarnConflictRetry()
 
   return async function saveInlineAssignment(
     eventId: string,
     leaderId: string,
     revision: string,
   ): Promise<InlineAssignmentResult> {
-    try {
-      return await changeAssignmentInline(eventId, leaderId, revision)
-    } catch (cause) {
-      const conflict = parseConflictError(cause)
-      if (!conflict || conflict.blocking.length || !conflict.warnings.length) throw cause
-      const confirmed = await confirm({
+    return retryOnWarnings(
+      (acknowledged) =>
+        acknowledged
+          ? changeAssignmentInline(eventId, leaderId, revision, true)
+          : changeAssignmentInline(eventId, leaderId, revision),
+      {
         title: 'Konflikt bei der Zuordnung',
-        message: conflict.warnings.map((warning) => warning.message).join(' '),
         confirmText: 'Trotzdem zuordnen',
-        variant: 'warning',
-      })
-      if (!confirmed) throw new Error('Zuordnung abgebrochen')
-      return changeAssignmentInline(eventId, leaderId, revision, true)
-    }
+        abortMessage: 'Zuordnung abgebrochen',
+      },
+    )
   }
 }

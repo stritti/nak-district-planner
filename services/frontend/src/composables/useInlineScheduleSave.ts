@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { parseConflictError } from '../api/errors'
 import { updateEvent, type EventResponse } from '../api/events'
-import { useConfirm } from './useConfirm'
+import { useWarnConflictRetry } from './useWarnConflictRetry'
 
 const pad = (value: number) => String(value).padStart(2, '0')
 
@@ -20,7 +19,7 @@ export function toLocalInputValue(iso: string): string {
  * failure propagate to the cell unchanged, never as a blind retry.
  */
 export function useInlineScheduleSave() {
-  const confirm = useConfirm()
+  const retryOnWarnings = useWarnConflictRetry()
 
   return async function saveInlineSchedule(
     event: EventResponse,
@@ -34,19 +33,14 @@ export function useInlineScheduleSave() {
       start_at: start.toISOString(),
       end_at: new Date(start.getTime() + duration).toISOString(),
     }
-    try {
-      return await updateEvent(event.id, payload, revision)
-    } catch (cause) {
-      const conflict = parseConflictError(cause)
-      if (!conflict || conflict.blocking.length || !conflict.warnings.length) throw cause
-      const confirmed = await confirm({
+    return retryOnWarnings(
+      (acknowledged) =>
+        updateEvent(event.id, acknowledged ? { ...payload, confirm_warnings: true } : payload, revision),
+      {
         title: 'Konflikt bei der Terminänderung',
-        message: conflict.warnings.map((warning) => warning.message).join(' '),
         confirmText: 'Trotzdem ändern',
-        variant: 'warning',
-      })
-      if (!confirmed) throw new Error('Änderung abgebrochen')
-      return updateEvent(event.id, { ...payload, confirm_warnings: true }, revision)
-    }
+        abortMessage: 'Änderung abgebrochen',
+      },
+    )
   }
 }
