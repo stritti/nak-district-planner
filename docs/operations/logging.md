@@ -1,5 +1,9 @@
 # Logging
 
+::: warning Geplant
+Dieses Konzept beschreibt den Soll-Zustand. Strukturiertes JSON-Logging, `LOG_LEVEL`/`LOG_FORMAT`, die durchgängige `request_id` und der Frontend-Logger sind noch nicht umgesetzt; die Umsetzung läuft über den OpenSpec-Change `application-logging-concept`. Bis dahin schreibt das Backend Textlogs auf `INFO`, und nur die ICS-Token-Redaction ist bereits aktiv.
+:::
+
 Dieses Dokument ist die maßgebliche Quelle für das Logging-Konzept des NAK District Planner. Der Umsetzungsstand wird über den OpenSpec-Change `application-logging-concept` in [`openspec/changes`](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes) nachverfolgt; das verbindliche Soll-Verhalten steht in der OpenSpec-Capability `logging`.
 
 ## Zweck und Abgrenzung
@@ -19,8 +23,8 @@ Regel: Was in `audit_logs` gehört (wer hat was geändert oder wurde abgelehnt),
 
 | Pipeline | Quelle | Senke |
 | --- | --- | --- |
-| Backend-API | uvicorn (Access/Error) und Anwendungslogger (`app.*`) | stdout des Containers (`docker compose logs backend`) |
-| Celery Worker und Beat | Celery-Logger und Anwendungslogger | stdout der Container (`--loglevel` aus Compose) |
+| Backend-API | eigenes Access-Log (`app.access`), uvicorn-Error-Log und Anwendungslogger (`app.*`) | stdout des Containers (`docker compose logs backend`) |
+| Celery Worker und Beat | Celery-Logger und Anwendungslogger, gleiches Format wie das Backend | stdout der Container (`--loglevel` aus Compose, an `LOG_LEVEL` angeglichen) |
 | Frontend (Browser) | `console.*` bzw. zentrale Frontend-Logger-Funktion | Browser-Konsole; in Produktion nur Fehler, nie personenbezogene Daten |
 | nginx (Frontend- und Backend-Proxy) | Access-/Error-Log | definierte Log-Dateien mit Redaction, siehe Runbook |
 
@@ -45,11 +49,14 @@ Pflichtfelder jedes JSON-Logeintrags:
 | `version` | `APP_VERSION` des Deployments |
 | `request_id` | Korrelations-ID, falls der Eintrag im Request-Kontext entsteht |
 | `task_id` | Celery-Task-ID, falls der Eintrag in einem Task entsteht |
+| `task_name` | Name des Celery-Tasks, falls der Eintrag in einem Task entsteht |
 | `exception` | bei Fehlern: Typ, Meldung und redigierter Stacktrace |
+
+Access-Log-Einträge (Logger `app.access`) enthalten zusätzlich `method`, `path` (redigiert, ohne Query-String), `status` und `duration_ms`. Das uvicorn-eigene Access-Log ist abgeschaltet, weil es keine Dauer kennt.
 
 ## Log-Level
 
-Der Level ist über `LOG_LEVEL` konfigurierbar (Default: `INFO`). `LOG_LEVEL=DEBUG` in Produktion (`APP_ENV=production`) wird mit einer Warnung abgelehnt und auf `INFO` zurückgesetzt.
+Der Level ist über `LOG_LEVEL` konfigurierbar (Default: `INFO`). `LOG_LEVEL=DEBUG` in Produktion (`APP_ENV=production`) wird mit einer Warnung abgelehnt und auf `INFO` zurückgesetzt; der Start wird dabei bewusst nicht abgebrochen. Ungültige Werte für `LOG_LEVEL` oder `LOG_FORMAT` verhindern dagegen den Start.
 
 Richtlinien:
 
@@ -57,20 +64,23 @@ Richtlinien:
 - **WARNING:** unerwarteter, aber beherrschter Zustand (z. B. Retry, Fallback, Rate-Limiter ohne erreichbares Valkey).
 - **INFO:** Lebenszyklus-Ereignisse (Start, Shutdown, erfolgreiche OIDC-Discovery, Schema-Prüfung) — nicht pro Request.
 - **DEBUG:** nur in Entwicklung; niemals Request-Payloads.
-- Health-Endpunkte (`/health`, `/api/health`) und abgewiesene Rate-Limit-Requests werden nicht auf INFO geloggt.
+- Health-Endpunkte (`/health`, `/api/health`) und vom Rate-Limiter abgewiesene Requests (429) erzeugen keine Access-Log-Zeile auf INFO, nur auf DEBUG.
 
 ## Secrets und personenbezogene Daten
 
 - Die process-weite Redaction (`install_log_redaction()`, siehe `app/adapters/api/log_redaction.py`) bleibt auf **allen** Handlern installiert und filtert ICS-Export-Tokens aus Nachricht, Traceback und Stack — auch in Dritt-Loggern wie `uvicorn.access`.
+- Die Redaction gilt für beide Formate (JSON und Text) und auch für die Celery-Logger.
 - Es werden **nie** geloggt: Passwörter, Tokens, Credentials, E-Mail-Adressen, Namen, vollständige Request-Payloads und URLs mit Query-Strings. Request-Pfade nur über `redact_secret_path()`.
+- Der Frontend-Logger maskiert Werte von Schlüsseln, die `token`, `password`, `secret`, `credential`, `email` oder `name` enthalten (auch verschachtelt), als `[redacted]`.
 - Credential-Spalten werden ausschließlich in `audit_logs` unter `changes.redacted_fields` namentlich geführt (OpenSpec `audit-logging`).
 - Dieselben Regeln gelten für OTel-Span-Attribute und Metrik-Labels (siehe Change `external-ics-proxy-redaction`).
 
 ## Korrelation
 
-- Jeder HTTP-Request erhält genau eine `request_id` (UUID). Ein vom Client gesendeter `X-Request-ID`-Header wird nur von Peers aus `TRUSTED_PROXIES` übernommen (gleiche Vertrauensregel wie die Client-IP, OpenSpec `request-identity`), sonst wird eine neue ID generiert.
+- Jeder HTTP-Request erhält genau eine `request_id`. Der Frontend-nginx erzeugt sie für jeden Request selbst (`$request_id`) und überschreibt einen vom Browser oder vom externen TLS-Proxy mitgeschickten `X-Request-ID`-Header; Clients können die ID also nicht wählen.
+- Das Backend übernimmt `X-Request-ID` nur von Peers aus `TRUSTED_PROXIES` (gleiche Vertrauensregel wie die Client-IP, OpenSpec `request-identity`) und nur im Format `[A-Za-z0-9-]`, höchstens 64 Zeichen. Sonst, etwa bei direktem Zugriff auf Port 8000, wird eine neue UUID erzeugt.
 - Die `request_id` steht in jedem Log-Eintrag des Requests (über einen `logging.Filter` mit `contextvars`), im Audit-Eintrag (`audit_logs.request_id`) und wird als OTel-Span-Attribut gesetzt.
-- Celery-Tasks loggen `task_id` und `task_name`; Beat-Läufe sind über den Service-Namen `beat` identifizierbar.
+- Celery-Tasks loggen `task_id` und `task_name`; Worker- und Beat-Zeilen sind über `service=worker` bzw. `service=beat` unterscheidbar.
 
 ## Aufbewahrung, Zugriff und Auswertung
 
@@ -80,7 +90,8 @@ Richtlinien:
 
 ## Betrieb und Alarmierung
 
-- Fehlgeschlagene Requests (5xx), Audit-Persistenzfehler und abgelehnte Requests werden über bestehende Zähler erfasst und zusätzlich als ERROR geloggt — ohne Payload-Daten (OpenSpec `audit-logging`).
+- Fehlgeschlagene Requests (5xx) und Audit-Persistenzfehler werden als ERROR geloggt, Audit-Persistenzfehler zusätzlich gezählt — ohne Payload-Daten (OpenSpec `audit-logging`).
+- Abgelehnte Requests (403) sind kein Fehler der Anwendung: Sie werden in `audit_logs` (`ACCESS_DENIED`) nachgewiesen und erscheinen im Anwendungslog nur als normale Access-Log-Zeile, nicht als ERROR.
 - `nakctl check all` und `nakctl logs analyze --fail-on-errors` sind die Standard-Prüfungen für Log-Fehler (siehe Runbook).
 
 ## Non-Goals
