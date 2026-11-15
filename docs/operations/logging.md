@@ -60,7 +60,7 @@ Richtlinien:
 - **WARNING:** unerwarteter, aber beherrschter Zustand (z. B. Retry, Fallback, Rate-Limiter ohne erreichbares Valkey).
 - **INFO:** Lebenszyklus-Ereignisse (Start, Shutdown, erfolgreiche OIDC-Discovery, Schema-Prüfung) — nicht pro Request.
 - **DEBUG:** nur in Entwicklung; niemals Request-Payloads.
-- Health-Endpunkte (`/health`, `/api/health`) und vom Rate-Limiter abgewiesene Requests (429) erzeugen keine Access-Log-Zeile auf INFO, nur auf DEBUG.
+- Health-Endpunkte (`/health`, `/api/health`) und vom Rate-Limiter abgewiesene Requests (429) erzeugen keine Access-Log-Zeile auf INFO, nur auf DEBUG. Ein fehlschlagender Health-Check (5xx, z. B. Datenbank oder Valkey nicht erreichbar) wird dagegen als ERROR geloggt.
 
 ## Secrets und personenbezogene Daten
 

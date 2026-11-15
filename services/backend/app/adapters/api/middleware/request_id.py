@@ -82,10 +82,11 @@ class RequestIdMiddleware:
         # scope["path"] is URL-decoded: quote it again (as uvicorn's access log
         # does) so an encoded newline cannot forge extra log lines.
         path = quote(redact_secret_path(scope.get("path", "")), safe="/{}")
-        if path in _QUIET_PATHS or status == 429:
-            level = logging.DEBUG
-        elif status >= 500:
+        # 5xx first: a failing health probe (database or Valkey down) must stay visible.
+        if status >= 500:
             level = logging.ERROR
+        elif path in _QUIET_PATHS or status == 429:
+            level = logging.DEBUG
         else:
             level = logging.INFO
         if not access_logger.isEnabledFor(level):

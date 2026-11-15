@@ -99,6 +99,10 @@ def _app() -> FastAPI:
     async def health() -> dict:
         return {"ok": True}
 
+    @app.get("/health")
+    async def health_down() -> JSONResponse:
+        return JSONResponse({"db": "unavailable"}, status_code=503)
+
     @app.get("/limited")
     async def limited() -> JSONResponse:
         return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
@@ -169,6 +173,14 @@ def test_health_and_rate_limited_requests_stay_off_info(caplog, path: str) -> No
         client.get(path)
     (access,) = _access(caplog)
     assert access.levelno == logging.DEBUG
+
+
+def test_failing_health_probe_is_logged_as_error(caplog) -> None:
+    caplog.set_level(logging.INFO)
+    with TestClient(_app(), client=NGINX_PEER) as client:
+        assert client.get("/health").status_code == 503
+    (access,) = _access(caplog)
+    assert access.levelno == logging.ERROR
 
 
 def test_access_log_skipped_when_level_disabled(caplog) -> None:

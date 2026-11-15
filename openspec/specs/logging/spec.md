@@ -77,11 +77,15 @@ Celery worker and beat SHALL use the same format and level configuration as the 
 - **THEN** the line contains `service=beat` and uses the backend's format
 
 ### Requirement: Access log format and health-endpoint exemption
-The backend SHALL write one access-log record per HTTP request from its own middleware (the uvicorn access log is disabled) with method, redacted path, status code, duration in milliseconds and `request_id`. Requests to `/health` and `/api/health` and requests rejected by the rate limiter (429) SHALL NOT produce access-log records at `INFO` level.
+The backend SHALL write one access-log record per HTTP request from its own middleware (the uvicorn access log is disabled) with method, redacted path, status code, duration in milliseconds and `request_id`. Successful requests to `/health` and `/api/health` and requests rejected by the rate limiter (429) SHALL NOT produce access-log records at `INFO` level; any 5xx response SHALL be logged at `ERROR`.
 
 #### Scenario: Health probe stays quiet
 - **WHEN** `/api/health` is polled every 30 seconds
 - **THEN** no access-log line is emitted at `INFO`
+
+#### Scenario: Failing health probe stays visible
+- **WHEN** `/health` answers 503 because the database is unreachable
+- **THEN** an access-log line is emitted at `ERROR`
 
 #### Scenario: Access line carries no secret path
 - **WHEN** the ICS export feed is requested
