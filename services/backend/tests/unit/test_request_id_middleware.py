@@ -153,6 +153,15 @@ def test_access_line_has_redacted_path_without_query(caplog) -> None:
     assert "?" not in access.getMessage()
 
 
+def test_encoded_control_characters_cannot_forge_log_lines(caplog) -> None:
+    caplog.set_level(logging.INFO)
+    with TestClient(_app(), client=UNTRUSTED_PEER) as client:
+        client.get("/api/not-found%0AERROR%20forged-entry%0D")
+    (access,) = _access(caplog)
+    assert "\n" not in access.getMessage() and "\r" not in access.getMessage()
+    assert access.path == "/api/not-found%0AERROR%20forged-entry%0D"
+
+
 @pytest.mark.parametrize("path", ["/api/health", "/limited"])
 def test_health_and_rate_limited_requests_stay_off_info(caplog, path: str) -> None:
     caplog.set_level(logging.DEBUG)

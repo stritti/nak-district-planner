@@ -16,6 +16,7 @@ import logging
 import re
 import time
 import uuid
+from urllib.parse import quote
 
 from opentelemetry import trace
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -78,7 +79,9 @@ class RequestIdMiddleware:
 
     @staticmethod
     def _log_access(scope: Scope, status: int, duration_ms: float) -> None:
-        path = redact_secret_path(scope.get("path", ""))
+        # scope["path"] is URL-decoded: quote it again (as uvicorn's access log
+        # does) so an encoded newline cannot forge extra log lines.
+        path = quote(redact_secret_path(scope.get("path", "")), safe="/{}")
         if path in _QUIET_PATHS or status == 429:
             level = logging.DEBUG
         elif status >= 500:
