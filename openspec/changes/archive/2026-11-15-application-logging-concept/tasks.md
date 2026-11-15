@@ -32,4 +32,4 @@
 - [x] 6.2 Register the page in the VitePress sidebar (`docs/.vitepress/config.mts`) and in `docs/documentation-map.md`.
 - [x] 6.3 Add cross-references to the logging concept in `docs/operations/production-runbook.md`, `docs/operations/opentelemetry.md` and `docs/operations/admin-scripts.md` (`nakctl logs`); document `X-Request-ID` in `docs/security/audit-logging.md`.
 - [x] 6.4 Remove the "planned" status note from `docs/operations/logging.md` once the implementation is merged.
-- [ ] 6.5 Archive the change (`openspec archive application-logging-concept`), which creates `openspec/specs/logging` and applies the `request-identity` and `audit-logging` deltas to the baseline.
+- [x] 6.5 Archive the change (`openspec archive application-logging-concept`), which creates `openspec/specs/logging` and applies the `request-identity` and `audit-logging` deltas to the baseline.
