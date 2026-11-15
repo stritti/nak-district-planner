@@ -56,8 +56,8 @@ class RedactSecretPathsFilter(logging.Filter):
 
 
 def install_log_redaction() -> None:
-    """Attach the filter to every handler of the root and uvicorn loggers (idempotent)."""
-    for name in ("", "uvicorn", "uvicorn.access", "uvicorn.error"):
+    """Attach the filter to every handler of the root, uvicorn and Celery loggers (idempotent)."""
+    for name in ("", "uvicorn", "uvicorn.access", "uvicorn.error", "celery", "celery.task"):
         for handler in logging.getLogger(name).handlers:
             if not any(isinstance(f, RedactSecretPathsFilter) for f in handler.filters):
                 handler.addFilter(RedactSecretPathsFilter())

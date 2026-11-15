@@ -34,4 +34,4 @@ USER 1000
 
 # Client IP resolution is done once in app/adapters/api/client_ip.py
 # (TRUSTED_PROXIES); uvicorn must not rewrite request.client from headers.
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-access-log"]

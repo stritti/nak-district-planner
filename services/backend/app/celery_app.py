@@ -5,6 +5,7 @@
 
 import asyncio
 import logging
+import sys
 
 from celery import Celery, signals
 from celery.schedules import crontab, timedelta
@@ -15,6 +16,7 @@ from sqlalchemy.pool import NullPool
 from app.adapters.db.schema_version import SchemaVersionError, assert_database_schema_current
 from app.adapters.db.session import engine
 from app.config import production_guard, settings
+from app.logging_config import setup_logging, task_id_var, task_name_var
 from app.telemetry import setup_telemetry
 
 celery = Celery(
@@ -88,6 +90,31 @@ async def assert_legacy_broker_drained(db_engine) -> None:
                 "Legacy SQL Celery broker has queued messages: drain the previous "
                 "worker before switching to Valkey (see production runbook)."
             )
+
+
+def _celery_service(argv: list[str] | None = None) -> str:
+    """``beat`` when started as ``celery … beat``, otherwise ``worker``."""
+    return "beat" if "beat" in (argv if argv is not None else sys.argv) else "worker"
+
+
+@signals.setup_logging.connect
+def configure_celery_logging(**_kwargs) -> None:
+    """Use the application's logging setup; a connected receiver stops Celery
+    from installing its own root-logger configuration (worker_hijack_root_logger).
+    """
+    setup_logging(service=_celery_service())
+
+
+@signals.task_prerun.connect
+def bind_task_log_context(task_id=None, task=None, **_kwargs) -> None:
+    task_id_var.set(task_id)
+    task_name_var.set(getattr(task, "name", None))
+
+
+@signals.task_postrun.connect
+def clear_task_log_context(**_kwargs) -> None:
+    task_id_var.set(None)
+    task_name_var.set(None)
 
 
 @signals.worker_init.connect

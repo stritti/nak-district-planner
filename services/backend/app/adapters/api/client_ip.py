@@ -27,14 +27,21 @@ def _parse_ip(value: str | None) -> ipaddress.IPv4Address | ipaddress.IPv6Addres
         return None
 
 
+def is_trusted_proxy(peer: str | None) -> bool:
+    """Whether the TCP peer address lies in one of the TRUSTED_PROXIES networks."""
+    peer_ip = _parse_ip(peer)
+    return peer_ip is not None and any(
+        peer_ip in net for net in _networks(settings.trusted_proxies)
+    )
+
+
 def get_client_ip(request: Request) -> str | None:
     """Return the TCP peer, or nginx's X-Real-IP when the peer is a trusted proxy.
 
     X-Forwarded-For is never read: its leftmost entries are client-controlled.
     """
     peer = request.client.host if request.client else None
-    peer_ip = _parse_ip(peer)
-    if peer_ip is not None and any(peer_ip in net for net in _networks(settings.trusted_proxies)):
+    if is_trusted_proxy(peer):
         real_ip = _parse_ip(request.headers.get("x-real-ip"))
         if real_ip is not None:
             return str(real_ip)

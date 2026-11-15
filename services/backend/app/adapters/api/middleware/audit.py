@@ -31,6 +31,7 @@ from app.application.audit_service import (
 )
 from app.audit_request import begin_request_audit, end_request_audit
 from app.domain.models.audit_log import AuditLogCreate
+from app.logging_config import current_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
         Returns:
             HTTP response.
         """
-        # Generate request ID
-        request_id = str(uuid.uuid4())
+        # Shared with the application log records (RequestIdMiddleware).
+        request_id = current_request_id() or str(uuid.uuid4())
 
         # Track start time
         start_time = time.time()

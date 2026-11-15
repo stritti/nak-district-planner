@@ -4,6 +4,7 @@
 import type { OIDCToken, OIDCUser } from './oidcTypes'
 import { identityFromTokenExchange, isValidTokenExchangeResponse } from './oidcToken'
 import { getCurrentCSRFHeaders } from './useCSRF'
+import { logger } from '../utils/logger'
 
 export const REFRESH_TIMEOUT_MS = 35_000
 export const CROSS_TAB_WAIT_TIMEOUT_MS = 40_000
@@ -169,7 +170,7 @@ export async function runRefreshOperation(options: {
       completedUser = nextUser
       return true
     } catch (error) {
-      console.error('OIDC refresh failed', error)
+      logger.error('OIDC refresh failed', error)
       failClosed()
       return false
     } finally {
