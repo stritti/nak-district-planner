@@ -199,6 +199,14 @@ bun run docs:dev                     # Entwicklungs-Server unter http://localhos
 bun run docs:build                   # Dokumentation bauen
 ```
 
+#### Abhängigkeiten gegen OSV prüfen (osv-scanner)
+
+Alle Lockfiles (`services/backend/uv.lock`, `services/frontend/bun.lock` und das Root-`bun.lock` der Dokumentation) lassen sich lokal gegen die [OSV-Datenbank](https://osv.dev/) scannen. Derselbe Scan läuft in CI als Check `OSV Dependency Scan (osv-scanner)` und meldet Funde zusätzlich in GitHub Code Scanning:
+
+```bash
+make osv-scan
+```
+
 ---
 
 ### 7. Stack stoppen
