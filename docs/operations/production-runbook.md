@@ -296,6 +296,8 @@ Mindestens ueberwachen:
 - Rate-Limiter-Fallbacks
 - Backup-/Restore-Fehler
 
+Format, Level (`LOG_LEVEL`, `LOG_FORMAT`) und Korrelation der Anwendungslogs beschreibt das [Logging-Konzept](/operations/logging): Backend, Worker und Beat schreiben in Produktion JSON-Zeilen auf stdout, jede Zeile eines Requests traegt dessen `request_id`.
+
 `scripts/ops/nakctl check all` prueft Zustand, Zertifikate, Platz, Secrets und Backup-Alter in einem Lauf, `scripts/ops/nakctl logs analyze --fail-on-errors` wertet die Logs redigiert aus; beide eignen sich fuer Cron ([Admin-Skripte](/operations/admin-scripts#cron-beispiel)).
 
 ### 6.1 Rate-Limiter-Fallback

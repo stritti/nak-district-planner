@@ -12,10 +12,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.adapters.api import deps
-from app.adapters.api.log_redaction import install_log_redaction
 from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
+from app.adapters.api.middleware.request_id import RequestIdMiddleware
 from app.adapters.api.middleware.tenant import TenantMiddleware
 from app.adapters.api.routers import (
     auth,
@@ -51,23 +51,15 @@ from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
+from app.logging_config import setup_logging
 from app.telemetry import setup_telemetry
 
 logger = logging.getLogger(__name__)
 
 
-def configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-        force=True,
-    )
-    install_log_redaction()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    configure_logging()
+    setup_logging(service="backend")
 
     try:
         production_guard(settings)
@@ -184,16 +176,21 @@ app.add_middleware(
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 
+# Outermost: binds request_id for every inner middleware and writes the access log.
+app.add_middleware(RequestIdMiddleware)
+
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     # Never bypass the process-wide secret-path redaction on log handlers.
     # Pass the caught exception explicitly: a registered handler may run outside
     # the original except block, where sys.exc_info() is no longer available.
+    # This handler runs outside RequestIdMiddleware; take the ID from request.state.
     logger.error(
         "Unhandled request exception (%s)",
         type(exc).__name__,
         exc_info=(type(exc), exc, exc.__traceback__),
+        extra={"request_id": getattr(request.state, "request_id", None)},
     )
     detail = str(exc) if settings.app_env == "development" else "Internal Server Error"
     return JSONResponse(status_code=500, content={"detail": detail})

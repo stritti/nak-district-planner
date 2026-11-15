@@ -41,8 +41,8 @@ New module `app/logging_config.py` (stdlib `logging` only, no new dependency):
 ### uvicorn and Celery wiring
 
 - uvicorn's access logger has no request duration, so it is disabled (`--no-access-log` in the Dockerfile `CMD` and the backend command of `docker-compose.override.yml`) and `RequestIdMiddleware` writes the access record itself on logger `app.access`: method, `redact_secret_path(path)` without query string, status, `duration_ms`, `request_id`. `/health`, `/api/health` and 429 responses from the rate limiter are logged at `DEBUG` only. `setup_logging` routes `uvicorn` and `uvicorn.error` to the shared handler.
-- `app/celery_app.py`: connect `celery.signals.setup_logging` — when any receiver is connected, Celery skips its own root-logger configuration (`worker_hijack_root_logger`), so the app's format survives. The receiver calls `setup_logging(service="beat")` when started as `celery beat` and `setup_logging(service="worker")` otherwise (detected from the signal's `loglevel`/argv or a `CELERY_SERVICE` env var set in compose). The existing `worker_init`/`beat_init` receivers stay for the schema check.
-- `task_prerun` sets `task_id`/`task_name` into a context var, `task_postrun` resets it; the logging filter copies them onto the record. Compose `--loglevel` is kept aligned with `LOG_LEVEL`.
+- `app/celery_app.py`: connect `celery.signals.setup_logging` — when any receiver is connected, Celery skips its own root-logger configuration (`worker_hijack_root_logger`), so the app's format survives. The receiver calls `setup_logging(service="beat")` when started as `celery beat` and `setup_logging(service="worker")` otherwise (detected from `sys.argv`). The existing `worker_init`/`beat_init` receivers stay for the schema check.
+- `task_prerun` sets `task_id`/`task_name` into a context var, `task_postrun` resets it; the logging filter copies them onto the record. Because the receiver configures the root logger, Celery's `--loglevel` from compose no longer applies; `LOG_LEVEL` is the single level setting.
 
 ### Frontend
 

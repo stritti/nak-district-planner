@@ -48,6 +48,7 @@ from app.adapters.db.orm_models.recurring_event import (
 )
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.audit_request import mark_domain_audit
+from app.logging_config import current_request_id
 from app.tenant import TenantContext
 
 
@@ -291,6 +292,7 @@ def _audit_row(session: Session, entry: AuditEntry, now: datetime) -> dict[str, 
         "created_at": now,
         "user_sub": TenantContext.get_user_sub(),
         "user_roles": TenantContext.get_user_roles(),
+        "request_id": current_request_id(),
         "action": entry.action,
         "resource_type": entry.resource.resource_type,
         "resource_id": entry.row.id,
@@ -335,6 +337,7 @@ def bulk_delete_audit_row(
         "created_at": now,
         "user_sub": TenantContext.get_user_sub(),
         "user_roles": TenantContext.get_user_roles(),
+        "request_id": current_request_id(),
         "action": AuditAction.BULK_OPERATION,
         "resource_type": resource_type,
         "status": AuditStatus.SUCCESS,
@@ -369,6 +372,7 @@ def statement_audit_row(
         "created_at": now,
         "user_sub": TenantContext.get_user_sub(),
         "user_roles": TenantContext.get_user_roles(),
+        "request_id": current_request_id(),
         "action": action,
         "resource_type": resource_type,
         "resource_id": resource_id,

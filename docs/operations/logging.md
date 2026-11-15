@@ -1,10 +1,6 @@
 # Logging
 
-::: warning Geplant
-Dieses Konzept beschreibt den Soll-Zustand. Strukturiertes JSON-Logging, `LOG_LEVEL`/`LOG_FORMAT`, die durchgängige `request_id` und der Frontend-Logger sind noch nicht umgesetzt; die Umsetzung läuft über den OpenSpec-Change `application-logging-concept`. Bis dahin schreibt das Backend Textlogs auf `INFO`, und nur die ICS-Token-Redaction ist bereits aktiv.
-:::
-
-Dieses Dokument ist die maßgebliche Quelle für das Logging-Konzept des NAK District Planner. Der Umsetzungsstand wird über den OpenSpec-Change `application-logging-concept` in [`openspec/changes`](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes) nachverfolgt; das verbindliche Soll-Verhalten steht in der OpenSpec-Capability `logging`.
+Dieses Dokument ist die maßgebliche Quelle für das Logging-Konzept des NAK District Planner. Das verbindliche Verhalten steht in der OpenSpec-Capability `logging` (eingeführt mit dem Change `application-logging-concept`); die Umsetzung liegt in `app/logging_config.py`, `app/adapters/api/middleware/request_id.py` und `services/frontend/src/utils/logger.ts`.
 
 ## Zweck und Abgrenzung
 
@@ -24,7 +20,7 @@ Regel: Was in `audit_logs` gehört (wer hat was geändert oder wurde abgelehnt),
 | Pipeline | Quelle | Senke |
 | --- | --- | --- |
 | Backend-API | eigenes Access-Log (`app.access`), uvicorn-Error-Log und Anwendungslogger (`app.*`) | stdout des Containers (`docker compose logs backend`) |
-| Celery Worker und Beat | Celery-Logger und Anwendungslogger, gleiches Format wie das Backend | stdout der Container (`--loglevel` aus Compose, an `LOG_LEVEL` angeglichen) |
+| Celery Worker und Beat | Celery-Logger und Anwendungslogger, gleiches Format wie das Backend | stdout der Container; Level aus `LOG_LEVEL` (das `--loglevel` in Compose wird dabei nicht verwendet) |
 | Frontend (Browser) | `console.*` bzw. zentrale Frontend-Logger-Funktion | Browser-Konsole; in Produktion nur Fehler, nie personenbezogene Daten |
 | nginx (Frontend- und Backend-Proxy) | Access-/Error-Log | definierte Log-Dateien mit Redaction, siehe Runbook |
 
@@ -90,7 +86,7 @@ Richtlinien:
 
 ## Betrieb und Alarmierung
 
-- Fehlgeschlagene Requests (5xx) und Audit-Persistenzfehler werden als ERROR geloggt, Audit-Persistenzfehler zusätzlich gezählt — ohne Payload-Daten (OpenSpec `audit-logging`).
+- Fehlgeschlagene Requests (5xx) erscheinen als Access-Log-Zeile auf ERROR, Audit-Persistenzfehler werden als ERROR geloggt, Audit-Persistenzfehler zusätzlich gezählt — ohne Payload-Daten (OpenSpec `audit-logging`).
 - Abgelehnte Requests (403) sind kein Fehler der Anwendung: Sie werden in `audit_logs` (`ACCESS_DENIED`) nachgewiesen und erscheinen im Anwendungslog nur als normale Access-Log-Zeile, nicht als ERROR.
 - `nakctl check all` und `nakctl logs analyze --fail-on-errors` sind die Standard-Prüfungen für Log-Fehler (siehe Runbook).
 

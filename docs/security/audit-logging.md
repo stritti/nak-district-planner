@@ -144,7 +144,7 @@ class AuditMiddleware:
 **Features:**
 
 - Automatic audit logging for all state-changing requests
-- Request ID generation for tracing
+- Request ID shared with the application logs: `RequestIdMiddleware` (outermost) assigns one `request_id` per request, and both the HTTP and the domain audit entries store it in `audit_logs.request_id`. `X-Request-ID` is accepted only from `TRUSTED_PROXIES` and only as `[A-Za-z0-9-]{1,64}`; the frontend nginx always sets it to its own `$request_id`. See [Logging](/operations/logging#korrelation).
 - Error handling and failed attempt logging
 - Configurable exemptions
 

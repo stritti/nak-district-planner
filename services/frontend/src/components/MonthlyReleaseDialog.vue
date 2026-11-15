@@ -67,6 +67,7 @@ import { computed, ref, watch } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { bulkUpdateApprovalStatus, listEvents } from '../api/events'
 import type { EventResponse } from '../api/events'
+import { logger } from '../utils/logger'
 
 const props = defineProps<{
   open: boolean
@@ -155,7 +156,7 @@ async function confirmRelease() {
     emit('released', res.updated_count)
   } catch (e) {
     // error handling - could show toast
-    console.error('Freigabe fehlgeschlagen:', e)
+    logger.error('Freigabe fehlgeschlagen:', e)
   } finally {
     submitting.value = false
   }

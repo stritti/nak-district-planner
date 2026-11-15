@@ -31,6 +31,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useOIDC } from '../composables/useOIDC'
 import { useAuthStore } from '../stores/auth'
+import { logger } from '../utils/logger'
 
 const router = useRouter()
 const route = useRoute()
@@ -90,7 +91,7 @@ async function handleCallback() {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
     error.value = errorMsg
-    console.error('Auth callback error:', errorMsg, err)
+    logger.error('Auth callback error:', errorMsg, err)
   } finally {
     loading.value = false
   }

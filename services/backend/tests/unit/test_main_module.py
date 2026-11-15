@@ -10,10 +10,6 @@ import pytest
 from app import main
 
 
-def test_configure_logging_runs() -> None:
-    main.configure_logging()
-
-
 @pytest.mark.asyncio
 async def test_health_endpoint() -> None:
     out = await main.health()

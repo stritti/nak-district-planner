@@ -60,6 +60,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOIDC } from '../composables/useOIDC'
 import ContextualHelp from '../components/ContextualHelp.vue'
+import { logger } from '../utils/logger'
 
 const router = useRouter()
 const oidc = useOIDC(router)
@@ -74,7 +75,7 @@ async function handleLogin() {
     window.location.href = authUrl
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
-    console.error('Login error:', err)
+    logger.error('Login error:', err)
   } finally {
     isLoading.value = false
   }
@@ -86,7 +87,7 @@ async function loadDiscovery() {
     await oidc.loadDiscovery()
   } catch (err) {
     error.value = 'OIDC Discovery fehlgeschlagen. Bitte versuchen Sie es später.'
-    console.error('Discovery error:', err)
+    logger.error('Discovery error:', err)
   } finally {
     isLoading.value = false
   }
