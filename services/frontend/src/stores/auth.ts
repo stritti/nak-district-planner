@@ -11,6 +11,7 @@
 
 import { clearSessionViewSettings, setSessionSettingsIdentity } from '../composables/useSessionViewSettings'
 import { defineStore } from 'pinia'
+import { logger } from '../utils/logger'
 import { ref, computed } from 'vue'
 import type { OIDCToken, OIDCUser } from '../composables/oidcTypes'
 import { getAccessContext, getCurrentUser, type MembershipAccess } from '../api/auth'
@@ -87,7 +88,7 @@ export const useAuthStore = defineStore(
         accessStatus.value = 'PENDING_APPROVAL'
         memberships.value = []
         pendingRegistrationsCount.value = 0
-        console.warn('Unable to refresh current user flags', error)
+        logger.warn('Unable to refresh current user flags', error)
       }
     }
 
