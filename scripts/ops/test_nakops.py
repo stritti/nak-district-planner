@@ -120,6 +120,28 @@ class AnalyzeLogsTest(unittest.TestCase):
         self.assertEqual(data["errors"], 5)
         self.assertNotIn("topsecret", out)
 
+    def test_json_lines_records(self) -> None:
+        lines = "\n".join(
+            "backend-1  | " + json.dumps(record)
+            for record in (
+                {"level": "ERROR", "message": "Unhandled request exception (ValueError)",
+                 "request_id": "0b7e7c1e-1111-2222-3333-444455556666",
+                 "exception": {"type": "ValueError", "message": "mail to max@example.org"}},
+                {"level": "INFO", "logger": "app.access",
+                 "message": '"GET /api/v1/events HTTP/1.1" 503 12.5ms', "status": 503},
+                {"level": "INFO", "message": "ERROR is only a word here"},
+                {"level": "CRITICAL", "message": "Database schema check failed: SchemaVersionError"},
+            )
+        ) + "\nbackend-1  | {not json\n"
+        summary = nakops.analyze(io.StringIO(lines))
+        self.assertEqual(summary.levels["backend"]["ERROR"], 1)
+        self.assertEqual(summary.levels["backend"]["CRITICAL"], 1)
+        self.assertEqual(summary.events["http_5xx"], 1)
+        self.assertEqual(summary.events["schema_mismatch"], 1)
+        top = " ".join(msg for (_svc, _lvl, msg) in summary.top)
+        self.assertNotIn("max@example.org", top)
+        self.assertNotIn("timestamp", top)
+
     def test_clean_logs_pass_fail_on_errors(self) -> None:
         code, _ = run(
             ["analyze-logs", "--fail-on-errors"], "backend-1  | 2026-11-05 08:00:00 INFO [x] ok\n"

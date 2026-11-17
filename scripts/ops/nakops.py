@@ -148,6 +148,23 @@ def _normalize(message: str) -> str:
     return message
 
 
+def _decode_json_line(message: str) -> tuple[str | None, str] | None:
+    """Level and searchable text of a backend/worker JSON Lines record, else None."""
+    if not message.startswith("{"):
+        return None
+    try:
+        record = json.loads(message)
+    except ValueError:
+        return None
+    if not isinstance(record, dict) or "message" not in record:
+        return None
+    text = str(record["message"])
+    exception = record.get("exception")
+    if isinstance(exception, dict):
+        text += f" {exception.get('type', '')}: {exception.get('message', '')}"
+    return _LEVEL_NAMES.get(str(record.get("level", "")).lower()), text
+
+
 def _level(message: str) -> str | None:
     match = _LEVEL.search(message)
     if not match:
@@ -194,7 +211,11 @@ def analyze(lines: list[str] | object) -> LogSummary:
         service, message = (
             (match.group("service"), match.group("message")) if match else ("-", line)
         )
-        level = _level(message)
+        decoded = _decode_json_line(message)
+        if decoded is not None:
+            level, message = decoded
+        else:
+            level = _level(message)
         if level:
             summary.levels[service][level] += 1
             summary.top[(service, level, _normalize(message))] += 1

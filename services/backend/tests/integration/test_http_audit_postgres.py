@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
+from app.adapters.api.middleware.request_id import RequestIdMiddleware
 from app.adapters.db import session as session_module
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.session import AuditedSession, _set_tenant_gucs
@@ -133,6 +134,7 @@ def stack(app_engine, world, monkeypatch):
 
     app = FastAPI()
     app.add_middleware(AuditMiddleware, audit_service=AuditService())
+    app.add_middleware(RequestIdMiddleware)
     base = f"/api/v1/districts/{world.district_id}"
 
     @app.post(base + "/events")
@@ -184,10 +186,22 @@ def stack(app_engine, world, monkeypatch):
     TenantContext.clear_context()
 
 
-async def _request(app: FastAPI, method: str, path: str) -> httpx.Response:
+async def _request(
+    app: FastAPI, method: str, path: str, headers: dict[str, str] | None = None
+) -> httpx.Response:
+    # ASGITransport connects from 127.0.0.1, a default trusted proxy (like the frontend nginx).
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.request(method, path)
+        return await client.request(method, path, headers=headers)
+
+
+async def _request_ids(owner: AsyncEngine, world: World) -> list[str | None]:
+    async with owner.connect() as conn:
+        result = await conn.execute(
+            text("SELECT request_id FROM audit_logs WHERE district_id = :d ORDER BY timestamp"),
+            {"d": world.district_id},
+        )
+        return list(result.scalars())
 
 
 async def _audit(owner: AsyncEngine, world: World) -> list:
@@ -307,3 +321,42 @@ async def test_a_write_without_tenant_still_gets_its_entry_despite_row_level_sec
     async with owner.begin() as conn:
         await conn.execute(text("DELETE FROM audit_logs WHERE user_sub = :s"), {"s": world.sub})
     assert [r["district_id"] for r in rows] == [None]
+
+
+async def test_denied_request_shares_its_request_id_with_the_access_log(owner, world, stack, caplog):
+    """OpenSpec logging/audit-logging: one request_id in the log output and in audit_logs."""
+    import logging
+
+    from app.logging_config import ContextFilter
+
+    caplog.handler.addFilter(ContextFilter())
+    caplog.set_level(logging.INFO, logger="app.access")
+    app, base = stack
+
+    response = await _request(app, "GET", base + "/secret", headers={"X-Request-ID": "nginx-req-1"})
+
+    assert response.status_code == 403
+    assert await _request_ids(owner, world) == ["nginx-req-1"]
+    (access,) = [r for r in caplog.records if r.name == "app.access"]
+    assert access.request_id == "nginx-req-1"
+
+
+async def test_domain_audit_entry_carries_the_request_id(owner, world, stack):
+    app, base = stack
+
+    response = await _request(app, "POST", base + "/slots", headers={"X-Request-ID": "slot-req-1"})
+
+    assert response.status_code == 200
+    assert await _request_ids(owner, world) == ["slot-req-1"]
+
+
+async def test_oversized_request_id_never_breaks_the_denial_audit(owner, world, stack):
+    """audit_logs.request_id is String(100); an oversized header must not turn 403 into 503."""
+    app, base = stack
+
+    response = await _request(app, "GET", base + "/secret", headers={"X-Request-ID": "x" * 500})
+
+    assert response.status_code == 403
+    (stored,) = await _request_ids(owner, world)
+    assert stored is not None and stored != "x" * 500
+    assert uuid.UUID(stored)

@@ -13,6 +13,8 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _NAT64_PREFIX_LENGTHS = {32, 40, 48, 56, 64, 96}
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+LOG_FORMATS = ("json", "text")
 
 
 def _parse_nat64_prefixes(value: str) -> tuple[ipaddress.IPv6Network, ...]:
@@ -59,6 +61,11 @@ class Settings(BaseSettings):
         )
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
+
+    # Application logging (docs/operations/logging.md). LOG_FORMAT unset means
+    # text in development and JSON Lines everywhere else.
+    log_level: str = "INFO"
+    log_format: str | None = None
 
     # Comma-separated peer networks whose X-Real-IP header is trusted (the
     # frontend nginx container). Default: loopback + Docker bridge networks.
@@ -129,6 +136,31 @@ class Settings(BaseSettings):
     # Version check (display only — the app never executes updates, see #469)
     ghcr_owner: str = "stritti"
     ghcr_repo: str = "nak-district-planner"
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        if level not in LOG_LEVELS:
+            raise ValueError(f"LOG_LEVEL must be one of {', '.join(LOG_LEVELS)}")
+        return level
+
+    @field_validator("log_format")
+    @classmethod
+    def validate_log_format(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        fmt = value.strip().lower()
+        if fmt not in LOG_FORMATS:
+            raise ValueError(f"LOG_FORMAT must be one of {', '.join(LOG_FORMATS)}")
+        return fmt
+
+    @property
+    def effective_log_format(self) -> str:
+        """Explicit LOG_FORMAT, otherwise text in development and JSON elsewhere."""
+        if self.log_format:
+            return self.log_format
+        return "text" if self.app_env == "development" else "json"
 
     @field_validator("sync_default_timezone")
     @classmethod

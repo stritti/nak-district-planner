@@ -168,6 +168,8 @@ scripts/ops/nakctl logs export --since 6h --output /tmp/nak-logs.txt
 
 `logs analyze` zählt Warnungen und Fehler je Dienst, zeigt die häufigsten Meldungen in normalisierter Form (UUIDs, Zahlen und IP-Adressen als Platzhalter) und erkennt HTTP-5xx, fehlgeschlagene und wiederholte Celery-Tasks, Zeitlimits, Rate-Limiter-Fallbacks und -Überschreitungen, Audit-Fehler, Datenbank- und Valkey-Verbindungsfehler sowie ein nicht passendes Schema.
 
+`logs analyze` versteht sowohl das Textformat als auch die JSON-Zeilen, die Backend, Worker und Beat in Produktion schreiben (Level und Meldung werden aus dem JSON gelesen). Format, Felder und Log-Level beschreibt das [Logging-Konzept](/operations/logging).
+
 Vor jeder Ausgabe werden Export-Tokens (`/api/v1/export/…`), Bearer- und Basic-Credentials, Passwörter in URLs, Werte von Schlüsseln wie `password`, `secret`, `token`, OAuth-Parameter (`code`, `state`) und E-Mail-Adressen maskiert. `logs export` schreibt in eine neue Datei mit Rechten 0600. Die Maskierung erkennt nur bekannte Formate; einen Export vor dem Teilen trotzdem durchsehen.
 
 ## Versionswechsel

@@ -32,6 +32,8 @@ Wenn Tracing aktiviert ist, werden folgende Komponenten automatisch instrumentie
 | **HTTPX**               | Ausgehende HTTP-Aufrufe (z. B. externe Kalender-Provider)               |
 | **Celery**              | Hintergrundtasks (Sync, Feiertags-Import, Cleanup)                      |
 
+Jeder Server-Span trägt zusätzlich das Attribut `request_id`. Es ist dieselbe ID wie in den Logzeilen des Requests und in `audit_logs.request_id`, sodass sich Trace, Log und Audit-Eintrag verbinden lassen (siehe [Logging](/operations/logging#korrelation)).
+
 ## Aktivierung
 
 ### Lokale Entwicklung
