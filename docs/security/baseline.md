@@ -124,6 +124,7 @@ Verpflichtende Sicherheits-/Qualitaetskontrollen im aktiven `main`-Ruleset:
 - Dependency Review
 - pip-audit
 - bun audit
+- OSV-Scan aller Lockfiles (osv-scanner, inkl. Root-`bun.lock` der Doku, SARIF in Code Scanning)
 - CodeQL Python
 - CodeQL JavaScript/TypeScript
 - KICS (IaC-Scan: Dockerfiles, Docker Compose)
