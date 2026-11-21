@@ -47,6 +47,8 @@ DOCKERFILE_HADOLINT_FILTER_REGEX_INCLUDE: "(services/)"
 
 # ── Markdown ─────────────────────────────────────────────────────────────────
 MARKDOWN_MARKDOWNLINT_CONFIG_FILE: .markdownlint.json
+# Vendored upstream skill content stays byte-identical to its source.
+MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: "(\\.claude/skills/impeccable/|\\.claude/agents/impeccable-|third_party/impeccable/)"
 
 # ── Global excludes ───────────────────────────────────────────────────────────
 FILTER_REGEX_EXCLUDE: >-

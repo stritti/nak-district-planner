@@ -109,3 +109,7 @@ services/frontend/test-results/
 .graphify/
 # Query-plan report written by tests/performance (uploaded as CI artifact)
 services/backend/event-list-query-plans.json
+
+# Impeccable skill: local engine binaries and per-developer config
+.claude/skills/impeccable/scripts/bin/
+.impeccable/config.local.json
