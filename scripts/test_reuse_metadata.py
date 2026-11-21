@@ -63,7 +63,7 @@ class ReuseMetadataTests(unittest.TestCase):
     def test_license_files_only_for_actual_licenses(self) -> None:
         self.assertEqual(
             {p.name for p in (ROOT / "LICENSES").iterdir()},
-            {"AGPL-3.0-only.txt", "MIT.txt"},
+            {"AGPL-3.0-only.txt", "Apache-2.0.txt", "MIT.txt"},
         )
 
 

@@ -64,6 +64,17 @@ precedence = "override"
 SPDX-FileCopyrightText = "vuejs-ai contributors"
 SPDX-License-Identifier = "MIT"
 
+# Impeccable design skill, mirrored from pbakaus/impeccable (v4.10.0).
+[[annotations]]
+path = [
+  ".claude/skills/impeccable/**",
+  ".claude/agents/impeccable-*.md",
+  "third_party/impeccable/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "Paul Bakaus and Impeccable contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
 [[annotations]]
 path = [
   ".opencode/skills/**",
