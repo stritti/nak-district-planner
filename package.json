@@ -14,5 +14,8 @@
     "vitepress": "^1.6.3",
     "vue": "^3.5.45",
     "vitepress-plugin-mermaid-diagram": "0.3.2"
+  },
+  "overrides": {
+    "vite": "^6.4.4"
   }
 }
