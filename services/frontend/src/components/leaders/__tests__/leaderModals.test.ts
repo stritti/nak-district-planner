@@ -3,6 +3,7 @@
 
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { reactive } from 'vue'
 import ApproveRegistrationModal from '../ApproveRegistrationModal.vue'
 import LeaderAddModal from '../LeaderAddModal.vue'
 import LeaderEditModal from '../LeaderEditModal.vue'
@@ -179,11 +180,12 @@ describe('edit modal assignments', () => {
   })
 
   it('clears a selected role when switching between congregation and district level', async () => {
-    const state = {
+    // The parent passes reactive state; mount() props are only shallowReactive.
+    const state = reactive({
       open: true, leaderId: 'l', revision: '1', name: 'Max', rank: 'Pr.',
       assignments: assignments.slice(0, 1), newAssignment: { target: '', role: null as string | null },
       email: '', phone: '', notes: '', is_active: true, hidden_from_lists: false, service_end_date: '', error: '',
-    }
+    })
     const wrapper = mount(LeaderEditModal, {
       props: { saving: false, congregations: twoCongregations, canManage: () => true, modal: state as never },
     })
@@ -203,11 +205,11 @@ describe('edit modal assignments', () => {
         saving: false,
         congregations: twoCongregations,
         canManage: () => true,
-        modal: {
+        modal: reactive({
           open: true, leaderId: 'l', revision: '1', name: 'Max', rank: 'Pr.', assignments: assignments.slice(0, 1),
           newAssignment: { target: '', role: null }, email: '', phone: '', notes: '', is_active: true,
           hidden_from_lists: false, service_end_date: '', error: '',
-        } as never,
+        }) as never,
       },
     })
     const picker = wrapper.get('select[aria-label="Neue Zuordnung"]')
